@@ -1,0 +1,690 @@
+:root {
+  --bg: #faf7f2;
+  --card: #ffffff;
+  --ink: #2b2620;
+  --muted: #6b6259;
+  --accent: #2a6ec9;
+  --accent-dark: #1f5aa8;
+  --border: #e4ddd3;
+  --danger: #b0402a;
+  --warn: #b98900;
+  --success: #2f7a3d;
+}
+
+* { box-sizing: border-box; }
+
+.wrap {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.wrap-narrow {
+  max-width: 420px;
+  margin: 80px auto;
+}
+
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 16px; margin: 0; }
+p.sub { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
+
+.tab-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tab-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+.tab-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.tab-btn:not(.active):hover {
+  background: #f2ece2;
+}
+
+.project-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.project-select-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-row .btn-primary {
+  width: auto;
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+.project-row .edit-toolbar {
+  flex: 2;
+  min-width: 0;
+}
+
+.project-select-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+table.sheet th.center-cell,
+table.sheet td.center-cell {
+  text-align: center;
+}
+table.sheet td.center-cell input[type="number"] {
+  width: 100%;
+  min-width: 0;
+  padding: 3px 1px;
+  font-size: 13px;
+  border-radius: 4px;
+  text-align: center;
+  box-sizing: border-box;
+  -moz-appearance: textfield;
+}
+table.sheet td.center-cell input[type="number"]::-webkit-outer-spin-button,
+table.sheet td.center-cell input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+table.sheet td.center-cell select {
+  width: 100%;
+  min-width: 0;
+  padding: 3px 2px;
+  font-size: 12px;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+/* The part search+picker pair used in Record Part Use and Purchase Order
+   line items — without this, the <select>'s longest option (a full part
+   description) forces it wider than its column, blowing out the table. */
+.part-search-input,
+.part-picker-select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-size: 12px;
+}
+
+.radio-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.avail-dot {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: default;
+  vertical-align: middle;
+  background-color: transparent;
+}
+.avail-dot:checked {
+  border-color: var(--accent-dark);
+  background-color: var(--accent);
+}
+.radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.radio-group input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.add-form label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 6px;
+  margin-top: 12px;
+}
+.add-form label:first-child { margin-top: 0; }
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+.form-actions .btn-primary { margin-top: 0; }
+
+input[type="text"],
+input[type="number"],
+input[type="password"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 15px;
+  background: #fffdfa;
+  color: var(--ink);
+}
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="password"]:focus { outline: none; border-color: var(--accent); }
+
+select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 15px;
+  background: #fffdfa;
+  color: var(--ink);
+}
+
+#project_select {
+  width: 100%;
+}
+
+.edit-toolbar select,
+.edit-toolbar input[type="text"] {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+button {
+  border: none;
+  border-radius: 8px;
+  padding: 11px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  width: auto;
+  margin-top: 16px;
+}
+
+/* Full-width only makes sense for the centered, single-column auth forms —
+   everywhere else (toolbars, form-actions rows) a full-width primary button
+   looks oversized next to its siblings. */
+.wrap-narrow .btn-primary {
+  width: 100%;
+}
+.btn-primary:hover { background: var(--accent-dark); }
+.btn-primary:disabled { background: #a9c3e0; cursor: not-allowed; }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--accent-dark);
+  border: 1px solid var(--accent);
+  padding: 6px 14px;
+  font-size: 13px;
+}
+.btn-secondary:hover { background: #eaf2ff; }
+.btn-secondary:disabled { color: var(--muted); border-color: var(--border); cursor: not-allowed; }
+
+.field-invalid {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+.status { font-size: 13px; margin-top: 10px; min-height: 16px; }
+.status.ok { color: #2f7a3d; }
+.status.err { color: var(--danger); }
+
+.empty { color: var(--muted); font-size: 14px; text-align: center; padding: 12px 0; }
+
+.sheet-wrap {
+  margin-top: 12px;
+  overflow-x: auto;
+  border: 1px solid #b7b7b7;
+  border-radius: 2px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+table.sheet {
+  table-layout: fixed;
+  border-collapse: collapse;
+  width: 100%;
+  font-family: Calibri, Carlito, 'Segoe UI', Arial, sans-serif;
+  font-size: 13px;
+  background: #ffffff;
+}
+
+table.sheet th,
+table.sheet td {
+  border: 1px solid #d4d4d4;
+  padding: 6px 10px;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+table.sheet thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+table.sheet thead tr:first-child th {
+  background: #f3f3f3;
+  color: #6b6b6b;
+  font-weight: 400;
+  font-size: 11px;
+  text-align: center;
+  height: 18px;
+  padding: 2px 10px;
+}
+
+table.sheet thead tr.header-row th {
+  background: #e8eaed;
+  color: var(--ink);
+  font-weight: 700;
+  border-bottom: 2px solid #b7b7b7;
+}
+
+table.sheet thead tr.filter-row th {
+  background: #fbfbfa;
+  padding: 4px;
+}
+
+table.sheet thead tr.filter-row input[type="text"],
+table.sheet thead tr.filter-row select {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+table.sheet th.row-head,
+table.sheet td.row-head {
+  background: #f3f3f3;
+  color: #6b6b6b;
+  text-align: center;
+  font-weight: 400;
+}
+
+col.col-rowhead { width: 72px; }
+col.col-last { width: 70px; }
+
+.edit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.edit-toolbar .btn-primary {
+  width: auto;
+  margin-top: 0;
+}
+
+/* The Purchase Orders summary table's action-button column is only 140px
+   wide, but its labels ("Confirm Receipt", "Approve Invoice") are too long
+   for the app's normal 15px/18px-padding button — shrink and let it wrap
+   onto a second line rather than spill into the neighboring column. */
+.po-action-btn {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: normal;
+  margin-top: 0;
+}
+
+table.sheet tbody tr:nth-child(even) td:not(.row-head) {
+  background: #f8f9fb;
+}
+
+table.sheet tbody tr:hover td:not(.row-head) {
+  background: #eaf2ff;
+}
+
+table.sheet td.col-last,
+table.sheet th.col-last {
+  text-align: center;
+  width: 1%;
+}
+
+table.sheet td.col-last button {
+  white-space: nowrap;
+}
+
+.del-btn {
+  background: none;
+  border: none;
+  color: var(--danger);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+.del-btn:hover { text-decoration: underline; }
+
+/* Placed after the row-striping rules so this wins the specificity tie
+   on even rows too — a part "owned" (not shared) at that site. */
+table.sheet td.owned-cell {
+  background: #e6f4ea;
+}
+table.sheet tbody tr:nth-child(even) td.owned-cell {
+  background: #dcefe1;
+}
+
+table.sheet th.total-col,
+table.sheet td.total-col {
+  border-left: 2px solid #8a8a8a;
+}
+
+.po-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.po-badge-draft { background: #ece7de; color: var(--muted); }
+.po-badge-submitted { background: #fdf1d6; color: var(--warn); }
+.po-badge-approved { background: #e3edfb; color: var(--accent-dark); }
+.po-badge-issued { background: #ece2fb; color: #6a3fae; }
+.po-badge-received { background: #e6f4ea; color: var(--success); }
+
+.role-check {
+  color: var(--success);
+  font-weight: 700;
+}
+
+/* Progress stepper (Submitted -> Approved -> PO Issued -> Received) shown on
+   the Purchase Requests summary list in place of a plain status badge. */
+.po-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.po-progress-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 2px solid var(--border);
+  flex: none;
+}
+.po-progress-dot.filled {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.po-progress-line {
+  width: 16px;
+  height: 2px;
+  background: var(--border);
+  flex: none;
+}
+.po-progress-line.filled {
+  background: var(--accent);
+}
+table.sheet td.nowrap-cell,
+table.sheet th.nowrap-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Below this width the columns can no longer all fit without wrapping or
+   collapsing the Description column — .sheet-wrap scrolls horizontally
+   instead of squeezing them. */
+table.po-summary-table {
+  min-width: 1250px;
+}
+
+/* Status heading + flow legend shown once above the summary table, rather
+   than crammed into the narrow Status column header — free to run wider
+   than the column itself and wraps onto a second line if the window is
+   narrow, instead of overflowing or getting clipped. Horizontally centered
+   directly over the real Status column (not the whole table) via an inline
+   marginLeft set from JS, so .po-progress-heading-inner itself must stay
+   inline-block for that offset to apply.  */
+.po-progress-heading-block {
+  margin: 4px 0 16px;
+}
+.po-progress-heading-inner {
+  display: inline-block;
+  text-align: center;
+}
+.po-progress-heading {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  white-space: nowrap;
+}
+.po-progress-flow-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.po-progress-flow-arrow {
+  color: var(--border);
+}
+
+/* The request detail screen's header info — a label/value grid instead of a
+   stack of plain <p> tags. */
+.po-detail-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px 24px;
+  margin: 12px 0 18px;
+}
+.po-detail-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.po-detail-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.po-detail-value {
+  font-size: 14px;
+}
+
+/* The request's audit trail (who/when for each workflow step), as a compact
+   table instead of a stack of plain <p> tags. */
+.po-detail-timeline {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 18px;
+  font-size: 13px;
+}
+.po-detail-timeline th {
+  text-align: left;
+  padding: 6px 16px 6px 0;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: top;
+  width: 1%;
+}
+.po-detail-timeline td {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.po-detail-timeline tr:last-child td {
+  border-bottom: none;
+}
+
+/* Printable PO view — kept off-screen normally, shown alone when printing,
+   unless "View PO" toggles .po-print-area-preview to show it inline. */
+.po-print-area {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 800px;
+  padding: 24px;
+  font-family: Calibri, Carlito, 'Segoe UI', Arial, sans-serif;
+  font-size: 13px;
+  color: var(--ink);
+  background: #ffffff;
+}
+.po-print-area-preview {
+  position: static;
+  left: auto;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+@media print {
+  body * { visibility: hidden; }
+  .po-print-area, .po-print-area * { visibility: visible; }
+  .po-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}
+
+.po-print-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+.po-print-project-name { font-weight: 700; font-size: 15px; margin: 0 0 6px; }
+.po-print-address { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.po-print-address-small { font-size: 11px; }
+.po-print-header-right { text-align: right; }
+.po-print-title { font-size: 26px; margin: 0 0 10px; color: var(--ink); }
+.po-print-meta { margin-left: auto; border-collapse: collapse; }
+.po-print-meta th,
+.po-print-meta td {
+  border: 1px solid #d4d4d4;
+  padding: 4px 10px;
+  font-size: 12px;
+  text-align: left;
+}
+.po-print-meta th { background: #f3f3f3; font-weight: 600; white-space: nowrap; }
+
+.po-print-parties {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+.po-print-label { font-weight: 700; margin: 0 0 4px; }
+.po-print-strong { margin: 0 0 4px; font-weight: 600; }
+
+.po-print-lines { margin-bottom: 18px; }
+
+.po-print-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+.po-print-footer-left { max-width: 55%; }
+.po-print-footer-left p { margin: 0 0 6px; }
+
+.po-print-totals table { border-collapse: collapse; margin-left: auto; }
+.po-print-totals th,
+.po-print-totals td {
+  padding: 3px 10px;
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+.po-print-totals th { font-weight: 600; text-align: left; }
+.po-print-grand-total th,
+.po-print-grand-total td {
+  border-top: 2px solid var(--ink);
+  font-weight: 700;
+  font-size: 13px;
+  padding-top: 6px;
+}
+
+.po-print-instructions {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0 0 18px;
+  padding-left: 18px;
+}
+.po-print-instructions li { margin-bottom: 3px; }
+
+.po-print-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+.po-print-reference { font-size: 12px; font-weight: 600; }
+
+.po-print-signature { font-size: 13px; margin-top: 12px; }

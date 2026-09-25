@@ -1,0 +1,2314 @@
+import { useMemo, useEffect, useState, Fragment } from 'react'
+import Papa from 'papaparse'
+import { supabase } from './supabaseClient'
+import './App.css'
+
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD
+const SITE_PASSWORD = import.meta.env.VITE_SITE_PASSWORD
+const SITE_SESSION_KEY = 'inventory_site_unlocked'
+
+const WHERE_USED_SEED = ['SMA 500 CP', 'SMA 500 XP', 'SATCON 500', 'Substation', 'Array']
+
+const emptyFilters = {
+  gcs_id: '',
+  gcs_part_id: '',
+  manufacturer_part_number: '',
+  manufacturer: '',
+  spare_category: '',
+  where_used: '',
+  description: '',
+}
+
+const blankDraftRow = () => ({
+  _existing: false,
+  _tempId: crypto.randomUUID(),
+  gcs_part_id: '',
+  manufacturer_part_number: '',
+  manufacturer: '',
+  spare_category: '',
+  where_used: '',
+  description: '',
+})
+
+function uniqueSorted(values) {
+  return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b))
+}
+
+function shortProjectName(name) {
+  return (name || '').replace(/^SunE\s+/, '').replace(/\s+LP$/, '')
+}
+
+// Unshared requirements each need their own dedicated unit, so they add up.
+// Shared requirements can all be met by the same pooled unit, so only the
+// largest one adds to the total (a part is still needed somewhere even if
+// every project that wants it is happy to share).
+function computeTargetSum(values) {
+  const unsharedSum = values.reduce((sum, p) => sum + (!p.shared ? p.target ?? 0 : 0), 0)
+  const sharedMax = values.reduce((max, p) => (p.shared ? Math.max(max, p.target ?? 0) : max), 0)
+  return unsharedSum + sharedMax
+}
+
+function App() {
+  const [siteUnlocked, setSiteUnlocked] = useState(
+    () => !SITE_PASSWORD || sessionStorage.getItem(SITE_SESSION_KEY) === 'true'
+  )
+  const [sitePasswordInput, setSitePasswordInput] = useState('')
+  const [sitePasswordError, setSitePasswordError] = useState(null)
+
+  const [activeTab, setActiveTab] = useState('master')
+
+  const [parts, setParts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState(emptyFilters)
+  const [status, setStatus] = useState(null)
+
+  const [pendingAction, setPendingAction] = useState(null)
+  const [passwordInput, setPasswordInput] = useState('')
+  const [passwordError, setPasswordError] = useState(null)
+
+  const [editMode, setEditMode] = useState(false)
+  const [draftParts, setDraftParts] = useState([])
+  const [savingEdits, setSavingEdits] = useState(false)
+
+  const [masterPanel, setMasterPanel] = useState(null) // null | 'import'
+  const [importFileName, setImportFileName] = useState('')
+  const [importPreview, setImportPreview] = useState(null)
+  const [importErrors, setImportErrors] = useState([])
+  const [importing, setImporting] = useState(false)
+
+  const [projects, setProjects] = useState([])
+  const [selectedProjectId, setSelectedProjectId] = useState(null)
+  const [projectItems, setProjectItems] = useState([])
+  const [projectLoading, setProjectLoading] = useState(true)
+  const [projectStatus, setProjectStatus] = useState(null)
+
+  const [projectEditMode, setProjectEditMode] = useState(false)
+  const [draftProjectItems, setDraftProjectItems] = useState([])
+  const [savingProjectEdits, setSavingProjectEdits] = useState(false)
+  const [projectEditFilter, setProjectEditFilter] = useState('')
+  const [projectViewFilter, setProjectViewFilter] = useState('')
+
+  const [stockItems, setStockItems] = useState([])
+  const [stockLoading, setStockLoading] = useState(true)
+  const [stockStatus, setStockStatus] = useState(null)
+  const [stockViewProjectId, setStockViewProjectId] = useState('all')
+  const [stockViewFilter, setStockViewFilter] = useState('')
+  const [stockEditMode, setStockEditMode] = useState(false)
+  const [draftStockItems, setDraftStockItems] = useState([])
+  const [savingStockEdits, setSavingStockEdits] = useState(false)
+  const [stockEditFilter, setStockEditFilter] = useState('')
+  const [adjustNote, setAdjustNote] = useState('')
+
+  const [stockPanel, setStockPanel] = useState(null) // null | 'upload' | 'history'
+
+  const [locationEditMode, setLocationEditMode] = useState(false)
+  const [draftLocationItems, setDraftLocationItems] = useState([])
+  const [savingLocationEdits, setSavingLocationEdits] = useState(false)
+  const [locationEditFilter, setLocationEditFilter] = useState('')
+  const [locationNote, setLocationNote] = useState('')
+
+  const [uploadFileName, setUploadFileName] = useState('')
+  const [uploadPreview, setUploadPreview] = useState(null)
+  const [uploadErrors, setUploadErrors] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadNote, setUploadNote] = useState('')
+
+  const [journalEntries, setJournalEntries] = useState([])
+  const [journalLoading, setJournalLoading] = useState(false)
+  const [journalLines, setJournalLines] = useState({})
+  const [expandedJournalId, setExpandedJournalId] = useState(null)
+
+  async function loadParts() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('parts')
+      .select('*')
+      .order('gcs_id', { ascending: true })
+
+    if (error) {
+      console.error(error)
+      setStatus({ ok: false, msg: 'Could not load parts — check the console for details.' })
+    } else {
+      setParts(data ?? [])
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    if (siteUnlocked) loadParts()
+  }, [siteUnlocked])
+
+  async function loadProjects() {
+    const { data, error } = await supabase.from('projects').select('*').order('name', { ascending: true })
+    if (error) {
+      console.error(error)
+      setProjectStatus({ ok: false, msg: 'Could not load projects — check the console for details.' })
+      return
+    }
+    setProjects(data ?? [])
+    if (data && data.length > 0 && selectedProjectId === null) {
+      setSelectedProjectId(data[0].id)
+    } else if (!data || data.length === 0) {
+      setProjectLoading(false)
+    }
+  }
+
+  async function loadProjectItems(projectId) {
+    if (!projectId) {
+      setProjectItems([])
+      return
+    }
+    setProjectLoading(true)
+    const { data, error } = await supabase
+      .from('project_parts')
+      .select('*, parts(*)')
+      .eq('project_id', projectId)
+
+    if (error) {
+      console.error(error)
+      setProjectStatus({ ok: false, msg: 'Could not load project sheet — check the console for details.' })
+    } else {
+      const sorted = (data ?? []).slice().sort((a, b) => (a.parts?.gcs_id ?? 0) - (b.parts?.gcs_id ?? 0))
+      setProjectItems(sorted)
+    }
+    setProjectLoading(false)
+  }
+
+  useEffect(() => {
+    if (siteUnlocked) loadProjects()
+  }, [siteUnlocked])
+
+  useEffect(() => {
+    if (siteUnlocked && selectedProjectId) loadProjectItems(selectedProjectId)
+  }, [siteUnlocked, selectedProjectId])
+
+  async function loadStock() {
+    setStockLoading(true)
+    const [ppRes, sohRes] = await Promise.all([
+      supabase.from('project_parts').select('project_id, part_gcs_id, target_stock, shared'),
+      supabase.from('stock_on_hand').select('project_id, part_gcs_id, quantity'),
+    ])
+
+    if (ppRes.error || sohRes.error) {
+      console.error(ppRes.error || sohRes.error)
+      setStockStatus({ ok: false, msg: 'Could not load inventory — check the console for details.' })
+      setStockLoading(false)
+      return
+    }
+
+    const sohMap = new Map(
+      (sohRes.data ?? []).map((s) => [`${s.project_id}:${s.part_gcs_id}`, s])
+    )
+
+    const byPart = new Map()
+    for (const row of ppRes.data ?? []) {
+      if (!byPart.has(row.part_gcs_id)) {
+        byPart.set(row.part_gcs_id, { gcs_id: row.part_gcs_id, perProject: {} })
+      }
+      const soh = sohMap.get(`${row.project_id}:${row.part_gcs_id}`)
+      byPart.get(row.part_gcs_id).perProject[row.project_id] = {
+        target: row.target_stock,
+        shared: Boolean(row.shared),
+        onHand: soh?.quantity ?? 0,
+      }
+    }
+
+    const items = [...byPart.values()]
+      .map((entry) => {
+        const values = Object.values(entry.perProject)
+        const part = parts.find((p) => p.gcs_id === entry.gcs_id)
+        const onHandSum = values.reduce((sum, p) => sum + (p.onHand ?? 0), 0)
+        const storageQty = part?.storage_qty ?? 0
+        const barnQty = part?.barn_qty ?? 0
+        return {
+          gcs_id: entry.gcs_id,
+          part,
+          perProject: entry.perProject,
+          targetSum: computeTargetSum(values),
+          onHandSum,
+          storageQty,
+          barnQty,
+          projectQty: onHandSum - storageQty - barnQty,
+        }
+      })
+      .sort((a, b) => a.gcs_id - b.gcs_id)
+
+    setStockItems(items)
+    setStockLoading(false)
+  }
+
+  useEffect(() => {
+    if (siteUnlocked && parts.length > 0) loadStock()
+  }, [siteUnlocked, parts])
+
+  function handleSiteUnlock(e) {
+    e.preventDefault()
+    if (sitePasswordInput === SITE_PASSWORD) {
+      setSiteUnlocked(true)
+      sessionStorage.setItem(SITE_SESSION_KEY, 'true')
+      setSitePasswordInput('')
+      setSitePasswordError(null)
+    } else {
+      setSitePasswordError('Incorrect password.')
+    }
+  }
+
+  function flashStatus(msg, ok) {
+    setStatus({ ok, msg })
+    setTimeout(() => setStatus(null), 3000)
+  }
+
+  function updateFilter(field, value) {
+    setFilters((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const hasActiveFilter = Object.values(filters).some(Boolean)
+
+  const lastPartsUpdate = parts.reduce(
+    (latest, p) => (p.updated_at && (!latest || p.updated_at > latest) ? p.updated_at : latest),
+    null
+  )
+
+  const manufacturerOptions = useMemo(
+    () => uniqueSorted([...parts.map((p) => p.manufacturer), ...draftParts.map((r) => r.manufacturer)]),
+    [parts, draftParts]
+  )
+  const categoryOptions = useMemo(
+    () => uniqueSorted([...parts.map((p) => p.spare_category), ...draftParts.map((r) => r.spare_category)]),
+    [parts, draftParts]
+  )
+  const whereUsedOptions = useMemo(
+    () =>
+      uniqueSorted([
+        ...WHERE_USED_SEED,
+        ...parts.map((p) => p.where_used),
+        ...draftParts.map((r) => r.where_used),
+      ]),
+    [parts, draftParts]
+  )
+
+  function runAction(action) {
+    if (action.type === 'edit') {
+      setDraftParts(parts.map((p) => ({ ...p, _existing: true })))
+      setFilters(emptyFilters)
+      setEditMode(true)
+    }
+    if (action.type === 'export-parts') {
+      handleExportParts()
+    }
+    if (action.type === 'import-parts') {
+      setImportFileName('')
+      setImportPreview(null)
+      setImportErrors([])
+      setMasterPanel('import')
+    }
+    if (action.type === 'project-edit') {
+      const byGcsId = new Map(projectItems.map((item) => [item.part_gcs_id, item]))
+      const draft = parts
+        .slice()
+        .sort((a, b) => a.gcs_id - b.gcs_id)
+        .map((part) => {
+          const existing = byGcsId.get(part.gcs_id)
+          return {
+            gcs_id: part.gcs_id,
+            part,
+            project_part_id: existing ? existing.id : null,
+            required: Boolean(existing),
+            target_stock: existing?.target_stock ?? '',
+            shared: Boolean(existing?.shared),
+          }
+        })
+      setDraftProjectItems(draft)
+      setProjectEditFilter('')
+      setProjectEditMode(true)
+    }
+    if (action.type === 'stock-edit') {
+      const draft = stockItems.map((item) => ({
+        gcs_id: item.gcs_id,
+        part: item.part,
+        perProject: item.perProject,
+        qtyByProject: Object.fromEntries(
+          Object.entries(item.perProject).map(([pid, p]) => [pid, String(p.onHand ?? 0)])
+        ),
+      }))
+      setDraftStockItems(draft)
+      setStockEditFilter('')
+      setAdjustNote('')
+      setStockEditMode(true)
+    }
+    if (action.type === 'location-edit') {
+      const draft = stockItems.map((item) => ({
+        gcs_id: item.gcs_id,
+        part: item.part,
+        perProject: item.perProject,
+        onHandSum: item.onHandSum,
+        storage_qty: String(item.storageQty ?? 0),
+        barn_qty: String(item.barnQty ?? 0),
+      }))
+      setDraftLocationItems(draft)
+      setLocationEditFilter('')
+      setLocationNote('')
+      setLocationEditMode(true)
+    }
+  }
+
+  function requireAdmin(action) {
+    setPendingAction(action)
+    setPasswordInput('')
+    setPasswordError(null)
+  }
+
+  function handleUnlock(e) {
+    e.preventDefault()
+    if (passwordInput === ADMIN_PASSWORD) {
+      setPasswordInput('')
+      setPasswordError(null)
+      if (pendingAction) {
+        runAction(pendingAction)
+        setPendingAction(null)
+      }
+    } else {
+      setPasswordError('Incorrect password.')
+    }
+  }
+
+  function updateDraftField(index, field, value) {
+    setDraftParts((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
+  }
+
+  function addDraftRow() {
+    setDraftParts((prev) => [...prev, blankDraftRow()])
+  }
+
+  function removeDraftRow(index) {
+    setDraftParts((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function handleCancelEdits() {
+    setEditMode(false)
+    setDraftParts([])
+  }
+
+  async function handleSaveEdits() {
+    const newRows = draftParts.filter((r) => !r._existing)
+    for (const row of newRows) {
+      if (!(row.gcs_part_id || '').trim()) {
+        flashStatus('Every new row needs a Part ID.', false)
+        return
+      }
+    }
+
+    setSavingEdits(true)
+    try {
+      const originalIds = parts.map((p) => p.gcs_id)
+      const draftExistingIds = draftParts.filter((r) => r._existing).map((r) => r.gcs_id)
+      const deletedIds = originalIds.filter((id) => !draftExistingIds.includes(id))
+
+      const editableFields = ['description', 'manufacturer', 'spare_category', 'where_used']
+      const changedRows = draftParts.filter((r) => {
+        if (!r._existing) return false
+        const orig = parts.find((p) => p.gcs_id === r.gcs_id)
+        return orig && editableFields.some((field) => (orig[field] || '') !== (r[field] || ''))
+      })
+
+      if (deletedIds.length) {
+        const { error } = await supabase.from('parts').delete().in('gcs_id', deletedIds)
+        if (error) throw error
+      }
+
+      for (const row of changedRows) {
+        const { error } = await supabase
+          .from('parts')
+          .update({
+            description: (row.description || '').trim() || null,
+            manufacturer: (row.manufacturer || '').trim() || null,
+            spare_category: (row.spare_category || '').trim() || null,
+            where_used: (row.where_used || '').trim() || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('gcs_id', row.gcs_id)
+        if (error) throw error
+      }
+
+      if (newRows.length) {
+        const { error } = await supabase.from('parts').insert(
+          newRows.map((r) => ({
+            gcs_part_id: r.gcs_part_id.trim(),
+            manufacturer_part_number: (r.manufacturer_part_number || '').trim() || null,
+            manufacturer: (r.manufacturer || '').trim() || null,
+            spare_category: (r.spare_category || '').trim() || null,
+            where_used: (r.where_used || '').trim() || null,
+            description: (r.description || '').trim() || null,
+            updated_at: new Date().toISOString(),
+          }))
+        )
+        if (error) throw error
+      }
+
+      setEditMode(false)
+      setDraftParts([])
+      flashStatus('Changes saved.', true)
+      await loadParts()
+    } catch (error) {
+      console.error(error)
+      flashStatus('Could not save changes — check the console for details.', false)
+    } finally {
+      setSavingEdits(false)
+    }
+  }
+
+  function handleExportParts() {
+    const rows = parts.map((p) => ({
+      'GCS P/N': p.gcs_id,
+      'Part ID': p.gcs_part_id || '',
+      'Mfr Part #': p.manufacturer_part_number || '',
+      Manufacturer: p.manufacturer || '',
+      Category: p.spare_category || '',
+      'Where Used': p.where_used || '',
+      Description: p.description || '',
+    }))
+    const csv = Papa.unparse(rows)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `parts-master-list-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  function resetMasterPanel() {
+    setMasterPanel(null)
+    setImportFileName('')
+    setImportPreview(null)
+    setImportErrors([])
+  }
+
+  async function handleImportFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportFileName(file.name)
+    setImportPreview(null)
+    setImportErrors([])
+
+    const text = await file.text()
+    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true })
+
+    const fields = parsed.meta.fields || []
+    const fieldMap = {}
+    for (const f of fields) fieldMap[normalizeHeader(f)] = f
+
+    const gcsKey = fieldMap['gcspn'] || fieldMap['gcsid'] || fieldMap['gcs']
+    const partIdKey = fieldMap['partid']
+    const mfrPartKey = fieldMap['mfrpart'] || fieldMap['mfrpartno'] || fieldMap['manufacturerpartnumber']
+    const mfrKey = fieldMap['manufacturer']
+    const categoryKey = fieldMap['category'] || fieldMap['sparecategory']
+    const whereUsedKey = fieldMap['whereused']
+    const descKey = fieldMap['description']
+
+    if (!partIdKey) {
+      setImportErrors(['CSV must have a "Part ID" column.'])
+      return
+    }
+
+    const errors = []
+    const rows = []
+    parsed.data.forEach((row, i) => {
+      const rowNum = i + 2
+      const gcsRaw = gcsKey ? (row[gcsKey] || '').trim() : ''
+      const partId = (row[partIdKey] || '').trim()
+      if (!partId) {
+        errors.push(`Row ${rowNum}: Part ID is required.`)
+        return
+      }
+      let existing = null
+      if (gcsRaw) {
+        const gcsId = parseInt(gcsRaw, 10)
+        existing = parts.find((p) => p.gcs_id === gcsId)
+        if (!existing) {
+          errors.push(`Row ${rowNum}: GCS P/N "${gcsRaw}" not found — leave GCS P/N blank to add a new part.`)
+          return
+        }
+      }
+      rows.push({
+        gcs_id: existing?.gcs_id ?? null,
+        action: existing ? 'update' : 'insert',
+        gcs_part_id: partId,
+        manufacturer_part_number: mfrPartKey ? (row[mfrPartKey] || '').trim() : '',
+        manufacturer: mfrKey ? (row[mfrKey] || '').trim() : '',
+        spare_category: categoryKey ? (row[categoryKey] || '').trim() : '',
+        where_used: whereUsedKey ? (row[whereUsedKey] || '').trim() : '',
+        description: descKey ? (row[descKey] || '').trim() : '',
+      })
+    })
+
+    setImportErrors(errors)
+    setImportPreview(rows.length ? { rows } : null)
+  }
+
+  async function handleConfirmImport() {
+    if (!importPreview || importPreview.rows.length === 0) return
+    setImporting(true)
+    try {
+      const updates = importPreview.rows.filter((r) => r.action === 'update')
+      const inserts = importPreview.rows.filter((r) => r.action === 'insert')
+      const nowIso = new Date().toISOString()
+
+      for (const row of updates) {
+        const { error } = await supabase
+          .from('parts')
+          .update({
+            gcs_part_id: row.gcs_part_id,
+            manufacturer_part_number: row.manufacturer_part_number || null,
+            manufacturer: row.manufacturer || null,
+            spare_category: row.spare_category || null,
+            where_used: row.where_used || null,
+            description: row.description || null,
+            updated_at: nowIso,
+          })
+          .eq('gcs_id', row.gcs_id)
+        if (error) throw error
+      }
+
+      if (inserts.length) {
+        const { error } = await supabase.from('parts').insert(
+          inserts.map((r) => ({
+            gcs_part_id: r.gcs_part_id,
+            manufacturer_part_number: r.manufacturer_part_number || null,
+            manufacturer: r.manufacturer || null,
+            spare_category: r.spare_category || null,
+            where_used: r.where_used || null,
+            description: r.description || null,
+            updated_at: nowIso,
+          }))
+        )
+        if (error) throw error
+      }
+
+      resetMasterPanel()
+      flashStatus(`Imported — ${updates.length} updated, ${inserts.length} added.`, true)
+      await loadParts()
+    } catch (error) {
+      console.error(error)
+      flashStatus('Could not import — check the console for details.', false)
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  function flashProjectStatus(msg, ok) {
+    setProjectStatus({ ok, msg })
+    setTimeout(() => setProjectStatus(null), 3000)
+  }
+
+  function updateProjectRequired(index, required) {
+    setDraftProjectItems((prev) => prev.map((r, i) => (i === index ? { ...r, required } : r)))
+  }
+
+  function updateProjectDraftField(index, field, value) {
+    setDraftProjectItems((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
+  }
+
+  function handleCancelProjectEdits() {
+    setProjectEditMode(false)
+    setDraftProjectItems([])
+  }
+
+  const visibleDraftProjectItems = useMemo(() => {
+    const q = projectEditFilter.trim().toLowerCase()
+    if (!q) return draftProjectItems
+    return draftProjectItems.filter((r) =>
+      [r.part.gcs_part_id, r.part.manufacturer, r.part.description]
+        .filter(Boolean)
+        .some((field) => field.toLowerCase().includes(q))
+    )
+  }, [draftProjectItems, projectEditFilter])
+
+  const visibleProjectItems = useMemo(() => {
+    if (!projectViewFilter) return projectItems
+    return projectItems.filter((item) => String(item.parts?.gcs_id ?? '') === projectViewFilter)
+  }, [projectItems, projectViewFilter])
+
+  async function handleSaveProjectEdits() {
+    setSavingProjectEdits(true)
+    try {
+      const toDelete = draftProjectItems.filter((r) => !r.required && r.project_part_id)
+      const toInsert = draftProjectItems.filter((r) => r.required && !r.project_part_id)
+      const toUpdate = draftProjectItems.filter((r) => {
+        if (!r.required || !r.project_part_id) return false
+        const orig = projectItems.find((item) => item.id === r.project_part_id)
+        return (
+          orig &&
+          ((orig.target_stock ?? '') !== (r.target_stock === '' ? '' : Number(r.target_stock)) ||
+            Boolean(orig.shared) !== r.shared)
+        )
+      })
+
+      if (toDelete.length) {
+        const { error } = await supabase
+          .from('project_parts')
+          .delete()
+          .in('id', toDelete.map((r) => r.project_part_id))
+        if (error) throw error
+      }
+
+      for (const row of toUpdate) {
+        const { error } = await supabase
+          .from('project_parts')
+          .update({
+            target_stock: row.target_stock === '' ? null : Number(row.target_stock),
+            shared: row.shared,
+          })
+          .eq('id', row.project_part_id)
+        if (error) throw error
+      }
+
+      if (toInsert.length) {
+        const { error } = await supabase.from('project_parts').insert(
+          toInsert.map((r) => ({
+            project_id: selectedProjectId,
+            part_gcs_id: r.gcs_id,
+            target_stock: r.target_stock === '' ? null : Number(r.target_stock),
+            shared: r.shared,
+          }))
+        )
+        if (error) throw error
+      }
+
+      setProjectEditMode(false)
+      setDraftProjectItems([])
+      flashProjectStatus('Changes saved.', true)
+      await Promise.all([loadProjectItems(selectedProjectId), loadStock()])
+    } catch (error) {
+      console.error(error)
+      flashProjectStatus('Could not save changes — check the console for details.', false)
+    } finally {
+      setSavingProjectEdits(false)
+    }
+  }
+
+  function flashStockStatus(msg, ok) {
+    setStockStatus({ ok, msg })
+    setTimeout(() => setStockStatus(null), 3000)
+  }
+
+  function updateStockDraftField(index, projectId, value) {
+    setDraftStockItems((prev) =>
+      prev.map((r, i) =>
+        i === index ? { ...r, qtyByProject: { ...r.qtyByProject, [projectId]: value } } : r
+      )
+    )
+  }
+
+  function handleCancelStockEdits() {
+    setStockEditMode(false)
+    setDraftStockItems([])
+  }
+
+  const visibleStockItems = useMemo(() => {
+    let items = stockViewProjectId === 'all'
+      ? stockItems
+      : stockItems.filter((item) => Boolean(item.perProject[stockViewProjectId]))
+    if (stockViewFilter) items = items.filter((item) => String(item.gcs_id ?? '') === stockViewFilter)
+    return items
+  }, [stockItems, stockViewProjectId, stockViewFilter])
+
+  const visibleDraftStockItems = useMemo(() => {
+    const q = stockEditFilter.trim().toLowerCase()
+    if (!q) return draftStockItems
+    return draftStockItems.filter((r) =>
+      [r.part?.gcs_part_id, r.part?.description].filter(Boolean).some((field) => field.toLowerCase().includes(q))
+    )
+  }, [draftStockItems, stockEditFilter])
+
+  async function handleSaveStockEdits() {
+    if (!adjustNote.trim()) {
+      flashStockStatus('A reason is required before saving.', false)
+      return
+    }
+    setSavingStockEdits(true)
+    try {
+      const updates = []
+      for (const row of draftStockItems) {
+        for (const [pidStr, valStr] of Object.entries(row.qtyByProject)) {
+          const pid = Number(pidStr)
+          const newVal = valStr === '' ? 0 : Number(valStr)
+          const orig = row.perProject[pid]?.onHand ?? 0
+          if (newVal !== orig) {
+            updates.push({ project_id: pid, part_gcs_id: row.gcs_id, quantity: newVal, previous: orig })
+          }
+        }
+      }
+
+      if (updates.length) {
+        const { error } = await supabase
+          .from('stock_on_hand')
+          .upsert(
+            updates.map((u) => ({ project_id: u.project_id, part_gcs_id: u.part_gcs_id, quantity: u.quantity })),
+            { onConflict: 'project_id,part_gcs_id' }
+          )
+        if (error) throw error
+
+        const { data: journalRow, error: journalError } = await supabase
+          .from('inventory_journal')
+          .insert({ entry_type: 'adjustment', note: adjustNote.trim() })
+          .select()
+          .single()
+        if (journalError) throw journalError
+
+        const { error: lineError } = await supabase.from('inventory_journal_lines').insert(
+          updates.map((u) => ({
+            journal_id: journalRow.id,
+            project_id: u.project_id,
+            part_gcs_id: u.part_gcs_id,
+            previous_quantity: u.previous,
+            new_quantity: u.quantity,
+          }))
+        )
+        if (lineError) throw lineError
+      }
+
+      setStockEditMode(false)
+      setDraftStockItems([])
+      setAdjustNote('')
+      flashStockStatus(updates.length ? 'Changes saved.' : 'No changes to save.', true)
+      await loadStock()
+    } catch (error) {
+      console.error(error)
+      flashStockStatus('Could not save changes — check the console for details.', false)
+    } finally {
+      setSavingStockEdits(false)
+    }
+  }
+
+  function updateLocationDraftField(index, field, value) {
+    setDraftLocationItems((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
+  }
+
+  function handleCancelLocationEdits() {
+    setLocationEditMode(false)
+    setDraftLocationItems([])
+    setLocationNote('')
+  }
+
+  const visibleDraftLocationItems = useMemo(() => {
+    const q = locationEditFilter.trim().toLowerCase()
+    if (!q) return draftLocationItems
+    return draftLocationItems.filter((r) =>
+      [r.part?.gcs_part_id, r.part?.description].filter(Boolean).some((field) => field.toLowerCase().includes(q))
+    )
+  }, [draftLocationItems, locationEditFilter])
+
+  async function handleSaveLocationEdits() {
+    if (!locationNote.trim()) {
+      flashStockStatus('A reason is required before saving.', false)
+      return
+    }
+    setSavingLocationEdits(true)
+    try {
+      const updates = []
+      const negativeErrors = []
+      for (const row of draftLocationItems) {
+        const newStorage = row.storage_qty === '' ? 0 : Number(row.storage_qty)
+        const newBarn = row.barn_qty === '' ? 0 : Number(row.barn_qty)
+        const origStorage = row.part?.storage_qty ?? 0
+        const origBarn = row.part?.barn_qty ?? 0
+        if (newStorage !== origStorage || newBarn !== origBarn) {
+          if (row.onHandSum - newStorage - newBarn < 0) {
+            negativeErrors.push(row.part?.gcs_part_id || row.gcs_id)
+            continue
+          }
+          updates.push({
+            gcs_id: row.gcs_id,
+            newStorage,
+            newBarn,
+            origStorage,
+            origBarn,
+          })
+        }
+      }
+
+      if (negativeErrors.length) {
+        flashStockStatus(
+          `Storage + Barn can't exceed Total On-Hand for: ${negativeErrors.join(', ')}`,
+          false
+        )
+        setSavingLocationEdits(false)
+        return
+      }
+
+      if (updates.length) {
+        for (const u of updates) {
+          const { error } = await supabase
+            .from('parts')
+            .update({ storage_qty: u.newStorage, barn_qty: u.newBarn })
+            .eq('gcs_id', u.gcs_id)
+          if (error) throw error
+        }
+
+        const { data: journalRow, error: journalError } = await supabase
+          .from('inventory_journal')
+          .insert({ entry_type: 'adjustment', note: locationNote.trim() })
+          .select()
+          .single()
+        if (journalError) throw journalError
+
+        const { error: lineError } = await supabase.from('inventory_journal_lines').insert(
+          updates.map((u) => ({
+            journal_id: journalRow.id,
+            part_gcs_id: u.gcs_id,
+            previous_storage_qty: u.origStorage,
+            new_storage_qty: u.newStorage,
+            previous_barn_qty: u.origBarn,
+            new_barn_qty: u.newBarn,
+          }))
+        )
+        if (lineError) throw lineError
+      }
+
+      setLocationEditMode(false)
+      setDraftLocationItems([])
+      setLocationNote('')
+      flashStockStatus(updates.length ? 'Locations saved.' : 'No changes to save.', true)
+      await loadParts()
+    } catch (error) {
+      console.error(error)
+      flashStockStatus('Could not save locations — check the console for details.', false)
+    } finally {
+      setSavingLocationEdits(false)
+    }
+  }
+
+  function resetStockPanel() {
+    setStockPanel(null)
+    setUploadFileName('')
+    setUploadPreview(null)
+    setUploadErrors([])
+    setUploadNote('')
+  }
+
+  function normalizeHeader(h) {
+    return (h || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+  }
+
+  function findProjectByName(name) {
+    const q = (name || '').trim().toLowerCase()
+    if (!q) return null
+    return (
+      projects.find((p) => p.name.toLowerCase() === q) ||
+      projects.find((p) => shortProjectName(p.name).toLowerCase() === q) ||
+      null
+    )
+  }
+
+  function handleExportInventory() {
+    const rows = []
+    for (const item of stockItems) {
+      for (const p of projects) {
+        const entry = item.perProject[p.id]
+        if (entry) {
+          rows.push({ 'GCS P/N': item.gcs_id, Project: p.name, Quantity: entry.onHand ?? 0 })
+        }
+      }
+    }
+    const csv = Papa.unparse(rows)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `inventory-on-hand-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleUploadFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadFileName(file.name)
+    setUploadPreview(null)
+    setUploadErrors([])
+
+    const text = await file.text()
+    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true })
+
+    const fields = parsed.meta.fields || []
+    const fieldMap = {}
+    for (const f of fields) fieldMap[normalizeHeader(f)] = f
+
+    const gcsKey = fieldMap['gcspn'] || fieldMap['gcsid'] || fieldMap['gcs']
+    const projectKey = fieldMap['project'] || fieldMap['site']
+    const qtyKey = fieldMap['quantity'] || fieldMap['qty'] || fieldMap['stockonhand']
+
+    if (!gcsKey || !projectKey || !qtyKey) {
+      setUploadErrors([
+        'CSV must have columns for GCS P/N, Project, and Quantity (column names not recognized).',
+      ])
+      return
+    }
+
+    const errors = []
+    const validRows = []
+    parsed.data.forEach((row, i) => {
+      const rowNum = i + 2 // account for header row, 1-indexed
+      const gcsId = parseInt(row[gcsKey], 10)
+      const part = parts.find((p) => p.gcs_id === gcsId)
+      const project = findProjectByName(row[projectKey])
+      const qty = parseInt(row[qtyKey], 10)
+
+      if (!part) {
+        errors.push(`Row ${rowNum}: GCS P/N "${row[gcsKey]}" not found in Master List.`)
+        return
+      }
+      if (!project) {
+        errors.push(`Row ${rowNum}: Project "${row[projectKey]}" does not match any project.`)
+        return
+      }
+      if (Number.isNaN(qty) || qty < 0) {
+        errors.push(`Row ${rowNum}: Quantity "${row[qtyKey]}" is not a valid number.`)
+        return
+      }
+      validRows.push({ gcs_id: gcsId, part, project_id: project.id, project_name: project.name, quantity: qty })
+    })
+
+    setUploadErrors(errors)
+
+    if (validRows.length === 0) {
+      setUploadPreview(null)
+      return
+    }
+
+    const uniqueGcsIds = [...new Set(validRows.map((r) => r.gcs_id))]
+    const { data: existing, error } = await supabase
+      .from('stock_on_hand')
+      .select('project_id, part_gcs_id, quantity')
+      .in('part_gcs_id', uniqueGcsIds)
+
+    if (error) {
+      setUploadErrors((prev) => [...prev, 'Could not look up current stock — check the console.'])
+      console.error(error)
+      return
+    }
+
+    const prevMap = new Map((existing ?? []).map((r) => [`${r.project_id}:${r.part_gcs_id}`, r.quantity]))
+    const rows = validRows.map((r) => ({
+      ...r,
+      previous: prevMap.get(`${r.project_id}:${r.gcs_id}`) ?? null,
+    }))
+
+    setUploadPreview({ rows })
+  }
+
+  async function handleConfirmUpload() {
+    if (!uploadPreview || uploadPreview.rows.length === 0) return
+    if (!uploadNote.trim()) {
+      flashStockStatus('A reason is required before uploading.', false)
+      return
+    }
+    setUploading(true)
+    try {
+      const { rows } = uploadPreview
+      const { data: journalRow, error: journalError } = await supabase
+        .from('inventory_journal')
+        .insert({
+          entry_type: 'count',
+          note: `${uploadNote.trim()} — ${uploadFileName} (${rows.length} rows)`,
+        })
+        .select()
+        .single()
+      if (journalError) throw journalError
+
+      const batchSize = 500
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize)
+        const { error: upsertError } = await supabase
+          .from('stock_on_hand')
+          .upsert(
+            batch.map((r) => ({ project_id: r.project_id, part_gcs_id: r.gcs_id, quantity: r.quantity })),
+            { onConflict: 'project_id,part_gcs_id' }
+          )
+        if (upsertError) throw upsertError
+
+        const { error: lineError } = await supabase.from('inventory_journal_lines').insert(
+          batch.map((r) => ({
+            journal_id: journalRow.id,
+            project_id: r.project_id,
+            part_gcs_id: r.gcs_id,
+            previous_quantity: r.previous,
+            new_quantity: r.quantity,
+          }))
+        )
+        if (lineError) throw lineError
+      }
+
+      resetStockPanel()
+      flashStockStatus(`Inventory count uploaded — ${rows.length} rows updated.`, true)
+      await loadStock()
+    } catch (error) {
+      console.error(error)
+      flashStockStatus('Could not upload inventory count — check the console for details.', false)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function loadJournalEntries() {
+    setJournalLoading(true)
+    const { data, error } = await supabase
+      .from('inventory_journal')
+      .select('*, inventory_journal_lines(count)')
+      .order('created_at', { ascending: false })
+      .limit(200)
+    if (error) {
+      console.error(error)
+      flashStockStatus('Could not load history — check the console for details.', false)
+    } else {
+      setJournalEntries(data ?? [])
+    }
+    setJournalLoading(false)
+  }
+
+  async function toggleJournalExpand(id) {
+    if (expandedJournalId === id) {
+      setExpandedJournalId(null)
+      return
+    }
+    setExpandedJournalId(id)
+    if (journalLines[id]) return
+    const { data, error } = await supabase
+      .from('inventory_journal_lines')
+      .select('*')
+      .eq('journal_id', id)
+      .order('id', { ascending: true })
+    if (error) {
+      console.error(error)
+      return
+    }
+    setJournalLines((prev) => ({ ...prev, [id]: data ?? [] }))
+  }
+
+  const filtered = useMemo(() => {
+    const active = Object.entries(filters).filter(([, v]) => v.trim() !== '')
+    if (active.length === 0) return parts
+    return parts.filter((p) =>
+      active.every(([field, v]) => {
+        if (field === 'gcs_id') return String(p.gcs_id) === v.trim()
+        return String(p[field] ?? '').toLowerCase().includes(v.trim().toLowerCase())
+      })
+    )
+  }, [parts, filters])
+
+  const gcsIdOptions = useMemo(
+    () => [...parts].map((p) => p.gcs_id).sort((a, b) => a - b),
+    [parts]
+  )
+
+  const rows = editMode ? draftParts : filtered
+
+  if (!siteUnlocked) {
+    return (
+      <div className="wrap wrap-narrow">
+        <h1>📦 Parts Master List</h1>
+        <p className="sub">Backed by Supabase — data lives in the cloud, not just this page.</p>
+        <div className="card">
+          <form onSubmit={handleSiteUnlock} className="add-form">
+            <label htmlFor="site_password">Password required</label>
+            <input
+              id="site_password"
+              type="password"
+              autoFocus
+              placeholder="Enter password"
+              value={sitePasswordInput}
+              onChange={(e) => setSitePasswordInput(e.target.value)}
+            />
+            <button className="btn-primary" type="submit">
+              Enter
+            </button>
+            {sitePasswordError && <div className="status err">{sitePasswordError}</div>}
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  const selectedProject = projects.find((p) => p.id === selectedProjectId)
+
+  return (
+    <div className="wrap">
+      <h1>
+        📦{' '}
+        {activeTab === 'master'
+          ? 'Parts Master List'
+          : activeTab === 'projects'
+          ? `Required Inventory — ${selectedProject?.name ?? ''}`
+          : 'Inventory On Hand'}
+      </h1>
+      <p className="sub">Backed by Supabase — data lives in the cloud, not just this page.</p>
+
+      <div className="tab-row">
+        <button
+          className={'tab-btn' + (activeTab === 'master' ? ' active' : '')}
+          onClick={() => setActiveTab('master')}
+        >
+          Master List
+        </button>
+        <button
+          className={'tab-btn' + (activeTab === 'projects' ? ' active' : '')}
+          onClick={() => setActiveTab('projects')}
+        >
+          Required Inventory
+        </button>
+        <button
+          className={'tab-btn' + (activeTab === 'stock' ? ' active' : '')}
+          onClick={() => setActiveTab('stock')}
+        >
+          Inventory On Hand
+        </button>
+      </div>
+
+      {pendingAction && (
+        <div className="card">
+          <form onSubmit={handleUnlock} className="add-form">
+            <label htmlFor="admin_password">Admin password required</label>
+            <input
+              id="admin_password"
+              type="password"
+              autoFocus
+              placeholder="Enter admin password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+            />
+            <div className="form-actions">
+              <button className="btn-primary" type="submit">
+                Unlock
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setPendingAction(null)}>
+                Cancel
+              </button>
+            </div>
+            {passwordError && <div className="status err">{passwordError}</div>}
+          </form>
+        </div>
+      )}
+
+      {activeTab === 'master' && (
+      <>
+      <datalist id="manufacturer-options">
+        {manufacturerOptions.map((v) => (
+          <option value={v} key={v} />
+        ))}
+      </datalist>
+      <datalist id="category-options">
+        {categoryOptions.map((v) => (
+          <option value={v} key={v} />
+        ))}
+      </datalist>
+      <datalist id="where-used-options">
+        {whereUsedOptions.map((v) => (
+          <option value={v} key={v} />
+        ))}
+      </datalist>
+
+      {!pendingAction && (
+      <div className="card">
+        {masterPanel ? (
+          <div className="edit-toolbar">
+            <button className="btn-secondary" onClick={resetMasterPanel}>
+              ← Back to Master List
+            </button>
+          </div>
+        ) : !editMode ? (
+          <div className="edit-toolbar">
+            <button className="btn-primary" onClick={() => requireAdmin({ type: 'edit' })}>
+              Edit List
+            </button>
+            <button className="btn-primary" onClick={() => requireAdmin({ type: 'export-parts' })}>
+              Export List
+            </button>
+            <button className="btn-primary" onClick={() => requireAdmin({ type: 'import-parts' })}>
+              Import List
+            </button>
+          </div>
+        ) : (
+          <div className="edit-toolbar">
+            <button className="btn-primary" onClick={handleSaveEdits} disabled={savingEdits}>
+              {savingEdits ? 'Saving…' : 'Save Changes'}
+            </button>
+            <button className="btn-secondary" onClick={addDraftRow} disabled={savingEdits}>
+              + Add Row
+            </button>
+            <button className="btn-secondary" onClick={handleCancelEdits} disabled={savingEdits}>
+              Cancel
+            </button>
+          </div>
+        )}
+        {status && <div className={'status ' + (status.ok ? 'ok' : 'err')}>{status.msg}</div>}
+      </div>
+      )}
+
+      {masterPanel === 'import' && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Import List</h2>
+            <p className="sub" style={{ margin: 0 }}>
+              CSV with columns: GCS P/N, Part ID, Mfr Part #, Manufacturer, Category, Where Used,
+              Description. Rows with a matching GCS P/N update that part; rows with GCS P/N left
+              blank add a new part.
+            </p>
+          </div>
+          <input type="file" accept=".csv" onChange={handleImportFileChange} />
+          {importErrors.length > 0 && (
+            <div className="status err" style={{ marginTop: 12 }}>
+              {importErrors.map((e, i) => (
+                <div key={i}>{e}</div>
+              ))}
+            </div>
+          )}
+          {importPreview && (
+            <>
+              <div className="sheet-wrap" style={{ marginTop: 12 }}>
+                <table className="sheet">
+                  <colgroup>
+                    <col className="col-rowhead" />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '20%' }} />
+                    <col />
+                  </colgroup>
+                  <thead>
+                    <tr className="header-row">
+                      <th className="row-head">GCS P/N</th>
+                      <th>Action</th>
+                      <th>Part ID</th>
+                      <th>Manufacturer</th>
+                      <th>Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importPreview.rows.map((r, i) => (
+                      <tr key={i}>
+                        <td className="row-head">{r.gcs_id ?? '—'}</td>
+                        <td>{r.action === 'insert' ? 'Add new' : 'Update'}</td>
+                        <td>{r.gcs_part_id}</td>
+                        <td>{r.manufacturer || '—'}</td>
+                        <td>{r.description || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="edit-toolbar" style={{ marginTop: 12 }}>
+                <button className="btn-primary" onClick={handleConfirmImport} disabled={importing}>
+                  {importing ? 'Importing…' : `Confirm Import (${importPreview.rows.length} rows)`}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {!masterPanel && (
+      <div className="card">
+        <div className="card-header">
+          <h2>
+            Last Update: {lastPartsUpdate ? new Date(lastPartsUpdate).toLocaleString() : '—'}
+          </h2>
+          <div className="header-actions">
+            {!editMode && hasActiveFilter && (
+              <button className="btn-secondary" onClick={() => setFilters(emptyFilters)}>
+                Clear filters
+              </button>
+            )}
+            <button className="btn-secondary" onClick={loadParts} disabled={loading || editMode}>
+              {loading ? 'Loading…' : 'Refresh'}
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="empty">Loading...</div>
+        ) : (
+          <div className="sheet-wrap">
+            <table className="sheet">
+              <colgroup>
+                <col className="col-rowhead" />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '13%' }} />
+                <col />
+                {editMode && <col className="col-last" />}
+              </colgroup>
+              <thead>
+                <tr>
+                  <th className="row-head"></th>
+                  <th>A</th>
+                  <th>B</th>
+                  <th>C</th>
+                  <th>D</th>
+                  <th>E</th>
+                  <th>F</th>
+                  {editMode && <th className="col-last"></th>}
+                </tr>
+                <tr className="header-row">
+                  <th className="row-head">GCS P/N</th>
+                  <th>Part ID</th>
+                  <th>Mfr Part #</th>
+                  <th>Manufacturer</th>
+                  <th>Category</th>
+                  <th>Where Used</th>
+                  <th>Description</th>
+                  {editMode && <th></th>}
+                </tr>
+                {!editMode && (
+                  <tr className="filter-row">
+                    <th className="row-head">
+                      <select
+                        value={filters.gcs_id}
+                        onChange={(e) => updateFilter('gcs_id', e.target.value)}
+                      >
+                        <option value="">All</option>
+                        {gcsIdOptions.map((id) => (
+                          <option value={id} key={id}>
+                            {id}
+                          </option>
+                        ))}
+                      </select>
+                    </th>
+                    <th>
+                      <input
+                        type="text"
+                        placeholder="Filter..."
+                        value={filters.gcs_part_id}
+                        onChange={(e) => updateFilter('gcs_part_id', e.target.value)}
+                      />
+                    </th>
+                    <th>
+                      <input
+                        type="text"
+                        placeholder="Filter..."
+                        value={filters.manufacturer_part_number}
+                        onChange={(e) => updateFilter('manufacturer_part_number', e.target.value)}
+                      />
+                    </th>
+                    <th>
+                      <select
+                        value={filters.manufacturer}
+                        onChange={(e) => updateFilter('manufacturer', e.target.value)}
+                      >
+                        <option value="">All</option>
+                        {manufacturerOptions.map((v) => (
+                          <option value={v} key={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    </th>
+                    <th>
+                      <select
+                        value={filters.spare_category}
+                        onChange={(e) => updateFilter('spare_category', e.target.value)}
+                      >
+                        <option value="">All</option>
+                        {categoryOptions.map((v) => (
+                          <option value={v} key={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    </th>
+                    <th>
+                      <select
+                        value={filters.where_used}
+                        onChange={(e) => updateFilter('where_used', e.target.value)}
+                      >
+                        <option value="">All</option>
+                        {whereUsedOptions.map((v) => (
+                          <option value={v} key={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    </th>
+                    <th>
+                      <input
+                        type="text"
+                        placeholder="Filter..."
+                        value={filters.description}
+                        onChange={(e) => updateFilter('description', e.target.value)}
+                      />
+                    </th>
+                  </tr>
+                )}
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td className="empty" colSpan={editMode ? 8 : 7}>
+                      {parts.length === 0 ? 'No parts yet.' : 'No parts match your filters.'}
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((p, i) => (
+                    <tr key={editMode ? p._tempId || p.gcs_id : p.gcs_id}>
+                      <td className="row-head">{p._existing !== false ? p.gcs_id : 'new'}</td>
+                      {editMode && !p._existing ? (
+                        <>
+                          <td>
+                            <input
+                              type="text"
+                              value={p.gcs_part_id || ''}
+                              onChange={(e) => updateDraftField(i, 'gcs_part_id', e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              value={p.manufacturer_part_number || ''}
+                              onChange={(e) => updateDraftField(i, 'manufacturer_part_number', e.target.value)}
+                            />
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td>{p.gcs_part_id}</td>
+                          <td>{p.manufacturer_part_number || '—'}</td>
+                        </>
+                      )}
+                      {editMode ? (
+                        <>
+                          <td>
+                            <input
+                              type="text"
+                              list="manufacturer-options"
+                              value={p.manufacturer || ''}
+                              onChange={(e) => updateDraftField(i, 'manufacturer', e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              list="category-options"
+                              value={p.spare_category || ''}
+                              onChange={(e) => updateDraftField(i, 'spare_category', e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              list="where-used-options"
+                              value={p.where_used || ''}
+                              onChange={(e) => updateDraftField(i, 'where_used', e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              value={p.description || ''}
+                              onChange={(e) => updateDraftField(i, 'description', e.target.value)}
+                            />
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td>{p.manufacturer || '—'}</td>
+                          <td>{p.spare_category || '—'}</td>
+                          <td>{p.where_used || '—'}</td>
+                          <td>{p.description || '—'}</td>
+                        </>
+                      )}
+                      {editMode && (
+                        <td className="col-last">
+                          <button className="del-btn" onClick={() => removeDraftRow(i)}>
+                            Delete
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      )}
+      </>
+      )}
+
+      {activeTab === 'projects' && (
+      <>
+      {!pendingAction && (
+      <div className="card">
+        <div className="project-row">
+          <div className="project-select-wrap">
+            <label htmlFor="project_select" className="project-select-label">
+              Project
+            </label>
+            <select
+              id="project_select"
+              value={selectedProjectId ?? ''}
+              onChange={(e) => setSelectedProjectId(Number(e.target.value))}
+              disabled={projectEditMode}
+            >
+              {projects.map((p) => (
+                <option value={p.id} key={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {!projectEditMode ? (
+            <div className="edit-toolbar">
+              <button
+                className="btn-primary"
+                onClick={() => requireAdmin({ type: 'project-edit' })}
+                disabled={!selectedProjectId}
+              >
+                Edit List
+              </button>
+            </div>
+          ) : (
+            <div className="edit-toolbar">
+              <button className="btn-primary" onClick={handleSaveProjectEdits} disabled={savingProjectEdits}>
+                {savingProjectEdits ? 'Saving…' : 'Save Changes'}
+              </button>
+              <input
+                type="text"
+                placeholder="Search parts to narrow the list..."
+                value={projectEditFilter}
+                onChange={(e) => setProjectEditFilter(e.target.value)}
+              />
+              <button
+                className="btn-secondary"
+                onClick={handleCancelProjectEdits}
+                disabled={savingProjectEdits}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+        {projectStatus && (
+          <div className={'status ' + (projectStatus.ok ? 'ok' : 'err')}>{projectStatus.msg}</div>
+        )}
+      </div>
+      )}
+
+      {!projectEditMode ? (
+        <div className="card">
+          <div className="card-header">
+            <h2>Required Parts {projectLoading ? '' : `(${visibleProjectItems.length})`}</h2>
+            <div className="project-select-wrap" style={{ maxWidth: 180, flex: 'none' }}>
+              <label htmlFor="project_pn_filter" className="project-select-label">
+                GCS P/N
+              </label>
+              <select
+                id="project_pn_filter"
+                value={projectViewFilter}
+                onChange={(e) => setProjectViewFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                {gcsIdOptions.map((id) => (
+                  <option value={id} key={id}>
+                    {id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {projectLoading ? (
+            <div className="empty">Loading...</div>
+          ) : (
+            <div className="sheet-wrap">
+              <table className="sheet">
+                <colgroup>
+                  <col className="col-rowhead" />
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '10%' }} />
+                </colgroup>
+                <thead>
+                  <tr className="header-row">
+                    <th className="row-head">GCS P/N</th>
+                    <th>Part ID</th>
+                    <th>Manufacturer</th>
+                    <th>Description</th>
+                    <th className="center-cell">Target Stock</th>
+                    <th className="center-cell">Shared</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleProjectItems.length === 0 ? (
+                    <tr>
+                      <td className="empty" colSpan={6}>
+                        {projectViewFilter
+                          ? 'No parts match your filter.'
+                          : 'No required parts yet for this project.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleProjectItems.map((item) => (
+                      <tr key={item.id}>
+                        <td className="row-head">{item.parts?.gcs_id}</td>
+                        <td>{item.parts?.gcs_part_id}</td>
+                        <td>{item.parts?.manufacturer || '—'}</td>
+                        <td>{item.parts?.description || '—'}</td>
+                        <td className="center-cell">{item.target_stock ?? '—'}</td>
+                        <td className="center-cell">
+                          {item.shared ? (
+                            <input type="radio" className="avail-dot" checked readOnly disabled />
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="card">
+          <div className="card-header">
+            <h2>
+              All Parts ({visibleDraftProjectItems.length}
+              {projectEditFilter ? ` of ${draftProjectItems.length}` : ''})
+            </h2>
+            <p className="sub" style={{ margin: 0 }}>
+              Check a part as required and set the target stock level. Mark Shared if this
+              project's need can be met from its own stock, another project's stock, or FLOPS —
+              unshared rows only count stock physically at this project. Only unshared rows count
+              toward the total Target shown on Inventory On Hand.
+            </p>
+          </div>
+
+          <div className="sheet-wrap">
+            <table className="sheet">
+              <colgroup>
+                <col className="col-rowhead" />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '12%' }} />
+                <col />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '22%' }} />
+              </colgroup>
+              <thead>
+                <tr className="header-row">
+                  <th className="row-head">GCS P/N</th>
+                  <th>Part ID</th>
+                  <th>Manufacturer</th>
+                  <th>Description</th>
+                  <th className="center-cell">Required</th>
+                  <th className="center-cell">Target Stock</th>
+                  <th className="center-cell">Shared</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleDraftProjectItems.length === 0 ? (
+                  <tr>
+                    <td className="empty" colSpan={7}>
+                      No parts match your search.
+                    </td>
+                  </tr>
+                ) : (
+                  visibleDraftProjectItems.map((row) => {
+                    const i = draftProjectItems.indexOf(row)
+                    return (
+                      <tr key={row.gcs_id}>
+                        <td className="row-head">{row.gcs_id}</td>
+                        <td>{row.part.gcs_part_id}</td>
+                        <td>{row.part.manufacturer || '—'}</td>
+                        <td>{row.part.description || '—'}</td>
+                        <td className="center-cell">
+                          <input
+                            type="checkbox"
+                            checked={row.required}
+                            onChange={(e) => updateProjectRequired(i, e.target.checked)}
+                          />
+                        </td>
+                        <td className="center-cell">
+                          <input
+                            type="number"
+                            min="0"
+                            disabled={!row.required}
+                            value={row.target_stock}
+                            onChange={(e) => updateProjectDraftField(i, 'target_stock', e.target.value)}
+                          />
+                        </td>
+                        <td className="center-cell">
+                          <input
+                            type="checkbox"
+                            className="avail-dot"
+                            disabled={!row.required}
+                            checked={row.shared}
+                            onChange={(e) => updateProjectDraftField(i, 'shared', e.target.checked)}
+                          />
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      </>
+      )}
+
+      {activeTab === 'stock' && (
+      <>
+      {!pendingAction && (
+      <div className="card">
+        {stockPanel ? (
+          <div className="edit-toolbar">
+            <button className="btn-secondary" onClick={resetStockPanel}>
+              ← Back to Inventory
+            </button>
+          </div>
+        ) : !stockEditMode && !locationEditMode ? (
+          <div className="edit-toolbar">
+            <button className="btn-secondary" onClick={() => setStockPanel('upload')}>
+              Upload Inventory Count
+            </button>
+            <button className="btn-primary" onClick={() => requireAdmin({ type: 'stock-edit' })}>
+              Inventory Adjustment
+            </button>
+            <button className="btn-secondary" onClick={() => requireAdmin({ type: 'location-edit' })}>
+              Update Location
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                setStockPanel('history')
+                loadJournalEntries()
+              }}
+            >
+              History
+            </button>
+          </div>
+        ) : stockEditMode ? (
+          <div className="edit-toolbar">
+            <button
+              className="btn-primary"
+              onClick={handleSaveStockEdits}
+              disabled={savingStockEdits || !adjustNote.trim()}
+            >
+              {savingStockEdits ? 'Saving…' : 'Save Adjustment'}
+            </button>
+            <input
+              type="text"
+              placeholder="Search parts to narrow the list..."
+              value={stockEditFilter}
+              onChange={(e) => setStockEditFilter(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Reason for this adjustment (required)"
+              value={adjustNote}
+              onChange={(e) => setAdjustNote(e.target.value)}
+              required
+            />
+            <button className="btn-secondary" onClick={handleCancelStockEdits} disabled={savingStockEdits}>
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="edit-toolbar">
+            <button
+              className="btn-primary"
+              onClick={handleSaveLocationEdits}
+              disabled={savingLocationEdits || !locationNote.trim()}
+            >
+              {savingLocationEdits ? 'Saving…' : 'Save Locations'}
+            </button>
+            <input
+              type="text"
+              placeholder="Search parts to narrow the list..."
+              value={locationEditFilter}
+              onChange={(e) => setLocationEditFilter(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Reason for this change (required)"
+              value={locationNote}
+              onChange={(e) => setLocationNote(e.target.value)}
+              required
+            />
+            <button className="btn-secondary" onClick={handleCancelLocationEdits} disabled={savingLocationEdits}>
+              Cancel
+            </button>
+          </div>
+        )}
+        {stockStatus && (
+          <div className={'status ' + (stockStatus.ok ? 'ok' : 'err')}>{stockStatus.msg}</div>
+        )}
+      </div>
+      )}
+
+      {stockPanel === 'upload' && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Upload Inventory Count</h2>
+            <p className="sub" style={{ margin: 0 }}>
+              CSV with columns: GCS P/N, Project, Quantity. Every row replaces that part's stock at
+              that project — the previous value is archived in History.
+            </p>
+          </div>
+          <div className="edit-toolbar" style={{ marginBottom: 12 }}>
+            <button className="btn-secondary" onClick={handleExportInventory}>
+              Export Current Inventory (CSV)
+            </button>
+          </div>
+          <input type="file" accept=".csv" onChange={handleUploadFileChange} />
+          {uploadErrors.length > 0 && (
+            <div className="status err" style={{ marginTop: 12 }}>
+              {uploadErrors.map((e, i) => (
+                <div key={i}>{e}</div>
+              ))}
+            </div>
+          )}
+          {uploadPreview && (
+            <>
+              <div className="sheet-wrap" style={{ marginTop: 12 }}>
+                <table className="sheet">
+                  <colgroup>
+                    <col className="col-rowhead" />
+                    <col style={{ width: '18%' }} />
+                    <col />
+                    <col style={{ width: '15%' }} />
+                    <col style={{ width: '15%' }} />
+                  </colgroup>
+                  <thead>
+                    <tr className="header-row">
+                      <th className="row-head">GCS P/N</th>
+                      <th>Project</th>
+                      <th>Description</th>
+                      <th className="center-cell">Previous</th>
+                      <th className="center-cell">New</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {uploadPreview.rows.map((r, i) => (
+                      <tr key={i}>
+                        <td className="row-head">{r.gcs_id}</td>
+                        <td>{r.project_name}</td>
+                        <td>{r.part?.description || '—'}</td>
+                        <td className="center-cell">{r.previous ?? '—'}</td>
+                        <td className="center-cell">{r.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="edit-toolbar" style={{ marginTop: 12 }}>
+                <input
+                  type="text"
+                  placeholder="Reason for this upload (required)"
+                  value={uploadNote}
+                  onChange={(e) => setUploadNote(e.target.value)}
+                  required
+                />
+                <button
+                  className="btn-primary"
+                  onClick={handleConfirmUpload}
+                  disabled={uploading || !uploadNote.trim()}
+                >
+                  {uploading ? 'Uploading…' : `Confirm Upload (${uploadPreview.rows.length} rows)`}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {stockPanel === 'history' && (
+        <div className="card">
+          <div className="card-header">
+            <h2>History {journalLoading ? '' : `(${journalEntries.length})`}</h2>
+          </div>
+          {journalLoading ? (
+            <div className="empty">Loading...</div>
+          ) : journalEntries.length === 0 ? (
+            <div className="empty">No changes logged yet.</div>
+          ) : (
+            <div className="sheet-wrap">
+              <table className="sheet">
+                <thead>
+                  <tr className="header-row">
+                    <th className="row-head">Date</th>
+                    <th>Type</th>
+                    <th>Note</th>
+                    <th className="center-cell"># Changed</th>
+                    <th className="center-cell"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {journalEntries.map((j) => {
+                    const lineCount = j.inventory_journal_lines?.[0]?.count ?? 0
+                    const expanded = expandedJournalId === j.id
+                    return (
+                      <Fragment key={j.id}>
+                        <tr>
+                          <td className="row-head">{new Date(j.created_at).toLocaleString()}</td>
+                          <td>{j.entry_type === 'count' ? 'Inventory Count' : 'Adjustment'}</td>
+                          <td>{j.note || '—'}</td>
+                          <td className="center-cell">{lineCount}</td>
+                          <td className="center-cell">
+                            <button className="btn-secondary" onClick={() => toggleJournalExpand(j.id)}>
+                              {expanded ? 'Hide' : 'View'}
+                            </button>
+                          </td>
+                        </tr>
+                        {expanded && (
+                          <tr key={`${j.id}-detail`}>
+                            <td colSpan={5}>
+                              <table className="sheet">
+                                <colgroup>
+                                  <col style={{ width: '16%' }} />
+                                  <col className="col-rowhead" />
+                                  <col />
+                                  <col style={{ width: '8%' }} />
+                                  <col style={{ width: '8%' }} />
+                                  <col style={{ width: '8%' }} />
+                                  <col style={{ width: '8%' }} />
+                                  <col style={{ width: '8%' }} />
+                                  <col style={{ width: '8%' }} />
+                                </colgroup>
+                                <thead>
+                                  <tr className="header-row">
+                                    <th>Project</th>
+                                    <th className="row-head">GCS P/N</th>
+                                    <th>Description</th>
+                                    <th className="center-cell">Previous Qty</th>
+                                    <th className="center-cell">New Qty</th>
+                                    <th className="center-cell">Previous Storage</th>
+                                    <th className="center-cell">New Storage</th>
+                                    <th className="center-cell">Previous Barn</th>
+                                    <th className="center-cell">New Barn</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(journalLines[j.id] ?? []).map((line) => (
+                                    <tr key={line.id}>
+                                      <td>
+                                        {line.project_id
+                                          ? projects.find((p) => p.id === line.project_id)?.name || line.project_id
+                                          : '—'}
+                                      </td>
+                                      <td className="row-head">{line.part_gcs_id}</td>
+                                      <td>
+                                        {parts.find((p) => p.gcs_id === line.part_gcs_id)?.description || '—'}
+                                      </td>
+                                      <td className="center-cell">{line.previous_quantity ?? '—'}</td>
+                                      <td className="center-cell">{line.new_quantity ?? '—'}</td>
+                                      <td className="center-cell">{line.previous_storage_qty ?? '—'}</td>
+                                      <td className="center-cell">{line.new_storage_qty ?? '—'}</td>
+                                      <td className="center-cell">{line.previous_barn_qty ?? '—'}</td>
+                                      <td className="center-cell">{line.new_barn_qty ?? '—'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!stockPanel && (
+      <div className="card">
+        <div className="card-header">
+          <h2>
+            {stockEditMode ? 'Inventory Adjustment' : locationEditMode ? 'Update Location' : 'Parts'}{' '}
+            {stockLoading
+              ? ''
+              : `(${
+                  stockEditMode
+                    ? visibleDraftStockItems.length
+                    : locationEditMode
+                    ? visibleDraftLocationItems.length
+                    : visibleStockItems.length
+                })`}
+          </h2>
+          {stockEditMode && (
+            <p className="sub" style={{ margin: 0 }}>
+              Each cell shows the current on-hand quantity — edit it up or down directly. Saving
+              archives the previous values and logs an entry in History.
+            </p>
+          )}
+          {locationEditMode && (
+            <p className="sub" style={{ margin: 0 }}>
+              Enter how many units of each part sit in Storage and in the Barn. Project is
+              calculated automatically as whatever's left over. Saving archives the previous values
+              and logs an entry in History.
+            </p>
+          )}
+          {!stockEditMode && !locationEditMode && (
+            <div className="project-select-wrap" style={{ maxWidth: 260 }}>
+              <label htmlFor="stock_view_project" className="project-select-label">
+                View
+              </label>
+              <select
+                id="stock_view_project"
+                value={stockViewProjectId}
+                onChange={(e) => setStockViewProjectId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              >
+                <option value="all">All Projects</option>
+                {projects.map((p) => (
+                  <option value={p.id} key={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {!stockEditMode && !locationEditMode && (
+            <div className="project-select-wrap" style={{ maxWidth: 180, flex: 'none' }}>
+              <label htmlFor="stock_pn_filter" className="project-select-label">
+                GCS P/N
+              </label>
+              <select
+                id="stock_pn_filter"
+                value={stockViewFilter}
+                onChange={(e) => setStockViewFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                {gcsIdOptions.map((id) => (
+                  <option value={id} key={id}>
+                    {id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {stockLoading ? (
+          <div className="empty">Loading...</div>
+        ) : (
+          <div className="sheet-wrap">
+            {(() => {
+              const singleProjectView = !stockEditMode && !locationEditMode && stockViewProjectId !== 'all'
+              const viewProject = singleProjectView ? projects.find((p) => p.id === stockViewProjectId) : null
+              return (
+            <table className="sheet">
+              <colgroup>
+                <col className="col-rowhead" />
+                <col />
+                {singleProjectView ? (
+                  <col style={{ width: '8%' }} />
+                ) : (
+                  projects.map((p) => (
+                    <col key={p.id} style={{ width: `${48 / projects.length}%` }} />
+                  ))
+                )}
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '6%' }} />
+              </colgroup>
+              <thead>
+                <tr className="header-row">
+                  <th className="row-head" rowSpan={2}>GCS P/N</th>
+                  <th rowSpan={2}>Description</th>
+                  {singleProjectView ? (
+                    <th className="center-cell" rowSpan={2}>{shortProjectName(viewProject?.name || '')}</th>
+                  ) : (
+                    projects.map((p) => (
+                      <th className="center-cell" key={p.id} rowSpan={2} title={p.name}>
+                        {shortProjectName(p.name)}
+                      </th>
+                    ))
+                  )}
+                  <th className="center-cell total-col" rowSpan={2}>Target Stock</th>
+                  <th className="center-cell total-col" rowSpan={2}>
+                    {singleProjectView ? 'Available - All Projects' : 'Available on Hand'}
+                  </th>
+                  <th className="center-cell total-col" colSpan={3}>
+                    {singleProjectView ? 'Storage Location - This Project' : 'Storage Location'}
+                  </th>
+                </tr>
+                <tr className="header-row">
+                  <th className="center-cell total-col">Project</th>
+                  <th className="center-cell">Storage</th>
+                  <th className="center-cell">Barn</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stockEditMode ? (
+                  visibleDraftStockItems.length === 0 ? (
+                    <tr>
+                      <td className="empty" colSpan={projects.length + 5}>
+                        No parts match your search.
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleDraftStockItems.map((row) => {
+                      const i = draftStockItems.indexOf(row)
+                      const targetSum = computeTargetSum(Object.values(row.perProject))
+                      const onHandSum = Object.values(row.qtyByProject).reduce(
+                        (sum, v) => sum + (v === '' ? 0 : Number(v)),
+                        0
+                      )
+                      const storageQty = row.part?.storage_qty ?? 0
+                      const barnQty = row.part?.barn_qty ?? 0
+                      return (
+                        <tr key={row.gcs_id}>
+                          <td className="row-head">{row.gcs_id}</td>
+                          <td>{row.part?.description || '—'}</td>
+                          {projects.map((p) => {
+                            const required = Object.prototype.hasOwnProperty.call(row.qtyByProject, p.id)
+                            return (
+                              <td className="center-cell" key={p.id}>
+                                {required ? (
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={row.qtyByProject[p.id]}
+                                    onChange={(e) => updateStockDraftField(i, p.id, e.target.value)}
+                                  />
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
+                            )
+                          })}
+                          <td className="center-cell total-col">{targetSum}</td>
+                          <td className="center-cell total-col">{onHandSum}</td>
+                          <td className="center-cell total-col">{onHandSum - storageQty - barnQty}</td>
+                          <td className="center-cell">{storageQty}</td>
+                          <td className="center-cell">{barnQty}</td>
+                        </tr>
+                      )
+                    })
+                  )
+                ) : locationEditMode ? (
+                  visibleDraftLocationItems.length === 0 ? (
+                    <tr>
+                      <td className="empty" colSpan={projects.length + 5}>
+                        No parts match your search.
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleDraftLocationItems.map((row) => {
+                      const i = draftLocationItems.indexOf(row)
+                      const storageQty = row.storage_qty === '' ? 0 : Number(row.storage_qty)
+                      const barnQty = row.barn_qty === '' ? 0 : Number(row.barn_qty)
+                      const projectQty = row.onHandSum - storageQty - barnQty
+                      return (
+                        <tr key={row.gcs_id}>
+                          <td className="row-head">{row.gcs_id}</td>
+                          <td>{row.part?.description || '—'}</td>
+                          {projects.map((p) => {
+                            const entry = row.perProject[p.id]
+                            return (
+                              <td className="center-cell" key={p.id}>
+                                {entry ? entry.onHand : '—'}
+                              </td>
+                            )
+                          })}
+                          <td className="center-cell total-col">—</td>
+                          <td className="center-cell total-col">{row.onHandSum}</td>
+                          <td className="center-cell total-col" style={projectQty < 0 ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
+                            {projectQty}
+                          </td>
+                          <td className="center-cell">
+                            <input
+                              type="number"
+                              min="0"
+                              value={row.storage_qty}
+                              onChange={(e) => updateLocationDraftField(i, 'storage_qty', e.target.value)}
+                            />
+                          </td>
+                          <td className="center-cell">
+                            <input
+                              type="number"
+                              min="0"
+                              value={row.barn_qty}
+                              onChange={(e) => updateLocationDraftField(i, 'barn_qty', e.target.value)}
+                            />
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )
+                ) : visibleStockItems.length === 0 ? (
+                  <tr>
+                    <td className="empty" colSpan={(singleProjectView ? 1 : projects.length) + 7}>
+                      {stockViewFilter
+                        ? 'No parts match your filter.'
+                        : singleProjectView
+                        ? 'No parts required for this project.'
+                        : 'No parts yet — required parts must be added on the Required Inventory tab first.'}
+                    </td>
+                  </tr>
+                ) : (
+                  visibleStockItems.map((item) => {
+                    const viewEntry = singleProjectView ? item.perProject[stockViewProjectId] : null
+                    return (
+                      <tr key={item.gcs_id}>
+                        <td className="row-head">{item.gcs_id}</td>
+                        <td>{item.part?.description || '—'}</td>
+                        {singleProjectView ? (
+                          <td className="center-cell">{viewEntry ? viewEntry.onHand : '—'}</td>
+                        ) : (
+                          projects.map((p) => {
+                            const entry = item.perProject[p.id]
+                            return (
+                              <td className="center-cell" key={p.id}>
+                                {entry ? entry.onHand : '—'}
+                              </td>
+                            )
+                          })
+                        )}
+                        <td className="center-cell total-col">
+                          {singleProjectView ? (viewEntry ? viewEntry.target ?? 0 : '—') : item.targetSum}
+                        </td>
+                        <td className="center-cell total-col">{item.onHandSum}</td>
+                        <td className="center-cell total-col">
+                          {singleProjectView ? (viewEntry ? viewEntry.onHand : 0) : item.projectQty}
+                        </td>
+                        <td className="center-cell">{item.storageQty}</td>
+                        <td className="center-cell">{item.barnQty}</td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+              )
+            })()}
+          </div>
+        )}
+      </div>
+      )}
+      </>
+      )}
+
+
+    </div>
+  )
+}
+
+export default App

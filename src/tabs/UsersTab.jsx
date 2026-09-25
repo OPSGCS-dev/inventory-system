@@ -1,15 +1,18 @@
-import { useState } from 'react'
 import { PO_ROLE_OPTIONS } from '../utils'
 
 function UsersTab({
   draftUsers,
   usersStatus,
-  addDraftUserRow,
-  removeDraftUserRow,
   updateDraftUserField,
   toggleDraftUserRole,
   savingUsers,
   handleSaveUsers,
+  inviteEmail,
+  setInviteEmail,
+  inviteRoles,
+  toggleInviteRole,
+  inviting,
+  handleInviteUser,
   draftBudgetCategories,
   addDraftBudgetCategoryRow,
   removeDraftBudgetCategoryRow,
@@ -66,20 +69,6 @@ function UsersTab({
   handleConfirmAdminImport,
   resetAdminImportPanel,
 }) {
-  // Which rows' stored password is currently shown in plain text — purely a
-  // local display toggle, never sent anywhere.
-  const [revealedUserIds, setRevealedUserIds] = useState(() => new Set())
-  const [revealedVendorIds, setRevealedVendorIds] = useState(() => new Set())
-
-  function toggleRevealed(setFn, id) {
-    setFn((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
   return (
     <>
       <div className="card">
@@ -104,8 +93,8 @@ function UsersTab({
             <p className="sub" style={{ margin: '0 0 8px' }}>
               Excel file with one worksheet per category — Users, Vendors, Entities, Projects, Budget
               Categories, Budget Sub-Categories — matching the file from "Export All (Excel)". Rows
-              matching an existing name update it; anything else is added. New users need a Password
-              column filled in.
+              matching an existing name update it; anything else is added. New users aren't created
+              this way — invite them from the Users section above instead, then re-import to set roles.
             </p>
             <input type="file" accept=".xlsx,.xls" onChange={handleAdminImportFileChange} />
             {adminImportErrors.length > 0 && (
@@ -168,70 +157,34 @@ function UsersTab({
         <div className="sheet-wrap">
           <table className="sheet">
             <colgroup>
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '16%' }} />
+              <col style={{ width: '24%' }} />
               {PO_ROLE_OPTIONS.map((r) => (
                 <col style={{ width: '9%' }} key={r.value} />
               ))}
               <col style={{ width: '8%' }} />
-              <col className="col-last" />
             </colgroup>
             <thead>
               <tr className="header-row">
-                <th>Name</th>
-                <th>Password</th>
+                <th>Email</th>
                 {PO_ROLE_OPTIONS.map((r) => (
                   <th className="center-cell" key={r.value}>
                     {r.label}
                   </th>
                 ))}
                 <th className="center-cell">Active</th>
-                <th className="col-last"></th>
               </tr>
             </thead>
             <tbody>
               {draftUsers.length === 0 ? (
                 <tr>
-                  <td className="empty" colSpan={PO_ROLE_OPTIONS.length + 4}>
+                  <td className="empty" colSpan={PO_ROLE_OPTIONS.length + 2}>
                     No users yet.
                   </td>
                 </tr>
               ) : (
                 draftUsers.map((u, i) => (
-                  <tr key={u._existing ? u.id : u._tempId}>
-                    <td>
-                      <input
-                        type="text"
-                        value={u.name}
-                        onChange={(e) => updateDraftUserField(i, 'name', e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      {u._existing && u._currentPassword && (
-                        <div
-                          className="sub"
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 4px' }}
-                        >
-                          <span style={{ fontFamily: 'monospace' }}>
-                            {revealedUserIds.has(u.id) ? u._currentPassword : '••••••••'}
-                          </span>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            style={{ padding: '2px 8px', fontSize: 11 }}
-                            onClick={() => toggleRevealed(setRevealedUserIds, u.id)}
-                          >
-                            {revealedUserIds.has(u.id) ? 'Hide' : 'Show'}
-                          </button>
-                        </div>
-                      )}
-                      <input
-                        type="password"
-                        placeholder={u._existing ? 'Leave blank to keep' : 'Password'}
-                        value={u.password}
-                        onChange={(e) => updateDraftUserField(i, 'password', e.target.value)}
-                      />
-                    </td>
+                  <tr key={u.id}>
+                    <td>{u.name}</td>
                     {PO_ROLE_OPTIONS.map((r) => (
                       <td className="center-cell" key={r.value}>
                         <input
@@ -248,13 +201,6 @@ function UsersTab({
                         onChange={(e) => updateDraftUserField(i, 'active', e.target.checked)}
                       />
                     </td>
-                    <td className="col-last">
-                      {!u._existing && (
-                        <button className="del-btn" onClick={() => removeDraftUserRow(i)}>
-                          Delete
-                        </button>
-                      )}
-                    </td>
                   </tr>
                 ))
               )}
@@ -266,9 +212,34 @@ function UsersTab({
           <button className="btn-primary" onClick={handleSaveUsers} disabled={savingUsers}>
             {savingUsers ? 'Saving…' : 'Save'}
           </button>
-          <button className="btn-secondary" onClick={addDraftUserRow} disabled={savingUsers}>
-            + Add User
-          </button>
+        </div>
+
+        <div className="add-form" style={{ marginTop: 16 }}>
+          <label htmlFor="invite_email">Invite New User (sends them a password-setup email)</label>
+          <input
+            id="invite_email"
+            type="email"
+            placeholder="name@greatcirclesolar.com"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+          />
+          <div className="field-row" style={{ flexWrap: 'wrap', gap: '4px 16px' }}>
+            {PO_ROLE_OPTIONS.map((r) => (
+              <label key={r.value} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={inviteRoles.includes(r.value)}
+                  onChange={() => toggleInviteRole(r.value)}
+                />
+                {r.label}
+              </label>
+            ))}
+          </div>
+          <div className="form-actions">
+            <button className="btn-primary" onClick={handleInviteUser} disabled={inviting}>
+              {inviting ? 'Sending invite…' : 'Send Invite'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -485,13 +456,12 @@ function UsersTab({
         <div className="sheet-wrap">
           <table className="sheet">
             <colgroup>
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '10%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '7%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '14%' }} />
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '16%' }} />
               <col />
               <col className="col-last" />
             </colgroup>
@@ -502,7 +472,6 @@ function UsersTab({
                 <th>Phone</th>
                 <th>Email</th>
                 <th className="center-cell">Logon</th>
-                <th>Password</th>
                 <th>Address</th>
                 <th>Notes</th>
                 <th className="col-last"></th>
@@ -511,7 +480,7 @@ function UsersTab({
             <tbody>
               {vendors.length === 0 ? (
                 <tr>
-                  <td className="empty" colSpan={9}>
+                  <td className="empty" colSpan={8}>
                     No vendors yet.
                   </td>
                 </tr>
@@ -527,36 +496,6 @@ function UsersTab({
                         type="checkbox"
                         checked={Boolean(v.logon_enabled)}
                         onChange={(e) => handleUpdateVendorLogon(v, { logon_enabled: e.target.checked })}
-                      />
-                    </td>
-                    <td>
-                      {v.password && (
-                        <div
-                          className="sub"
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 4px' }}
-                        >
-                          <span style={{ fontFamily: 'monospace' }}>
-                            {revealedVendorIds.has(v.id) ? v.password : '••••••••'}
-                          </span>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            style={{ padding: '2px 8px', fontSize: 11 }}
-                            onClick={() => toggleRevealed(setRevealedVendorIds, v.id)}
-                          >
-                            {revealedVendorIds.has(v.id) ? 'Hide' : 'Show'}
-                          </button>
-                        </div>
-                      )}
-                      <input
-                        type="password"
-                        placeholder={v.password ? 'Leave blank to keep' : 'Set password'}
-                        onBlur={(e) => {
-                          if (e.target.value) {
-                            handleUpdateVendorLogon(v, { password: e.target.value })
-                            e.target.value = ''
-                          }
-                        }}
                       />
                     </td>
                     <td>{v.address || '—'}</td>

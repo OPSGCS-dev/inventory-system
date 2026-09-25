@@ -25,11 +25,9 @@ import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import UsersTab from './tabs/UsersTab'
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD
-const LOGGED_IN_USER_KEY = 'inventory_logged_in_user_id'
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true)
-  const [noUsersExist, setNoUsersExist] = useState(false)
   const [loggedInUser, setLoggedInUser] = useState(null)
 
   const [loginName, setLoginName] = useState('')
@@ -37,10 +35,14 @@ function App() {
   const [loginError, setLoginError] = useState(null)
   const [loginBusy, setLoginBusy] = useState(false)
 
-  const [bootstrapName, setBootstrapName] = useState('')
-  const [bootstrapPassword, setBootstrapPassword] = useState('')
-  const [bootstrapError, setBootstrapError] = useState(null)
-  const [bootstrapBusy, setBootstrapBusy] = useState(false)
+  // Set after following an invite/recovery email link — Supabase has already
+  // signed this browser in with a temporary session, but the person still
+  // needs to choose their own password before using the app.
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
+  const [passwordSetupValue, setPasswordSetupValue] = useState('')
+  const [passwordSetupConfirm, setPasswordSetupConfirm] = useState('')
+  const [passwordSetupError, setPasswordSetupError] = useState(null)
+  const [passwordSetupBusy, setPasswordSetupBusy] = useState(false)
 
   const [activeTab, setActiveTab] = useState('master')
 
@@ -177,6 +179,9 @@ function App() {
   const [usersStatus, setUsersStatus] = useState(null)
   const [draftUsers, setDraftUsers] = useState([])
   const [savingUsers, setSavingUsers] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRoles, setInviteRoles] = useState([])
+  const [inviting, setInviting] = useState(false)
 
   const [showVendorForm, setShowVendorForm] = useState(false)
   const [editingVendorId, setEditingVendorId] = useState(null)
@@ -366,11 +371,7 @@ function App() {
   // baseline after every save/reload. Vendor-logon accounts (vendor_id set)
   // are managed from the Vendors table instead, so they're excluded here.
   useEffect(() => {
-    setDraftUsers(
-      users
-        .filter((u) => !u.vendor_id)
-        .map((u) => ({ ...u, _existing: true, password: '', _currentPassword: u.password }))
-    )
+    setDraftUsers(users.filter((u) => !u.vendor_id).map((u) => ({ ...u, _existing: true })))
   }, [users])
 
   async function loadVendors() {
@@ -448,111 +449,103 @@ function App() {
     }
   }, [loggedInUser])
 
-  // On mount: figure out whether any users exist at all (if not, this is a
-  // brand-new install and needs a one-time "create the first admin" step
-  // instead of a login form — otherwise the app would be permanently locked
-  // out now that login is required to reach any screen). Otherwise, try to
-  // restore a previously logged-in user from sessionStorage.
-  useEffect(() => {
-    async function init() {
-      // Bootstrap is needed not just when the users table is completely
-      // empty, but also if it has rows with no password set at all yet (e.g.
-      // existing rows from before per-user login existed) — either way,
-      // nobody could possibly log in, which would permanently lock the app.
-      const { data: allUsers, error: usersError } = await supabase
-        .from('users')
-        .select('id, password, active')
-
-      if (!usersError) {
-        const canAnyoneLogIn = (allUsers || []).some((u) => u.active && u.password)
-        if (!canAnyoneLogIn) {
-          setNoUsersExist(true)
-          setAuthLoading(false)
-          return
-        }
-      }
-      setNoUsersExist(false)
-
-      const storedId = sessionStorage.getItem(LOGGED_IN_USER_KEY)
-      if (storedId) {
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', Number(storedId))
-          .maybeSingle()
-        if (!error && data && data.active) {
-          setLoggedInUser(data)
-        } else {
-          sessionStorage.removeItem(LOGGED_IN_USER_KEY)
-        }
-      }
-      setAuthLoading(false)
+  // Loads (or reloads, after sign-in/out) the `users` row that matches the
+  // current Supabase Auth session, which is what the rest of this app
+  // actually reads as "the logged-in user" (id, roles, vendor_id, etc.).
+  async function loadUserForSession(session) {
+    if (!session?.user) {
+      setLoggedInUser(null)
+      return
     }
-    init()
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('auth_user_id', session.user.id)
+      .maybeSingle()
+    if (error || !data || !data.active) {
+      setLoggedInUser(null)
+      return
+    }
+    setLoggedInUser(data)
+  }
+
+  // On mount: an invite/recovery email link lands back here with Supabase
+  // already having parsed a temporary session out of the URL — in that case
+  // show a "set your password" screen instead of the normal app. Otherwise,
+  // just restore whatever session Supabase already has persisted.
+  useEffect(() => {
+    if (window.location.hash.includes('type=invite') || window.location.hash.includes('type=recovery')) {
+      setNeedsPasswordSetup(true)
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      loadUserForSession(session).finally(() => setAuthLoading(false))
+    })
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setNeedsPasswordSetup(true)
+      }
+      loadUserForSession(session)
+    })
+
+    return () => listener.subscription.unsubscribe()
   }, [])
 
   async function handleLogin(e) {
     e.preventDefault()
     setLoginError(null)
-    const name = loginName.trim()
-    if (!name || !loginPassword) {
-      setLoginError('Name and password are required.')
+    const email = loginName.trim()
+    if (!email || !loginPassword) {
+      setLoginError('Email and password are required.')
       return
     }
     setLoginBusy(true)
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .ilike('name', name)
-        .eq('active', true)
+      const { error } = await supabase.auth.signInWithPassword({ email, password: loginPassword })
       if (error) throw error
-      const match = (data || []).find((u) => u.password === loginPassword)
-      if (!match) {
-        setLoginError('Incorrect name or password.')
-        return
-      }
-      setLoggedInUser(match)
-      sessionStorage.setItem(LOGGED_IN_USER_KEY, String(match.id))
       setLoginName('')
       setLoginPassword('')
     } catch (error) {
       console.error(error)
-      setLoginError('Could not log in — check the console for details.')
+      setLoginError('Incorrect email or password.')
     } finally {
       setLoginBusy(false)
     }
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    await supabase.auth.signOut()
     setLoggedInUser(null)
-    sessionStorage.removeItem(LOGGED_IN_USER_KEY)
   }
 
-  async function handleBootstrapAdmin(e) {
+  async function handlePasswordSetup(e) {
     e.preventDefault()
-    setBootstrapError(null)
-    const name = bootstrapName.trim()
-    if (!name || !bootstrapPassword) {
-      setBootstrapError('Name and password are required.')
+    setPasswordSetupError(null)
+    if (!passwordSetupValue || passwordSetupValue.length < 8) {
+      setPasswordSetupError('Password must be at least 8 characters.')
       return
     }
-    setBootstrapBusy(true)
+    if (passwordSetupValue !== passwordSetupConfirm) {
+      setPasswordSetupError('Passwords do not match.')
+      return
+    }
+    setPasswordSetupBusy(true)
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .insert({ name, password: bootstrapPassword, roles: ['admin'], active: true })
-        .select()
-        .single()
+      const { error } = await supabase.auth.updateUser({ password: passwordSetupValue })
       if (error) throw error
-      setNoUsersExist(false)
-      setLoggedInUser(data)
-      sessionStorage.setItem(LOGGED_IN_USER_KEY, String(data.id))
+      setNeedsPasswordSetup(false)
+      setPasswordSetupValue('')
+      setPasswordSetupConfirm('')
+      // Clear the invite/recovery token out of the URL now that it's used.
+      window.history.replaceState(null, '', window.location.pathname)
+      const { data: { session } } = await supabase.auth.getSession()
+      await loadUserForSession(session)
     } catch (error) {
       console.error(error)
-      setBootstrapError('Could not create the admin account — check the console for details.')
+      setPasswordSetupError('Could not set password — check the console for details.')
     } finally {
-      setBootstrapBusy(false)
+      setPasswordSetupBusy(false)
     }
   }
 
@@ -893,9 +886,8 @@ function App() {
       const name = String(getCell(row, 'Name') || '').trim()
       if (!name) return
       const existing = users.find((u) => u.name.toLowerCase() === name.toLowerCase())
-      const password = String(getCell(row, 'Password') || '').trim()
-      if (!existing && !password) {
-        errors.push(`Users row ${rowNum}: New user "${name}" needs a Password.`)
+      if (!existing) {
+        errors.push(`Users row ${rowNum}: "${name}" doesn't match an existing user — add new users via the Invite form instead, then re-import to set their roles.`)
         return
       }
       const roles = []
@@ -910,9 +902,9 @@ function App() {
       rows.push({
         section: 'User',
         name,
-        action: existing ? 'update' : 'insert',
-        existingId: existing?.id ?? null,
-        data: { name, password, roles, active },
+        action: 'update',
+        existingId: existing.id,
+        data: { roles, active },
       })
     })
 
@@ -1032,15 +1024,11 @@ function App() {
       const byType = (section) => adminImportPreview.rows.filter((r) => r.section === section)
 
       for (const row of byType('User')) {
-        const payload = { name: row.data.name, roles: row.data.roles, active: row.data.active }
-        if (row.data.password) payload.password = row.data.password
-        if (row.action === 'update') {
-          const { error } = await supabase.from('users').update(payload).eq('id', row.existingId)
-          if (error) throw error
-        } else {
-          const { error } = await supabase.from('users').insert(payload)
-          if (error) throw error
-        }
+        const { error } = await supabase
+          .from('users')
+          .update({ roles: row.data.roles, active: row.data.active })
+          .eq('id', row.existingId)
+        if (error) throw error
       }
 
       for (const row of byType('Vendor')) {
@@ -2579,21 +2567,6 @@ function App() {
     setTimeout(() => setUsersStatus(null), 3000)
   }
 
-  function addDraftUserRow() {
-    setDraftUsers((prev) => [
-      ...prev,
-      { _existing: false, _tempId: crypto.randomUUID(), name: '', password: '', roles: [], active: true },
-    ])
-  }
-
-  function removeDraftUserRow(index) {
-    setDraftUsers((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  function updateDraftUserField(index, field, value) {
-    setDraftUsers((prev) => prev.map((u, i) => (i === index ? { ...u, [field]: value } : u)))
-  }
-
   function toggleDraftUserRole(index, role) {
     setDraftUsers((prev) =>
       prev.map((u, i) => {
@@ -2604,42 +2577,62 @@ function App() {
     )
   }
 
-  async function handleSaveUsers() {
-    const newRows = draftUsers.filter((u) => !u._existing)
-    for (const row of newRows) {
-      if (!(row.name || '').trim()) {
-        flashUsersStatus('Every new user needs a name.', false)
-        return
-      }
-      if (!(row.password || '').trim()) {
-        flashUsersStatus('Every new user needs a password.', false)
-        return
-      }
-    }
+  function updateDraftUserField(index, field, value) {
+    setDraftUsers((prev) => prev.map((u, i) => (i === index ? { ...u, [field]: value } : u)))
+  }
 
+  function toggleInviteRole(role) {
+    setInviteRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]))
+  }
+
+  // Calls the /api/invite-user serverless function (holds the service-role
+  // key server-side) which sends a real Supabase Auth invite email and links
+  // a matching `users` row once accepted.
+  async function handleInviteUser() {
+    const email = inviteEmail.trim()
+    if (!email) {
+      flashUsersStatus('An email is required.', false)
+      return
+    }
+    setInviting(true)
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const res = await fetch('/api/invite-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ email, roles: inviteRoles }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || 'Could not invite user.')
+
+      flashUsersStatus(`Invite sent to ${email}.`, true)
+      setInviteEmail('')
+      setInviteRoles([])
+      await loadUsers()
+    } catch (error) {
+      console.error(error)
+      flashUsersStatus(error.message || 'Could not invite user — check the console for details.', false)
+    } finally {
+      setInviting(false)
+    }
+  }
+
+  // New accounts are added via handleInviteUser (an email invite through
+  // Supabase Auth) instead of typing a row + password here -- this only
+  // saves role/active changes on people who already have an account.
+  async function handleSaveUsers() {
     setSavingUsers(true)
     try {
-      const existingRows = draftUsers.filter((u) => u._existing)
-      for (const row of existingRows) {
-        const payload = {
-          name: row.name.trim(),
-          roles: row.roles || [],
-          active: row.active,
-        }
-        if ((row.password || '').trim()) payload.password = row.password.trim()
-        const { error } = await supabase.from('users').update(payload).eq('id', row.id)
-        if (error) throw error
-      }
-
-      if (newRows.length) {
-        const { error } = await supabase.from('users').insert(
-          newRows.map((r) => ({
-            name: r.name.trim(),
-            password: r.password.trim(),
-            roles: r.roles || [],
-            active: r.active,
-          }))
-        )
+      for (const row of draftUsers) {
+        const { error } = await supabase
+          .from('users')
+          .update({ roles: row.roles || [], active: row.active })
+          .eq('id', row.id)
         if (error) throw error
       }
 
@@ -2897,12 +2890,13 @@ function App() {
     }
   }
 
-  // Checking "Logon" (or setting a password) for a vendor auto-manages a
-  // matching row in `users` behind the scenes — name = the vendor's email,
-  // role 'vendor', linked via vendor_id — reusing the exact same login/
-  // session/permission machinery as any other account instead of building a
-  // second one. That row is hidden from the Admin > Users table since it's
-  // meant to be managed from here.
+  // Checking "Logon" for a vendor auto-manages a matching row in `users`
+  // behind the scenes — name = the vendor's email, role 'vendor', linked via
+  // vendor_id — reusing the exact same login/session/permission machinery as
+  // any other account instead of building a second one. That row is hidden
+  // from the Admin > Users table since it's meant to be managed from here.
+  // Enabling logon for the first time sends a real invite email (through
+  // /api/invite-user) instead of setting a password by hand.
   async function handleUpdateVendorLogon(vendor, changes) {
     const logonEnabled = changes.logon_enabled ?? vendor.logon_enabled
     if (logonEnabled && !vendor.email) {
@@ -2911,37 +2905,37 @@ function App() {
     }
 
     const existingUser = users.find((u) => u.vendor_id === vendor.id)
-    const effectivePassword =
-      changes.password !== undefined ? changes.password : existingUser ? undefined : vendor.password
-    if (logonEnabled && !existingUser && !effectivePassword) {
-      flashUsersStatus('Set a password before enabling logon.', false)
-      return
-    }
 
     try {
-      const vendorPayload = {}
-      if (changes.logon_enabled !== undefined) vendorPayload.logon_enabled = changes.logon_enabled
-      if (changes.password !== undefined) vendorPayload.password = changes.password || null
-      if (Object.keys(vendorPayload).length) {
-        const { error } = await supabase.from('vendors').update(vendorPayload).eq('id', vendor.id)
+      if (changes.logon_enabled !== undefined) {
+        const { error } = await supabase
+          .from('vendors')
+          .update({ logon_enabled: changes.logon_enabled })
+          .eq('id', vendor.id)
         if (error) throw error
       }
 
       if (logonEnabled) {
         if (existingUser) {
-          const userPayload = { name: vendor.email, active: true, roles: ['vendor'], vendor_id: vendor.id }
-          if (changes.password) userPayload.password = changes.password
-          const { error } = await supabase.from('users').update(userPayload).eq('id', existingUser.id)
+          const { error } = await supabase
+            .from('users')
+            .update({ active: true, roles: ['vendor'], vendor_id: vendor.id })
+            .eq('id', existingUser.id)
           if (error) throw error
         } else {
-          const { error } = await supabase.from('users').insert({
-            name: vendor.email,
-            password: effectivePassword,
-            roles: ['vendor'],
-            vendor_id: vendor.id,
-            active: true,
+          const {
+            data: { session },
+          } = await supabase.auth.getSession()
+          const res = await fetch('/api/invite-user', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session?.access_token}`,
+            },
+            body: JSON.stringify({ email: vendor.email, roles: ['vendor'], vendor_id: vendor.id }),
           })
-          if (error) throw error
+          const body = await res.json()
+          if (!res.ok) throw new Error(body.error || 'Could not invite vendor.')
         }
       } else if (existingUser) {
         const { error } = await supabase.from('users').update({ active: false }).eq('id', existingUser.id)
@@ -2952,7 +2946,7 @@ function App() {
       await Promise.all([loadVendors(), loadUsers()])
     } catch (error) {
       console.error(error)
-      flashUsersStatus('Could not update vendor logon — check the console for details.', false)
+      flashUsersStatus(error.message || 'Could not update vendor logon — check the console for details.', false)
     }
   }
 
@@ -3034,36 +3028,34 @@ function App() {
     )
   }
 
-  if (noUsersExist) {
+  if (needsPasswordSetup) {
     return (
       <div className="wrap wrap-narrow">
         <h1>📦 Parts Master List</h1>
-        <p className="sub">
-          No user accounts exist yet — create the first admin account to get started.
-        </p>
+        <p className="sub">Set a password for your account to finish signing in.</p>
         <div className="card">
-          <form onSubmit={handleBootstrapAdmin} className="add-form">
-            <label htmlFor="bootstrap_name">Name</label>
+          <form onSubmit={handlePasswordSetup} className="add-form">
+            <label htmlFor="setup_password">New password</label>
             <input
-              id="bootstrap_name"
-              type="text"
-              autoFocus
-              placeholder="Your name"
-              value={bootstrapName}
-              onChange={(e) => setBootstrapName(e.target.value)}
-            />
-            <label htmlFor="bootstrap_password">Password</label>
-            <input
-              id="bootstrap_password"
+              id="setup_password"
               type="password"
-              placeholder="Choose a password"
-              value={bootstrapPassword}
-              onChange={(e) => setBootstrapPassword(e.target.value)}
+              autoFocus
+              placeholder="At least 8 characters"
+              value={passwordSetupValue}
+              onChange={(e) => setPasswordSetupValue(e.target.value)}
             />
-            <button className="btn-primary" type="submit" disabled={bootstrapBusy}>
-              {bootstrapBusy ? 'Creating…' : 'Create Admin Account'}
+            <label htmlFor="setup_password_confirm">Confirm password</label>
+            <input
+              id="setup_password_confirm"
+              type="password"
+              placeholder="Re-enter password"
+              value={passwordSetupConfirm}
+              onChange={(e) => setPasswordSetupConfirm(e.target.value)}
+            />
+            <button className="btn-primary" type="submit" disabled={passwordSetupBusy}>
+              {passwordSetupBusy ? 'Saving…' : 'Set Password'}
             </button>
-            {bootstrapError && <div className="status err">{bootstrapError}</div>}
+            {passwordSetupError && <div className="status err">{passwordSetupError}</div>}
           </form>
         </div>
       </div>
@@ -3077,12 +3069,12 @@ function App() {
         <p className="sub">Backed by Supabase — data lives in the cloud, not just this page.</p>
         <div className="card">
           <form onSubmit={handleLogin} className="add-form">
-            <label htmlFor="login_name">Name</label>
+            <label htmlFor="login_name">Email</label>
             <input
               id="login_name"
-              type="text"
+              type="email"
               autoFocus
-              placeholder="Your name"
+              placeholder="you@greatcirclesolar.com"
               value={loginName}
               onChange={(e) => setLoginName(e.target.value)}
             />
@@ -3410,12 +3402,16 @@ function App() {
         <UsersTab
           draftUsers={draftUsers}
           usersStatus={usersStatus}
-          addDraftUserRow={addDraftUserRow}
-          removeDraftUserRow={removeDraftUserRow}
           updateDraftUserField={updateDraftUserField}
           toggleDraftUserRole={toggleDraftUserRole}
           savingUsers={savingUsers}
           handleSaveUsers={handleSaveUsers}
+          inviteEmail={inviteEmail}
+          setInviteEmail={setInviteEmail}
+          inviteRoles={inviteRoles}
+          toggleInviteRole={toggleInviteRole}
+          inviting={inviting}
+          handleInviteUser={handleInviteUser}
           draftBudgetCategories={draftBudgetCategories}
           addDraftBudgetCategoryRow={addDraftBudgetCategoryRow}
           removeDraftBudgetCategoryRow={removeDraftBudgetCategoryRow}

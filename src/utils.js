@@ -132,6 +132,14 @@ export function canCreatePurchaseRequests(user) {
   return userHasRole(user, 'purchase_req')
 }
 
+// Mirrors the ticket system's own eligibility check (lib/inventoryAccess.ts
+// there) -- admin, Ticket/Purchase Req, or vendor. Only used to decide
+// whether to show the "Ticketing" link; the ticket system re-checks this
+// itself on login regardless.
+export function canAccessTicketing(user) {
+  return isAdmin(user) || userHasRole(user, 'purchase_req') || isVendorUser(user)
+}
+
 export function canApproveRequests(user) {
   return userHasRole(user, 'approve')
 }

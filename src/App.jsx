@@ -15,6 +15,7 @@ import {
   isAdmin,
   isVendorUser,
   canEditInventory,
+  canAccessTicketing,
   linesAreMixedType,
   poLineType,
 } from './utils'
@@ -25,6 +26,7 @@ import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import UsersTab from './tabs/UsersTab'
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD
+const TICKETING_URL = 'https://ticket-system-gcs14.vercel.app'
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true)
@@ -3159,6 +3161,17 @@ function App() {
         <span className="sub" style={{ margin: 0, alignSelf: 'center' }}>
           {loggedInUser.name}
         </span>
+        {canAccessTicketing(loggedInUser) && (
+          <a
+            className="btn-secondary"
+            href={TICKETING_URL}
+            target="_blank"
+            rel="noreferrer"
+            style={{ borderRadius: 8, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+          >
+            Ticketing ↗
+          </a>
+        )}
         <button className="btn-secondary" onClick={handleLogout}>
           Log out
         </button>

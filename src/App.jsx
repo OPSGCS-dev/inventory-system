@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from 'react'
+import { useMemo, useEffect, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { supabase } from './supabaseClient'
@@ -16,6 +16,7 @@ import {
   isVendorUser,
   canEditInventory,
   canAccessTicketing,
+  canCreatePurchaseRequests,
   linesAreMixedType,
   poLineType,
 } from './utils'
@@ -1994,7 +1995,7 @@ function App() {
     [parts, poDraftEligiblePartIds]
   )
 
-  function openPoDraftForm(existing) {
+  function openPoDraftForm(existing, prefill) {
     if (existing) {
       setPoDraftId(existing.id)
       setPoDraftProjectId(existing.project_id)
@@ -2035,15 +2036,15 @@ function App() {
       )
     } else {
       setPoDraftId(null)
-      setPoDraftProjectId(selectedProjectId ?? projects[0]?.id ?? null)
-      setPoDraftVendorId(null)
+      setPoDraftProjectId(prefill?.projectId ?? selectedProjectId ?? projects[0]?.id ?? null)
+      setPoDraftVendorId(prefill?.vendorId ?? null)
       setPoDraftNotes('')
-      setPoDraftDescription('')
+      setPoDraftDescription(prefill?.description ?? '')
       setPoDraftBudgetCategoryId(null)
       setPoDraftBudgetSubcategoryId(null)
-      setPoDraftSubProjectId(null)
+      setPoDraftSubProjectId(prefill?.subProjectId ?? null)
       setPoDraftChargeableExpense(false)
-      setPoDraftVendorQuoteNumber('')
+      setPoDraftVendorQuoteNumber(prefill?.vendorQuoteNumber ?? '')
       setPoDraftMarkupRate('10')
       setPoDraftTaxRate('13')
       setPoDraftShippingHandling('0')
@@ -2061,6 +2062,47 @@ function App() {
     setPoDraftLines([])
     setPoDraftFieldErrors({})
   }
+
+  // Deep link from the ticket system's "Create Purchase Rec" button:
+  // ?po=new&entity_id=&sub_project_id=&vendor_name=&quote=&description= opens
+  // this tab with the New Purchase Request form pre-filled from whatever the
+  // ticket already had on file. Runs once real data exists to match against
+  // (and once signed in, since the link may land here before login) -- the
+  // ref guard stops a later reload of projects/vendors from reopening it.
+  const deepLinkHandledRef = useRef(false)
+  useEffect(() => {
+    if (deepLinkHandledRef.current) return
+    if (!loggedInUser) return
+    if (projects.length === 0 || vendors.length === 0) return
+
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('po') !== 'new') return
+    deepLinkHandledRef.current = true
+    window.history.replaceState(null, '', window.location.pathname)
+
+    setActiveTab('po')
+    if (!canCreatePurchaseRequests(loggedInUser)) return
+
+    const entityId = params.get('entity_id')
+    const subProjectId = params.get('sub_project_id')
+    const vendorName = params.get('vendor_name')?.trim().toLowerCase()
+
+    const matchedEntity = entityId ? projects.find((p) => String(p.id) === entityId) : null
+    const matchedSubProject = subProjectId
+      ? subProjects.find((sp) => String(sp.id) === subProjectId)
+      : null
+    const matchedVendor = vendorName
+      ? vendors.find((v) => v.name?.trim().toLowerCase() === vendorName)
+      : null
+
+    openPoDraftForm(null, {
+      projectId: matchedEntity?.id ?? null,
+      subProjectId: matchedSubProject?.id ?? null,
+      vendorId: matchedVendor?.id ?? null,
+      vendorQuoteNumber: params.get('quote') ?? '',
+      description: params.get('description') ?? '',
+    })
+  }, [loggedInUser, projects, subProjects, vendors])
 
   function handleAddPurchaseRequestLine() {
     // A PO is entirely parts or entirely a service — a new line always

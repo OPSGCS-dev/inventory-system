@@ -15,7 +15,12 @@ import {
   truncate,
   canConfirmReceipt,
   poLineType,
+  TICKETING_URL,
 } from '../utils'
+
+function formatTicketNumber(n) {
+  return `TK-${String(n).padStart(5, '0')}`
+}
 
 const PO_DESCRIPTION_MAX_LEN = 50
 
@@ -92,6 +97,8 @@ function PurchaseOrdersTab({
   setPoDraftChargeableExpense,
   poDraftVendorQuoteNumber,
   setPoDraftVendorQuoteNumber,
+  poDraftTicketSystemTicketId,
+  poDraftTicketSystemTicketNumber,
   poDraftMarkupRate,
   setPoDraftMarkupRate,
   poDraftTaxRate,
@@ -207,6 +214,20 @@ function PurchaseOrdersTab({
                 <span className="po-detail-value">
                   {r.budget_categories.name}
                   {r.budget_subcategories?.name ? ` — ${r.budget_subcategories.name}` : ''}
+                </span>
+              </div>
+            )}
+            {r.ticket_system_ticket_id && (
+              <div className="po-detail-meta-item">
+                <span className="po-detail-label">Ticket</span>
+                <span className="po-detail-value">
+                  <a
+                    href={`${TICKETING_URL}/tickets/${r.ticket_system_ticket_id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {formatTicketNumber(r.ticket_system_ticket_number)} ↗
+                  </a>
                 </span>
               </div>
             )}
@@ -707,6 +728,16 @@ function PurchaseOrdersTab({
         <div className="card">
           <div className="card-header">
             <h2>{poDraftId ? 'Edit Draft Request' : 'New Purchase Request'}</h2>
+            {poDraftTicketSystemTicketNumber && (
+              <a
+                href={`${TICKETING_URL}/tickets/${poDraftTicketSystemTicketId}`}
+                target="_blank"
+                rel="noreferrer"
+                className="sub"
+              >
+                🔗 Linked to {formatTicketNumber(poDraftTicketSystemTicketNumber)}
+              </a>
+            )}
           </div>
 
           <div className="field-row">

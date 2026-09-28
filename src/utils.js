@@ -1,5 +1,7 @@
 export const WHERE_USED_SEED = ['SMA 500 CP', 'SMA 500 XP', 'SATCON 500', 'Substation', 'Array']
 
+export const TICKETING_URL = 'https://ticket-system-gcs14.vercel.app'
+
 export const emptyFilters = {
   gcs_id: '',
   gcs_part_id: '',

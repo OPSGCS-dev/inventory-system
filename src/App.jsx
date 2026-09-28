@@ -19,6 +19,7 @@ import {
   canCreatePurchaseRequests,
   linesAreMixedType,
   poLineType,
+  TICKETING_URL,
 } from './utils'
 import MasterListTab from './tabs/MasterListTab'
 import RequiredInventoryTab from './tabs/RequiredInventoryTab'
@@ -27,7 +28,6 @@ import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import UsersTab from './tabs/UsersTab'
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD
-const TICKETING_URL = 'https://ticket-system-gcs14.vercel.app'
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true)
@@ -157,6 +157,11 @@ function App() {
   const [poDraftBudgetCategoryId, setPoDraftBudgetCategoryId] = useState(null)
   const [poDraftBudgetSubcategoryId, setPoDraftBudgetSubcategoryId] = useState(null)
   const [poDraftSubProjectId, setPoDraftSubProjectId] = useState(null)
+  // Set only when this request was created via a ticket's "Create Purchase
+  // Rec" button (or when re-opening a draft that already has one) -- no UI
+  // ever sets these directly, they just ride along to the insert.
+  const [poDraftTicketSystemTicketId, setPoDraftTicketSystemTicketId] = useState(null)
+  const [poDraftTicketSystemTicketNumber, setPoDraftTicketSystemTicketNumber] = useState(null)
 
   const [budgetCategories, setBudgetCategories] = useState([])
   const [budgetSubcategories, setBudgetSubcategories] = useState([])
@@ -2005,6 +2010,8 @@ function App() {
       setPoDraftBudgetCategoryId(existing.budget_category_id ?? null)
       setPoDraftBudgetSubcategoryId(existing.budget_subcategory_id ?? null)
       setPoDraftSubProjectId(existing.sub_project_id ?? null)
+      setPoDraftTicketSystemTicketId(existing.ticket_system_ticket_id ?? null)
+      setPoDraftTicketSystemTicketNumber(existing.ticket_system_ticket_number ?? null)
       setPoDraftChargeableExpense(Boolean(existing.chargeable_expense))
       setPoDraftVendorQuoteNumber(existing.vendor_quote_number || '')
       setPoDraftMarkupRate(
@@ -2043,6 +2050,8 @@ function App() {
       setPoDraftBudgetCategoryId(null)
       setPoDraftBudgetSubcategoryId(null)
       setPoDraftSubProjectId(prefill?.subProjectId ?? null)
+      setPoDraftTicketSystemTicketId(prefill?.ticketSystemTicketId ?? null)
+      setPoDraftTicketSystemTicketNumber(prefill?.ticketSystemTicketNumber ?? null)
       setPoDraftChargeableExpense(false)
       setPoDraftVendorQuoteNumber(prefill?.vendorQuoteNumber ?? '')
       setPoDraftMarkupRate('10')
@@ -2064,19 +2073,38 @@ function App() {
   }
 
   // Deep link from the ticket system's "Create Purchase Rec" button:
-  // ?po=new&entity_id=&sub_project_id=&vendor_name=&quote=&description= opens
-  // this tab with the New Purchase Request form pre-filled from whatever the
-  // ticket already had on file. Runs once real data exists to match against
+  // ?po=new&entity_id=&sub_project_id=&vendor_name=&quote=&description=&ticket_id=&ticket_number=
+  // opens this tab with the New Purchase Request form pre-filled from
+  // whatever the ticket already had on file. ticket_id/ticket_number (only
+  // present when linked from an existing ticket, not a brand new one) ride
+  // along onto the saved request so the ticket system can look it back up.
+  // Runs once real data exists to match against
   // (and once signed in, since the link may land here before login) -- the
   // ref guard stops a later reload of projects/vendors from reopening it.
   const deepLinkHandledRef = useRef(false)
   useEffect(() => {
     if (deepLinkHandledRef.current) return
     if (!loggedInUser) return
-    if (projects.length === 0 || vendors.length === 0) return
 
     const params = new URLSearchParams(window.location.search)
-    if (params.get('po') !== 'new') return
+    const mode = params.get('po')
+
+    // ?po=view&id= -- a ticket's linked-purchase-request badge, opening
+    // straight to that request's detail view (where "View PO" shows the
+    // print-ready layout, once it's approved or later).
+    if (mode === 'view') {
+      const requestId = Number(params.get('id'))
+      if (!requestId) return
+      deepLinkHandledRef.current = true
+      window.history.replaceState(null, '', window.location.pathname)
+      setActiveTab('po')
+      setExpandedPoId(requestId)
+      return
+    }
+
+    if (mode !== 'new') return
+    if (projects.length === 0 || vendors.length === 0) return
+
     deepLinkHandledRef.current = true
     window.history.replaceState(null, '', window.location.pathname)
 
@@ -2101,6 +2129,8 @@ function App() {
       vendorId: matchedVendor?.id ?? null,
       vendorQuoteNumber: params.get('quote') ?? '',
       description: params.get('description') ?? '',
+      ticketSystemTicketId: params.get('ticket_id') || null,
+      ticketSystemTicketNumber: params.get('ticket_number') ? Number(params.get('ticket_number')) : null,
     })
   }, [loggedInUser, projects, subProjects, vendors])
 
@@ -2214,6 +2244,8 @@ function App() {
             credit: poDraftCredit === '' ? 0 : Number(poDraftCredit),
             currency: poDraftCurrency.trim() || 'CAD',
             status: 'draft',
+            ticket_system_ticket_id: poDraftTicketSystemTicketId,
+            ticket_system_ticket_number: poDraftTicketSystemTicketNumber,
           })
           .select()
           .single()
@@ -3410,6 +3442,8 @@ function App() {
           setPoDraftChargeableExpense={setPoDraftChargeableExpense}
           poDraftVendorQuoteNumber={poDraftVendorQuoteNumber}
           setPoDraftVendorQuoteNumber={setPoDraftVendorQuoteNumber}
+          poDraftTicketSystemTicketId={poDraftTicketSystemTicketId}
+          poDraftTicketSystemTicketNumber={poDraftTicketSystemTicketNumber}
           poDraftMarkupRate={poDraftMarkupRate}
           setPoDraftMarkupRate={setPoDraftMarkupRate}
           poDraftTaxRate={poDraftTaxRate}

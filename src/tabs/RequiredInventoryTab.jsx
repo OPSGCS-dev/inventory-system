@@ -1,5 +1,9 @@
 function RequiredInventoryTab({
-  pendingAction,
+  locked,
+  unlockPasswordInput,
+  setUnlockPasswordInput,
+  unlockError,
+  handleUnlock,
   canEditInventory,
   projects,
   selectedProjectId,
@@ -24,7 +28,6 @@ function RequiredInventoryTab({
 }) {
   return (
     <>
-      {!pendingAction && (
       <div className="card">
         <div className="project-row">
           <div className="project-select-wrap">
@@ -59,7 +62,11 @@ function RequiredInventoryTab({
             )
           ) : (
             <div className="edit-toolbar">
-              <button className="btn-primary" onClick={handleSaveProjectEdits} disabled={savingProjectEdits}>
+              <button
+                className="btn-primary"
+                onClick={handleSaveProjectEdits}
+                disabled={locked || savingProjectEdits}
+              >
                 {savingProjectEdits ? 'Saving…' : 'Save Changes'}
               </button>
               <input
@@ -82,6 +89,27 @@ function RequiredInventoryTab({
           <div className={'status ' + (projectStatus.ok ? 'ok' : 'err')}>{projectStatus.msg}</div>
         )}
       </div>
+
+      {locked && projectEditMode && (
+        <div className="card">
+          <form onSubmit={handleUnlock} className="edit-toolbar">
+            <label htmlFor="admin_password" className="sub" style={{ margin: 0 }}>
+              Enter the inventory password to edit these fields:
+            </label>
+            <input
+              id="admin_password"
+              type="password"
+              autoFocus
+              placeholder="Password"
+              value={unlockPasswordInput}
+              onChange={(e) => setUnlockPasswordInput(e.target.value)}
+            />
+            <button className="btn-primary" type="submit">
+              Unlock
+            </button>
+            {unlockError && <div className="status err">{unlockError}</div>}
+          </form>
+        </div>
       )}
 
       {!projectEditMode ? (
@@ -176,6 +204,7 @@ function RequiredInventoryTab({
             </p>
           </div>
 
+          <fieldset disabled={locked} style={{ border: 0, margin: 0, padding: 0 }}>
           <div className="sheet-wrap">
             <table className="sheet">
               <colgroup>
@@ -246,6 +275,7 @@ function RequiredInventoryTab({
               </tbody>
             </table>
           </div>
+          </fieldset>
         </div>
       )}
     </>

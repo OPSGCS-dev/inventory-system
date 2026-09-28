@@ -2,7 +2,11 @@ import { Fragment } from 'react'
 import { computeTargetSum, shortProjectName } from '../utils'
 
 function InventoryOnHandTab({
-  pendingAction,
+  locked,
+  unlockPasswordInput,
+  setUnlockPasswordInput,
+  unlockError,
+  handleUnlock,
   canEditInventory,
   stockPanel,
   resetStockPanel,
@@ -73,9 +77,10 @@ function InventoryOnHandTab({
   draftLocationItems,
   updateLocationDraftField,
 }) {
+  const inGatedMode = stockEditMode || locationEditMode || recordUseMode || transferMode
+
   return (
     <>
-      {!pendingAction && (
       <div className="card">
         {stockPanel ? (
           <div className="edit-toolbar">
@@ -161,7 +166,7 @@ function InventoryOnHandTab({
             <button
               className="btn-primary"
               onClick={handleSaveStockEdits}
-              disabled={savingStockEdits || !adjustNote.trim()}
+              disabled={locked || savingStockEdits || !adjustNote.trim()}
             >
               {savingStockEdits ? 'Saving…' : 'Save Adjustment'}
             </button>
@@ -187,7 +192,7 @@ function InventoryOnHandTab({
             <button
               className="btn-primary"
               onClick={handleSaveLocationEdits}
-              disabled={savingLocationEdits || !locationNote.trim()}
+              disabled={locked || savingLocationEdits || !locationNote.trim()}
             >
               {savingLocationEdits ? 'Saving…' : 'Save Locations'}
             </button>
@@ -213,6 +218,27 @@ function InventoryOnHandTab({
           <div className={'status ' + (stockStatus.ok ? 'ok' : 'err')}>{stockStatus.msg}</div>
         )}
       </div>
+
+      {locked && inGatedMode && (
+        <div className="card">
+          <form onSubmit={handleUnlock} className="edit-toolbar">
+            <label htmlFor="admin_password" className="sub" style={{ margin: 0 }}>
+              Enter the inventory password to edit these fields:
+            </label>
+            <input
+              id="admin_password"
+              type="password"
+              autoFocus
+              placeholder="Password"
+              value={unlockPasswordInput}
+              onChange={(e) => setUnlockPasswordInput(e.target.value)}
+            />
+            <button className="btn-primary" type="submit">
+              Unlock
+            </button>
+            {unlockError && <div className="status err">{unlockError}</div>}
+          </form>
+        </div>
       )}
 
       {stockPanel === 'upload' && (
@@ -443,6 +469,10 @@ function InventoryOnHandTab({
         {stockLoading ? (
           <div className="empty">Loading...</div>
         ) : (
+          <fieldset
+            disabled={locked && inGatedMode}
+            style={{ border: 0, margin: 0, padding: 0 }}
+          >
           <div className="sheet-wrap">
             {(() => {
               const singleProjectView = !stockEditMode && !locationEditMode && stockViewProjectId !== 'all'
@@ -737,6 +767,7 @@ function InventoryOnHandTab({
               )
             })()}
           </div>
+          </fieldset>
         )}
       </div>
       )}

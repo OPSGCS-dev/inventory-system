@@ -51,9 +51,13 @@ function App() {
   const [filters, setFilters] = useState(emptyFilters)
   const [status, setStatus] = useState(null)
 
-  const [pendingAction, setPendingAction] = useState(null)
-  const [passwordInput, setPasswordInput] = useState('')
-  const [passwordError, setPasswordError] = useState(null)
+  // Admin-gated actions (stock/location edits, part list edits, etc.) reveal
+  // their fields immediately so you always see what you clicked into — the
+  // shared inventory password only unlocks *interacting* with them, and
+  // stays unlocked for the rest of this login session once entered once.
+  const [adminUnlocked, setAdminUnlocked] = useState(false)
+  const [unlockPasswordInput, setUnlockPasswordInput] = useState('')
+  const [unlockError, setUnlockError] = useState(null)
 
   const [editMode, setEditMode] = useState(false)
   const [draftParts, setDraftParts] = useState([])
@@ -517,6 +521,9 @@ function App() {
   async function handleLogout() {
     await supabase.auth.signOut()
     setLoggedInUser(null)
+    setAdminUnlocked(false)
+    setUnlockPasswordInput('')
+    setUnlockError(null)
   }
 
   async function handlePasswordSetup(e) {
@@ -655,22 +662,19 @@ function App() {
   }
 
   function requireAdmin(action) {
-    setPendingAction(action)
-    setPasswordInput('')
-    setPasswordError(null)
+    // Fields for the action render right away (still read-only if locked) —
+    // the password only gates interacting with them, checked below.
+    runAction(action)
   }
 
   function handleUnlock(e) {
     e.preventDefault()
-    if (passwordInput === ADMIN_PASSWORD) {
-      setPasswordInput('')
-      setPasswordError(null)
-      if (pendingAction) {
-        runAction(pendingAction)
-        setPendingAction(null)
-      }
+    if (unlockPasswordInput === ADMIN_PASSWORD) {
+      setAdminUnlocked(true)
+      setUnlockPasswordInput('')
+      setUnlockError(null)
     } else {
-      setPasswordError('Incorrect password.')
+      setUnlockError('Incorrect password.')
     }
   }
 
@@ -3160,34 +3164,13 @@ function App() {
         </button>
       </div>
 
-      {pendingAction && (
-        <div className="card">
-          <form onSubmit={handleUnlock} className="add-form">
-            <label htmlFor="admin_password">Inventory password required</label>
-            <input
-              id="admin_password"
-              type="password"
-              autoFocus
-              placeholder="Enter inventory password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-            />
-            <div className="form-actions">
-              <button className="btn-primary" type="submit">
-                Unlock
-              </button>
-              <button type="button" className="btn-secondary" onClick={() => setPendingAction(null)}>
-                Cancel
-              </button>
-            </div>
-            {passwordError && <div className="status err">{passwordError}</div>}
-          </form>
-        </div>
-      )}
-
       {activeTab === 'master' && (
         <MasterListTab
-          pendingAction={pendingAction}
+          locked={!adminUnlocked}
+          unlockPasswordInput={unlockPasswordInput}
+          setUnlockPasswordInput={setUnlockPasswordInput}
+          unlockError={unlockError}
+          handleUnlock={handleUnlock}
           canEditInventory={canEditInventory(loggedInUser)}
           manufacturerOptions={manufacturerOptions}
           categoryOptions={categoryOptions}
@@ -3223,7 +3206,11 @@ function App() {
 
       {activeTab === 'projects' && (
         <RequiredInventoryTab
-          pendingAction={pendingAction}
+          locked={!adminUnlocked}
+          unlockPasswordInput={unlockPasswordInput}
+          setUnlockPasswordInput={setUnlockPasswordInput}
+          unlockError={unlockError}
+          handleUnlock={handleUnlock}
           canEditInventory={canEditInventory(loggedInUser)}
           projects={projects}
           selectedProjectId={selectedProjectId}
@@ -3250,7 +3237,11 @@ function App() {
 
       {activeTab === 'stock' && (
         <InventoryOnHandTab
-          pendingAction={pendingAction}
+          locked={!adminUnlocked}
+          unlockPasswordInput={unlockPasswordInput}
+          setUnlockPasswordInput={setUnlockPasswordInput}
+          unlockError={unlockError}
+          handleUnlock={handleUnlock}
           canEditInventory={canEditInventory(loggedInUser)}
           stockPanel={stockPanel}
           resetStockPanel={resetStockPanel}

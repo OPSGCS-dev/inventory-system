@@ -16,6 +16,7 @@ import {
   canConfirmReceipt,
   poLineType,
   TICKETING_URL,
+  isAdmin,
 } from '../utils'
 
 function formatTicketNumber(n) {
@@ -130,8 +131,10 @@ function PurchaseOrdersTab({
   handleToggleInvoiceApproved,
   handleTogglePaid,
   poActionBusyId,
+  handleDeletePurchaseRequest,
 }) {
   const canCreate = canCreatePurchaseRequests(loggedInUser)
+  const canDelete = isAdmin(loggedInUser)
   const availableSubcategories = budgetSubcategories.filter(
     (sc) => sc.category_id === poDraftBudgetCategoryId
   )
@@ -657,6 +660,16 @@ function PurchaseOrdersTab({
                   </span>
                 )}
               </>
+            )}
+            {canDelete && (
+              <button
+                className="btn-secondary"
+                style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                onClick={() => handleDeletePurchaseRequest(r)}
+                disabled={busy}
+              >
+                {busy ? 'Deleting…' : 'Delete'}
+              </button>
             )}
           </div>
 

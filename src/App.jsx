@@ -2276,6 +2276,33 @@ function App() {
     }
   }
 
+  // Admin-only. Cascades to the request's own line items (on delete cascade),
+  // but doesn't remove any uploaded receipt/invoice PDF from Storage -- those
+  // just become unreferenced files there.
+  async function handleDeletePurchaseRequest(request) {
+    if (!isAdmin(loggedInUser)) return
+    if (
+      !window.confirm(
+        `Delete ${request.po_number || `purchase request #${request.id}`}? This cannot be undone.`
+      )
+    ) {
+      return
+    }
+    setPoActionBusyId(request.id)
+    try {
+      const { error } = await supabase.from('purchase_requests').delete().eq('id', request.id)
+      if (error) throw error
+      if (expandedPoId === request.id) setExpandedPoId(null)
+      flashPoStatus('Purchase request deleted.', true)
+      await loadPurchaseRequests()
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not delete — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
   async function handleSubmitPurchaseRequest(request) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
@@ -3477,6 +3504,7 @@ function App() {
           handleToggleInvoiceApproved={handleToggleInvoiceApproved}
           handleTogglePaid={handleTogglePaid}
           poActionBusyId={poActionBusyId}
+          handleDeletePurchaseRequest={handleDeletePurchaseRequest}
         />
       )}
 

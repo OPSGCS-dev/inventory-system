@@ -2328,10 +2328,12 @@ function App() {
     }
   }
 
-  // PO numbers auto-generate as {project_code}-{2-digit year}-{3-digit seq},
-  // e.g. "06-26-001" — the sequence is derived from existing PO numbers for
-  // that project+prefix (not a separate counter), so it naturally restarts
-  // at 001 each new year and counts independently per project.
+  // PO numbers auto-generate as PO-{project_code}-{2-digit year}-{3-digit
+  // seq}, e.g. "PO-06-26-001" — the sequence is derived from existing PO
+  // numbers for that project+prefix (not a separate counter), so it
+  // naturally restarts at 001 each new year and counts independently per
+  // project. Ticket-system tickets follow the same convention (TK- instead
+  // of PO-) using its own per-project code -- see its lib/ticketNumber.ts.
   async function computeNextPoNumber(request) {
     const project = projects.find((p) => p.id === request.project_id)
     const code = (project?.project_code || String(request.project_id)).trim().padStart(2, '0')
@@ -2341,14 +2343,14 @@ function App() {
       .from('purchase_requests')
       .select('po_number')
       .eq('project_id', request.project_id)
-      .like('po_number', `${prefix}%`)
+      .like('po_number', `%${prefix}%`)
     if (error) throw error
     let maxSeq = 0
     for (const row of data ?? []) {
       const match = row.po_number?.match(/-(\d{3})$/)
       if (match) maxSeq = Math.max(maxSeq, Number(match[1]))
     }
-    return `${prefix}${String(maxSeq + 1).padStart(3, '0')}`
+    return `PO-${prefix}${String(maxSeq + 1).padStart(3, '0')}`
   }
 
   async function startIssuePurchaseOrder(request) {

@@ -124,8 +124,7 @@ export function isVendorUser(user) {
   return userHasRole(user, 'vendor')
 }
 
-// Can edit the Master List / Required Inventory / Inventory On Hand (saving
-// still requires the separate shared inventory password).
+// Can edit the Master List / Required Inventory / Inventory On Hand.
 export function canEditInventory(user) {
   return userHasRole(user, 'inventory')
 }

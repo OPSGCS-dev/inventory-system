@@ -1,11 +1,6 @@
 import { emptyFilters } from '../utils'
 
 function MasterListTab({
-  locked,
-  unlockPasswordInput,
-  setUnlockPasswordInput,
-  unlockError,
-  handleUnlock,
   canEditInventory,
   manufacturerOptions,
   categoryOptions,
@@ -13,7 +8,7 @@ function MasterListTab({
   masterPanel,
   resetMasterPanel,
   editMode,
-  requireAdmin,
+  runAction,
   handleSaveEdits,
   savingEdits,
   addDraftRow,
@@ -65,22 +60,22 @@ function MasterListTab({
           </div>
         ) : !editMode ? (
           <div className="edit-toolbar">
-            <button className="btn-primary" onClick={() => requireAdmin({ type: 'edit' })}>
+            <button className="btn-primary" onClick={() => runAction({ type: 'edit' })}>
               Edit List
             </button>
-            <button className="btn-primary" onClick={() => requireAdmin({ type: 'export-parts' })}>
+            <button className="btn-primary" onClick={() => runAction({ type: 'export-parts' })}>
               Export List
             </button>
-            <button className="btn-primary" onClick={() => requireAdmin({ type: 'import-parts' })}>
+            <button className="btn-primary" onClick={() => runAction({ type: 'import-parts' })}>
               Import List
             </button>
           </div>
         ) : (
           <div className="edit-toolbar">
-            <button className="btn-primary" onClick={handleSaveEdits} disabled={locked || savingEdits}>
+            <button className="btn-primary" onClick={handleSaveEdits} disabled={savingEdits}>
               {savingEdits ? 'Saving…' : 'Save Changes'}
             </button>
-            <button className="btn-secondary" onClick={addDraftRow} disabled={locked || savingEdits}>
+            <button className="btn-secondary" onClick={addDraftRow} disabled={savingEdits}>
               + Add Row
             </button>
             <button className="btn-secondary" onClick={handleCancelEdits} disabled={savingEdits}>
@@ -90,28 +85,6 @@ function MasterListTab({
         )}
         {status && <div className={'status ' + (status.ok ? 'ok' : 'err')}>{status.msg}</div>}
       </div>
-      )}
-
-      {canEditInventory && locked && editMode && (
-        <div className="card">
-          <form onSubmit={handleUnlock} className="edit-toolbar">
-            <label htmlFor="admin_password" className="sub" style={{ margin: 0 }}>
-              Enter the inventory password to edit these fields:
-            </label>
-            <input
-              id="admin_password"
-              type="password"
-              autoFocus
-              placeholder="Password"
-              value={unlockPasswordInput}
-              onChange={(e) => setUnlockPasswordInput(e.target.value)}
-            />
-            <button className="btn-primary" type="submit">
-              Unlock
-            </button>
-            {unlockError && <div className="status err">{unlockError}</div>}
-          </form>
-        </div>
       )}
 
       {masterPanel === 'import' && (
@@ -166,28 +139,10 @@ function MasterListTab({
                 </table>
               </div>
               <div className="edit-toolbar" style={{ marginTop: 12 }}>
-                <button className="btn-primary" onClick={handleConfirmImport} disabled={locked || importing}>
+                <button className="btn-primary" onClick={handleConfirmImport} disabled={importing}>
                   {importing ? 'Importing…' : `Confirm Import (${importPreview.rows.length} rows)`}
                 </button>
               </div>
-              {locked && (
-                <form onSubmit={handleUnlock} className="edit-toolbar" style={{ marginTop: 12 }}>
-                  <label htmlFor="admin_password" className="sub" style={{ margin: 0 }}>
-                    Enter the inventory password to confirm this import:
-                  </label>
-                  <input
-                    id="admin_password"
-                    type="password"
-                    placeholder="Password"
-                    value={unlockPasswordInput}
-                    onChange={(e) => setUnlockPasswordInput(e.target.value)}
-                  />
-                  <button className="btn-primary" type="submit">
-                    Unlock
-                  </button>
-                  {unlockError && <div className="status err">{unlockError}</div>}
-                </form>
-              )}
             </>
           )}
         </div>
@@ -214,7 +169,6 @@ function MasterListTab({
         {loading ? (
           <div className="empty">Loading...</div>
         ) : (
-          <fieldset disabled={locked && editMode} style={{ border: 0, margin: 0, padding: 0 }}>
           <div className="sheet-wrap">
             <table className="sheet">
               <colgroup>
@@ -432,7 +386,6 @@ function MasterListTab({
               </tbody>
             </table>
           </div>
-          </fieldset>
         )}
       </div>
       )}

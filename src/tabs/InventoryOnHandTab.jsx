@@ -2,18 +2,13 @@ import { Fragment } from 'react'
 import { computeTargetSum, shortProjectName } from '../utils'
 
 function InventoryOnHandTab({
-  locked,
-  unlockPasswordInput,
-  setUnlockPasswordInput,
-  unlockError,
-  handleUnlock,
   canEditInventory,
   stockPanel,
   resetStockPanel,
   stockEditMode,
   locationEditMode,
   setStockPanel,
-  requireAdmin,
+  runAction,
   loadJournalEntries,
   savingStockEdits,
   handleSaveStockEdits,
@@ -77,8 +72,6 @@ function InventoryOnHandTab({
   draftLocationItems,
   updateLocationDraftField,
 }) {
-  const inGatedMode = stockEditMode || locationEditMode || recordUseMode || transferMode
-
   return (
     <>
       <div className="card">
@@ -95,16 +88,16 @@ function InventoryOnHandTab({
             </button>
             {canEditInventory && (
               <>
-                <button className="btn-secondary" onClick={() => requireAdmin({ type: 'record-use' })}>
+                <button className="btn-secondary" onClick={() => runAction({ type: 'record-use' })}>
                   Record Part Use
                 </button>
-                <button className="btn-secondary" onClick={() => requireAdmin({ type: 'stock-transfer' })}>
+                <button className="btn-secondary" onClick={() => runAction({ type: 'stock-transfer' })}>
                   Stock Transfer
                 </button>
-                <button className="btn-primary" onClick={() => requireAdmin({ type: 'stock-edit' })}>
+                <button className="btn-primary" onClick={() => runAction({ type: 'stock-edit' })}>
                   Inventory Adjustment
                 </button>
-                <button className="btn-secondary" onClick={() => requireAdmin({ type: 'location-edit' })}>
+                <button className="btn-secondary" onClick={() => runAction({ type: 'location-edit' })}>
                   Update Location
                 </button>
               </>
@@ -166,7 +159,7 @@ function InventoryOnHandTab({
             <button
               className="btn-primary"
               onClick={handleSaveStockEdits}
-              disabled={locked || savingStockEdits || !adjustNote.trim()}
+              disabled={savingStockEdits || !adjustNote.trim()}
             >
               {savingStockEdits ? 'Saving…' : 'Save Adjustment'}
             </button>
@@ -192,7 +185,7 @@ function InventoryOnHandTab({
             <button
               className="btn-primary"
               onClick={handleSaveLocationEdits}
-              disabled={locked || savingLocationEdits || !locationNote.trim()}
+              disabled={savingLocationEdits || !locationNote.trim()}
             >
               {savingLocationEdits ? 'Saving…' : 'Save Locations'}
             </button>
@@ -218,28 +211,6 @@ function InventoryOnHandTab({
           <div className={'status ' + (stockStatus.ok ? 'ok' : 'err')}>{stockStatus.msg}</div>
         )}
       </div>
-
-      {locked && inGatedMode && (
-        <div className="card">
-          <form onSubmit={handleUnlock} className="edit-toolbar">
-            <label htmlFor="admin_password" className="sub" style={{ margin: 0 }}>
-              Enter the inventory password to edit these fields:
-            </label>
-            <input
-              id="admin_password"
-              type="password"
-              autoFocus
-              placeholder="Password"
-              value={unlockPasswordInput}
-              onChange={(e) => setUnlockPasswordInput(e.target.value)}
-            />
-            <button className="btn-primary" type="submit">
-              Unlock
-            </button>
-            {unlockError && <div className="status err">{unlockError}</div>}
-          </form>
-        </div>
-      )}
 
       {stockPanel === 'upload' && (
         <div className="card">
@@ -469,10 +440,6 @@ function InventoryOnHandTab({
         {stockLoading ? (
           <div className="empty">Loading...</div>
         ) : (
-          <fieldset
-            disabled={locked && inGatedMode}
-            style={{ border: 0, margin: 0, padding: 0 }}
-          >
           <div className="sheet-wrap">
             {(() => {
               const singleProjectView = !stockEditMode && !locationEditMode && stockViewProjectId !== 'all'
@@ -767,7 +734,6 @@ function InventoryOnHandTab({
               )
             })()}
           </div>
-          </fieldset>
         )}
       </div>
       )}

@@ -27,8 +27,6 @@ import InventoryOnHandTab from './tabs/InventoryOnHandTab'
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import UsersTab from './tabs/UsersTab'
 
-const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD
-
 function App() {
   const [authLoading, setAuthLoading] = useState(true)
   const [loggedInUser, setLoggedInUser] = useState(null)
@@ -53,14 +51,6 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState(emptyFilters)
   const [status, setStatus] = useState(null)
-
-  // Admin-gated actions (stock/location edits, part list edits, etc.) reveal
-  // their fields immediately so you always see what you clicked into — the
-  // shared inventory password only unlocks *interacting* with them, and
-  // stays unlocked for the rest of this login session once entered once.
-  const [adminUnlocked, setAdminUnlocked] = useState(false)
-  const [unlockPasswordInput, setUnlockPasswordInput] = useState('')
-  const [unlockError, setUnlockError] = useState(null)
 
   const [editMode, setEditMode] = useState(false)
   const [draftParts, setDraftParts] = useState([])
@@ -529,9 +519,6 @@ function App() {
   async function handleLogout() {
     await supabase.auth.signOut()
     setLoggedInUser(null)
-    setAdminUnlocked(false)
-    setUnlockPasswordInput('')
-    setUnlockError(null)
   }
 
   async function handlePasswordSetup(e) {
@@ -666,23 +653,6 @@ function App() {
     }
     if (action.type === 'stock-transfer') {
       startStockTransfer()
-    }
-  }
-
-  function requireAdmin(action) {
-    // Fields for the action render right away (still read-only if locked) —
-    // the password only gates interacting with them, checked below.
-    runAction(action)
-  }
-
-  function handleUnlock(e) {
-    e.preventDefault()
-    if (unlockPasswordInput === ADMIN_PASSWORD) {
-      setAdminUnlocked(true)
-      setUnlockPasswordInput('')
-      setUnlockError(null)
-    } else {
-      setUnlockError('Incorrect password.')
     }
   }
 
@@ -3282,11 +3252,6 @@ function App() {
 
       {activeTab === 'master' && (
         <MasterListTab
-          locked={!adminUnlocked}
-          unlockPasswordInput={unlockPasswordInput}
-          setUnlockPasswordInput={setUnlockPasswordInput}
-          unlockError={unlockError}
-          handleUnlock={handleUnlock}
           canEditInventory={canEditInventory(loggedInUser)}
           manufacturerOptions={manufacturerOptions}
           categoryOptions={categoryOptions}
@@ -3294,7 +3259,7 @@ function App() {
           masterPanel={masterPanel}
           resetMasterPanel={resetMasterPanel}
           editMode={editMode}
-          requireAdmin={requireAdmin}
+          runAction={runAction}
           handleSaveEdits={handleSaveEdits}
           savingEdits={savingEdits}
           addDraftRow={addDraftRow}
@@ -3322,17 +3287,12 @@ function App() {
 
       {activeTab === 'projects' && (
         <RequiredInventoryTab
-          locked={!adminUnlocked}
-          unlockPasswordInput={unlockPasswordInput}
-          setUnlockPasswordInput={setUnlockPasswordInput}
-          unlockError={unlockError}
-          handleUnlock={handleUnlock}
           canEditInventory={canEditInventory(loggedInUser)}
           projects={projects}
           selectedProjectId={selectedProjectId}
           setSelectedProjectId={setSelectedProjectId}
           projectEditMode={projectEditMode}
-          requireAdmin={requireAdmin}
+          runAction={runAction}
           savingProjectEdits={savingProjectEdits}
           handleSaveProjectEdits={handleSaveProjectEdits}
           projectEditFilter={projectEditFilter}
@@ -3353,18 +3313,13 @@ function App() {
 
       {activeTab === 'stock' && (
         <InventoryOnHandTab
-          locked={!adminUnlocked}
-          unlockPasswordInput={unlockPasswordInput}
-          setUnlockPasswordInput={setUnlockPasswordInput}
-          unlockError={unlockError}
-          handleUnlock={handleUnlock}
           canEditInventory={canEditInventory(loggedInUser)}
           stockPanel={stockPanel}
           resetStockPanel={resetStockPanel}
           stockEditMode={stockEditMode}
           locationEditMode={locationEditMode}
           setStockPanel={setStockPanel}
-          requireAdmin={requireAdmin}
+          runAction={runAction}
           loadJournalEntries={loadJournalEntries}
           savingStockEdits={savingStockEdits}
           handleSaveStockEdits={handleSaveStockEdits}

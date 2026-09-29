@@ -1546,6 +1546,17 @@ function App() {
     setUploadNote('')
   }
 
+  // Also used as the explicit "From Project" selector while recording a use
+  // or a transfer -- switching it mid-mode clears any typed-but-unsubmitted
+  // quantities so a number meant for one entity's part row can't silently
+  // carry over and get applied to a different entity's row for that same
+  // part.
+  function handleChangeStockViewProject(value) {
+    setStockViewProjectId(value === 'all' ? 'all' : Number(value))
+    if (recordUseMode) setUseQtyByPart({})
+    if (transferMode) setTransferQtyByPart({})
+  }
+
   function startRecordPartUse() {
     if (stockViewProjectId === 'all') {
       setStockViewProjectId(projects[0]?.id ?? 'all')
@@ -3413,7 +3424,7 @@ function App() {
           visibleDraftLocationItems={visibleDraftLocationItems}
           visibleStockItems={visibleStockItems}
           stockViewProjectId={stockViewProjectId}
-          setStockViewProjectId={setStockViewProjectId}
+          handleChangeStockViewProject={handleChangeStockViewProject}
           stockViewFilter={stockViewFilter}
           setStockViewFilter={setStockViewFilter}
           gcsIdOptions={stockGcsIdOptions}

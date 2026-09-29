@@ -8,6 +8,7 @@ function InventoryOnHandTab({
   stockEditMode,
   locationEditMode,
   setStockPanel,
+  handleChangeStockViewProject,
   runAction,
   loadJournalEntries,
   savingStockEdits,
@@ -63,7 +64,6 @@ function InventoryOnHandTab({
   visibleDraftLocationItems,
   visibleStockItems,
   stockViewProjectId,
-  setStockViewProjectId,
   stockViewFilter,
   setStockViewFilter,
   gcsIdOptions,
@@ -493,13 +493,21 @@ function InventoryOnHandTab({
                   })`}
             </h2>
             {!stockEditMode && !locationEditMode && (
-              <div className="project-select-wrap" style={{ maxWidth: 220, flex: 'none' }}>
+              <div
+                className="project-select-wrap"
+                style={{ maxWidth: 280, flex: 'none', display: 'flex', alignItems: 'center', gap: 8 }}
+              >
+                {(recordUseMode || transferMode) && (
+                  <label htmlFor="stock_view_project" className="sub" style={{ margin: 0, whiteSpace: 'nowrap' }}>
+                    From Project:
+                  </label>
+                )}
                 <select
                   id="stock_view_project"
                   value={stockViewProjectId}
-                  onChange={(e) => setStockViewProjectId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                  onChange={(e) => handleChangeStockViewProject(e.target.value)}
                 >
-                  <option value="all">All Entities</option>
+                  {!(recordUseMode || transferMode) && <option value="all">All Entities</option>}
                   {projects.map((p) => (
                     <option value={p.id} key={p.id}>
                       {p.name}

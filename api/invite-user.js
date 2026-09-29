@@ -79,19 +79,23 @@ export default async function handler(req, res) {
     authUserId = existing ? existing.id : linkData.user.id
     const actionLink = linkData.properties?.action_link
 
-    const { error: upsertError } = await admin
-      .from('users')
-      .upsert(
-        {
-          auth_user_id: authUserId,
-          name: normalizedEmail,
-          roles: roles || [],
-          active: true,
-          vendor_id: vendor_id ?? null,
-        },
-        { onConflict: 'auth_user_id' }
-      )
-    if (upsertError) throw upsertError
+    // Only write a `users` row for a brand-new account. Re-generating a link
+    // for an existing one is just a password reset -- it must never touch
+    // their existing roles/active/vendor_id, which the invite form doesn't
+    // even show for someone who already has an account (it previously
+    // stomped them back to whatever the form happened to have, e.g.
+    // wiping an admin's roles to [] because none of the checkboxes were
+    // ticked for what was meant to be a no-op reset).
+    if (!existing) {
+      const { error: insertError } = await admin.from('users').insert({
+        auth_user_id: authUserId,
+        name: normalizedEmail,
+        roles: roles || [],
+        active: true,
+        vendor_id: vendor_id ?? null,
+      })
+      if (insertError) throw insertError
+    }
 
     res.status(200).json({ ok: true, link: actionLink, reused: Boolean(existing) })
   } catch (error) {

@@ -83,8 +83,8 @@ function InventoryOnHandTab({
           </div>
         ) : !stockEditMode && !locationEditMode && !recordUseMode && !transferMode ? (
           <div className="edit-toolbar">
-            <button className="btn-secondary" onClick={() => setStockPanel('upload')}>
-              Upload Inventory Count
+            <button className="btn-primary" onClick={() => setStockPanel('count')}>
+              Update Inventory Count
             </button>
             {canEditInventory && (
               <>
@@ -93,9 +93,6 @@ function InventoryOnHandTab({
                 </button>
                 <button className="btn-secondary" onClick={() => runAction({ type: 'stock-transfer' })}>
                   Stock Transfer
-                </button>
-                <button className="btn-primary" onClick={() => runAction({ type: 'stock-edit' })}>
-                  Inventory Adjustment
                 </button>
                 <button className="btn-secondary" onClick={() => runAction({ type: 'location-edit' })}>
                   Update Location
@@ -212,10 +209,44 @@ function InventoryOnHandTab({
         )}
       </div>
 
+      {stockPanel === 'count' && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Update Inventory Count</h2>
+            <p className="sub" style={{ margin: 0 }}>
+              Both options update the same on-hand counts — just at different scale. Pick whichever
+              fits what you're doing.
+            </p>
+          </div>
+          <div className="edit-toolbar">
+            {canEditInventory && (
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  runAction({ type: 'stock-edit' })
+                  setStockPanel(null)
+                }}
+              >
+                Individual Adjustment
+              </button>
+            )}
+            <button className="btn-secondary" onClick={() => setStockPanel('upload')}>
+              Bulk Export / Upload (CSV)
+            </button>
+          </div>
+          {!canEditInventory && (
+            <p className="sub" style={{ marginTop: 8 }}>
+              Individual adjustments require inventory edit access — bulk upload is still available
+              above.
+            </p>
+          )}
+        </div>
+      )}
+
       {stockPanel === 'upload' && (
         <div className="card">
           <div className="card-header">
-            <h2>Upload Inventory Count</h2>
+            <h2>Bulk Export / Upload</h2>
             <p className="sub" style={{ margin: 0 }}>
               CSV with columns: GCS P/N, Entity, Quantity. Every row replaces that part's stock at
               that entity — the previous value is archived in History.

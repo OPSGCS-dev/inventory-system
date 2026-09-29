@@ -72,45 +72,97 @@ function InventoryOnHandTab({
   draftLocationItems,
   updateLocationDraftField,
 }) {
+  const isPartsActive = !stockPanel && !stockEditMode && !locationEditMode && !recordUseMode && !transferMode
+  const isCountActive = stockPanel === 'count' || stockPanel === 'upload' || stockEditMode
+  const isHistoryActive = stockPanel === 'history'
+
+  function hasUnsavedStockEdits() {
+    return draftStockItems.some((row) =>
+      Object.entries(row.qtyByProject).some(([pid, val]) => {
+        const orig = row.perProject[pid]?.onHand ?? 0
+        const newVal = val === '' ? 0 : Number(val)
+        return newVal !== orig
+      })
+    )
+  }
+
+  function hasUnsavedLocationEdits() {
+    return draftLocationItems.some((row) => {
+      const newStorage = row.storage_qty === '' ? 0 : Number(row.storage_qty)
+      const newBarn = row.barn_qty === '' ? 0 : Number(row.barn_qty)
+      return newStorage !== (row.part?.storage_qty ?? 0) || newBarn !== (row.part?.barn_qty ?? 0)
+    })
+  }
+
+  function exitCurrentMode() {
+    if (stockEditMode) handleCancelStockEdits()
+    else if (locationEditMode) handleCancelLocationEdits()
+    else if (recordUseMode) cancelRecordPartUse()
+    else if (transferMode) cancelStockTransfer()
+    else if (stockPanel) resetStockPanel()
+  }
+
+  // Lets the tab row stay visible and clickable at all times instead of
+  // being replaced by whichever mode is active -- switching straight to a
+  // different tab first exits whatever's currently open, guarding against
+  // silently losing typed-but-unsaved adjustment/location edits.
+  function switchTo(target) {
+    if (
+      ((stockEditMode && hasUnsavedStockEdits()) || (locationEditMode && hasUnsavedLocationEdits())) &&
+      !window.confirm('You have unsaved changes that will be lost. Switch anyway?')
+    ) {
+      return
+    }
+    exitCurrentMode()
+    if (target === 'count') setStockPanel('count')
+    if (target === 'record-use') runAction({ type: 'record-use' })
+    if (target === 'stock-transfer') runAction({ type: 'stock-transfer' })
+    if (target === 'location-edit') runAction({ type: 'location-edit' })
+    if (target === 'history') {
+      setStockPanel('history')
+      loadJournalEntries()
+    }
+  }
+
   return (
     <>
       <div className="card">
-        {stockPanel ? (
-          <div className="edit-toolbar">
-            <button className="btn-secondary" onClick={resetStockPanel}>
-              ← Back to Inventory
-            </button>
-          </div>
-        ) : !stockEditMode && !locationEditMode && !recordUseMode && !transferMode ? (
-          <div className="edit-toolbar">
-            <button className="btn-primary" onClick={() => setStockPanel('count')}>
-              Update Inventory Count
-            </button>
-            {canEditInventory && (
-              <>
-                <button className="btn-secondary" onClick={() => runAction({ type: 'record-use' })}>
-                  Record Part Use
-                </button>
-                <button className="btn-secondary" onClick={() => runAction({ type: 'stock-transfer' })}>
-                  Stock Transfer
-                </button>
-                <button className="btn-secondary" onClick={() => runAction({ type: 'location-edit' })}>
-                  Update Location
-                </button>
-              </>
-            )}
-            <button
-              className="btn-secondary"
-              onClick={() => {
-                setStockPanel('history')
-                loadJournalEntries()
-              }}
-            >
-              History
-            </button>
-          </div>
-        ) : recordUseMode ? (
-          <div className="edit-toolbar">
+        <div className="edit-toolbar">
+          <button className={isPartsActive ? 'btn-primary' : 'btn-secondary'} onClick={() => switchTo('parts')}>
+            Parts
+          </button>
+          <button className={isCountActive ? 'btn-primary' : 'btn-secondary'} onClick={() => switchTo('count')}>
+            Update Inventory Count
+          </button>
+          {canEditInventory && (
+            <>
+              <button
+                className={recordUseMode ? 'btn-primary' : 'btn-secondary'}
+                onClick={() => switchTo('record-use')}
+              >
+                Record Part Use
+              </button>
+              <button
+                className={transferMode ? 'btn-primary' : 'btn-secondary'}
+                onClick={() => switchTo('stock-transfer')}
+              >
+                Stock Transfer
+              </button>
+              <button
+                className={locationEditMode ? 'btn-primary' : 'btn-secondary'}
+                onClick={() => switchTo('location-edit')}
+              >
+                Update Location
+              </button>
+            </>
+          )}
+          <button className={isHistoryActive ? 'btn-primary' : 'btn-secondary'} onClick={() => switchTo('history')}>
+            History
+          </button>
+        </div>
+
+        {recordUseMode && (
+          <div className="edit-toolbar" style={{ marginTop: 8 }}>
             <input
               type="text"
               placeholder="Reason for this use (required)"
@@ -122,8 +174,9 @@ function InventoryOnHandTab({
               Done
             </button>
           </div>
-        ) : transferMode ? (
-          <div className="edit-toolbar">
+        )}
+        {transferMode && (
+          <div className="edit-toolbar" style={{ marginTop: 8 }}>
             <span className="sub" style={{ margin: 0 }}>
               To project:
             </span>
@@ -151,8 +204,9 @@ function InventoryOnHandTab({
               Done
             </button>
           </div>
-        ) : stockEditMode ? (
-          <div className="edit-toolbar">
+        )}
+        {stockEditMode && (
+          <div className="edit-toolbar" style={{ marginTop: 8 }}>
             <button
               className="btn-primary"
               onClick={handleSaveStockEdits}
@@ -177,8 +231,9 @@ function InventoryOnHandTab({
               Cancel
             </button>
           </div>
-        ) : (
-          <div className="edit-toolbar">
+        )}
+        {locationEditMode && (
+          <div className="edit-toolbar" style={{ marginTop: 8 }}>
             <button
               className="btn-primary"
               onClick={handleSaveLocationEdits}
@@ -204,6 +259,7 @@ function InventoryOnHandTab({
             </button>
           </div>
         )}
+
         {stockStatus && (
           <div className={'status ' + (stockStatus.ok ? 'ok' : 'err')}>{stockStatus.msg}</div>
         )}

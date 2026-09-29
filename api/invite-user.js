@@ -1,4 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
+
+// A short, easy-to-copy random temporary password -- not meant to be typed
+// by hand, just pasted wherever (Teams, Outlook, a text message...) without
+// tripping any of the link-preview/one-time-token problems a real invite
+// link has. Base64url so it's plain alphanumerics (plus - and _), no
+// characters that could get mangled or need escaping in transit.
+function generateTempPassword() {
+  return crypto.randomBytes(9).toString('base64url')
+}
 
 // Server-only keys -- never exposed to the browser bundle since this file
 // only ever runs on Vercel, not in Vite's client build. Set these in the
@@ -54,54 +64,63 @@ export default async function handler(req, res) {
     }
 
     const normalizedEmail = email.trim().toLowerCase()
-    const origin = req.headers.origin || `https://${req.headers.host}`
 
-    // If this email already has an auth account (e.g. re-enabling someone),
-    // reuse it instead of erroring out.
-    let authUserId
+    // If this email already has an auth account (e.g. re-enabling someone,
+    // or they forgot their password), reuse it instead of erroring out.
     const { data: existingList } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 })
     const existing = existingList?.users?.find((u) => u.email?.toLowerCase() === normalizedEmail)
 
-    // generateLink never actually emails anyone -- it just creates the auth
-    // account (for a new invite) and hands back the raw action link, which
-    // the admin then copies and sends however they want. This sidesteps
-    // Supabase's own default email sending, which is unreliable without a
-    // custom SMTP provider configured (see inviteUserByEmail's old
-    // behaviour -- it reported success even when the email silently never
-    // arrived). A new account gets an 'invite' link (sets their first
-    // password); an existing one gets a 'recovery' link (resets it).
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-      type: existing ? 'recovery' : 'invite',
-      email: normalizedEmail,
-      options: { redirectTo: origin },
-    })
-    if (linkError) throw linkError
-    authUserId = existing ? existing.id : linkData.user.id
-    const actionLink = linkData.properties?.action_link
+    // Sets a real, working password directly rather than emailing/linking
+    // one -- see handleInviteUser in App.jsx for why: a one-time link
+    // breaks the moment it's relayed through Teams/Outlook/Slack, since
+    // their automatic link-preview fetch silently consumes the token
+    // before the person ever clicks it. A plain temporary password has no
+    // such failure mode and works immediately.
+    const tempPassword = generateTempPassword()
+    let authUserId
 
-    // Only write a `users` row for a brand-new account. Re-generating a link
-    // for an existing one is just a password reset -- it must never touch
-    // their existing roles/active/vendor_id, which the invite form doesn't
-    // even show for someone who already has an account (it previously
-    // stomped them back to whatever the form happened to have, e.g.
-    // wiping an admin's roles to [] because none of the checkboxes were
-    // ticked for what was meant to be a no-op reset).
+    if (existing) {
+      const { error: updateError } = await admin.auth.admin.updateUserById(existing.id, {
+        password: tempPassword,
+      })
+      if (updateError) throw updateError
+      authUserId = existing.id
+    } else {
+      const { data: created, error: createError } = await admin.auth.admin.createUser({
+        email: normalizedEmail,
+        password: tempPassword,
+        email_confirm: true,
+      })
+      if (createError) throw createError
+      authUserId = created.user.id
+    }
+
     if (!existing) {
-      // Starts inactive -- becomes active only once they actually finish
-      // setting a password (handlePasswordSetup in App.jsx flips this),
-      // so a pending invite can't be mistaken for a real working account
-      // (and can't do anything role-gated) before that happens.
+      // Brand-new account: create the matching `users` row. Fully active
+      // right away -- the password above already works -- but
+      // activated_at stays null until they change it themselves, so the
+      // Users tab can flag anyone still sitting on an admin-set password.
       const { error: insertError } = await admin.from('users').insert({
         auth_user_id: authUserId,
         name: normalizedEmail,
         roles: roles || [],
-        active: false,
+        active: true,
         vendor_id: vendor_id ?? null,
       })
       if (insertError) throw insertError
+    } else {
+      // Existing account: never touch roles/active/vendor_id here (this
+      // form doesn't even show them for someone who already has an
+      // account) -- just mark them back to "on a temporary password" since
+      // that's what resetting it just made true again.
+      const { error: resetError } = await admin
+        .from('users')
+        .update({ activated_at: null })
+        .eq('auth_user_id', authUserId)
+      if (resetError) throw resetError
     }
 
-    res.status(200).json({ ok: true, link: actionLink, reused: Boolean(existing) })
+    res.status(200).json({ ok: true, password: tempPassword, reused: Boolean(existing) })
   } catch (error) {
     console.error(error)
     res.status(500).json({ error: error.message || 'Could not invite user.' })

@@ -9,15 +9,13 @@ function UsersTab({
   savingUsers,
   handleSaveUsers,
   handleDeleteUser,
-  pendingUsers,
-  handleCancelPendingInvite,
   inviteEmail,
   setInviteEmail,
   inviteRoles,
   toggleInviteRole,
   inviting,
   handleInviteUser,
-  inviteLink,
+  invitePassword,
   draftBudgetCategories,
   addDraftBudgetCategoryRow,
   removeDraftBudgetCategoryRow,
@@ -74,15 +72,15 @@ function UsersTab({
   handleConfirmAdminImport,
   resetAdminImportPanel,
 }) {
-  const [linkCopied, setLinkCopied] = useState(false)
+  const [passwordCopied, setPasswordCopied] = useState(false)
 
-  async function copyInviteLink() {
+  async function copyInvitePassword() {
     try {
-      await navigator.clipboard.writeText(inviteLink)
-      setLinkCopied(true)
-      setTimeout(() => setLinkCopied(false), 2000)
+      await navigator.clipboard.writeText(invitePassword)
+      setPasswordCopied(true)
+      setTimeout(() => setPasswordCopied(false), 2000)
     } catch {
-      // Clipboard API unavailable (e.g. non-HTTPS) -- the link is still
+      // Clipboard API unavailable (e.g. non-HTTPS) -- it's still
       // selectable/copyable by hand from the text box.
     }
   }
@@ -204,7 +202,18 @@ function UsersTab({
               ) : (
                 draftUsers.map((u, i) => (
                   <tr key={u.id}>
-                    <td>{u.name}</td>
+                    <td>
+                      {u.name}
+                      {!u.activated_at && (
+                        <span
+                          className="sub"
+                          style={{ marginLeft: 8, whiteSpace: 'nowrap' }}
+                          title="Still using the temporary password an admin set -- hasn't changed it themselves yet."
+                        >
+                          (temp password)
+                        </span>
+                      )}
+                    </td>
                     {PO_ROLE_OPTIONS.map((r) => (
                       <td className="center-cell" key={r.value}>
                         <input
@@ -241,7 +250,8 @@ function UsersTab({
 
         <div className="add-form" style={{ marginTop: 16 }}>
           <label htmlFor="invite_email">
-            Invite New User (creates their account and gives you a link to send them)
+            Invite New User (or reset an existing one's password) — creates a working temporary
+            password immediately, no link or email involved
           </label>
           <input
             id="invite_email"
@@ -264,64 +274,32 @@ function UsersTab({
           </div>
           <div className="form-actions">
             <button className="btn-primary" onClick={handleInviteUser} disabled={inviting}>
-              {inviting ? 'Creating…' : 'Create Invite Link'}
+              {inviting ? 'Creating…' : 'Create Account / Reset Password'}
             </button>
           </div>
 
-          {inviteLink && (
+          {invitePassword && (
             <div style={{ marginTop: 12 }}>
-              <label htmlFor="invite_link">Send this link to them (it expires, so don't wait too long)</label>
+              <label htmlFor="invite_password">
+                Temporary password — safe to paste into Teams, Outlook, anywhere. They can log in
+                with it right away and change it anytime from Change Password.
+              </label>
               <div className="field-row" style={{ alignItems: 'center' }}>
-                <input id="invite_link" type="text" readOnly value={inviteLink} onFocus={(e) => e.target.select()} />
-                <button className="btn-secondary" onClick={copyInviteLink} type="button">
-                  {linkCopied ? 'Copied!' : 'Copy'}
+                <input
+                  id="invite_password"
+                  type="text"
+                  readOnly
+                  value={invitePassword}
+                  onFocus={(e) => e.target.select()}
+                />
+                <button className="btn-secondary" onClick={copyInvitePassword} type="button">
+                  {passwordCopied ? 'Copied!' : 'Copy'}
                 </button>
               </div>
             </div>
           )}
         </div>
       </div>
-
-      {pendingUsers.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h2>Pending Invites ({pendingUsers.length})</h2>
-            <p className="sub" style={{ margin: 0 }}>
-              Sent but not yet completed — they won't show above, or count as a real user anywhere,
-              until they actually finish setting a password.
-            </p>
-          </div>
-          <div className="sheet-wrap">
-            <table className="sheet">
-              <colgroup>
-                <col />
-                <col style={{ width: '20%' }} />
-                <col className="col-last" />
-              </colgroup>
-              <thead>
-                <tr className="header-row">
-                  <th>Email</th>
-                  <th>Invited</th>
-                  <th className="col-last"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingUsers.map((u) => (
-                  <tr key={u.id}>
-                    <td>{u.name}</td>
-                    <td>{new Date(u.created_at).toLocaleDateString()}</td>
-                    <td className="col-last">
-                      <button className="del-btn" onClick={() => handleCancelPendingInvite(u)}>
-                        Cancel
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       <div className="card">
         <div className="card-header">

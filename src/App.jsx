@@ -45,6 +45,16 @@ function App() {
   const [passwordSetupError, setPasswordSetupError] = useState(null)
   const [passwordSetupBusy, setPasswordSetupBusy] = useState(false)
 
+  // Self-service password change for anyone already logged in (e.g. to
+  // replace a temporary password an admin created for them) -- separate
+  // from the passwordSetup* state above, which only applies to the one-time
+  // invite/recovery-link flow.
+  const [showChangePassword, setShowChangePassword] = useState(false)
+  const [changePasswordValue, setChangePasswordValue] = useState('')
+  const [changePasswordConfirm, setChangePasswordConfirm] = useState('')
+  const [changePasswordError, setChangePasswordError] = useState(null)
+  const [changePasswordBusy, setChangePasswordBusy] = useState(false)
+
   const [activeTab, setActiveTab] = useState('master')
 
   const [parts, setParts] = useState([])
@@ -184,7 +194,7 @@ function App() {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRoles, setInviteRoles] = useState([])
   const [inviting, setInviting] = useState(false)
-  const [inviteLink, setInviteLink] = useState(null)
+  const [invitePassword, setInvitePassword] = useState(null)
 
   const [showVendorForm, setShowVendorForm] = useState(false)
   const [editingVendorId, setEditingVendorId] = useState(null)
@@ -373,32 +383,14 @@ function App() {
   // whatever was last loaded from the server, so edits start from a clean
   // baseline after every save/reload. Vendor-logon accounts (vendor_id set)
   // are managed from the Vendors table instead, so they're excluded here.
-  // A pending (not-yet-activated) invite is excluded too -- it isn't a real
-  // account yet and has no roles/active state worth editing; it shows in
-  // its own list instead (see pendingUsers below).
+  // A newly-created account is fully real and usable right away (it gets a
+  // real, working temporary password up front -- see api/invite-user.js),
+  // so unlike the old link-based invite there's no non-functional limbo
+  // state to hide; activated_at just flags whether they're still on that
+  // temporary password (see the "Temp password" note next to their email).
   useEffect(() => {
-    setDraftUsers(
-      users.filter((u) => !u.vendor_id && u.activated_at).map((u) => ({ ...u, _existing: true }))
-    )
+    setDraftUsers(users.filter((u) => !u.vendor_id).map((u) => ({ ...u, _existing: true })))
   }, [users])
-
-  const pendingUsers = useMemo(
-    () => users.filter((u) => !u.vendor_id && !u.activated_at),
-    [users]
-  )
-
-  async function handleCancelPendingInvite(user) {
-    if (!window.confirm(`Cancel the pending invite for ${user.name}?`)) return
-    try {
-      const { error } = await supabase.from('users').delete().eq('id', user.id)
-      if (error) throw error
-      flashUsersStatus(`Cancelled invite for ${user.name}.`, true)
-      await loadUsers()
-    } catch (error) {
-      console.error(error)
-      flashUsersStatus('Could not cancel invite — check the console for details.', false)
-    }
-  }
 
   async function loadVendors() {
     const { data, error } = await supabase.from('vendors').select('*').order('name', { ascending: true })
@@ -581,6 +573,42 @@ function App() {
       setPasswordSetupError('Could not set password — check the console for details.')
     } finally {
       setPasswordSetupBusy(false)
+    }
+  }
+
+  // Lets anyone already logged in replace their own password at any time --
+  // in particular, an admin-created temporary one -- without needing a
+  // link at all.
+  async function handleChangePassword(e) {
+    e.preventDefault()
+    setChangePasswordError(null)
+    if (!changePasswordValue || changePasswordValue.length < 8) {
+      setChangePasswordError('Password must be at least 8 characters.')
+      return
+    }
+    if (changePasswordValue !== changePasswordConfirm) {
+      setChangePasswordError('Passwords do not match.')
+      return
+    }
+    setChangePasswordBusy(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: changePasswordValue })
+      if (error) throw error
+      if (loggedInUser?.id) {
+        await supabase
+          .from('users')
+          .update({ activated_at: new Date().toISOString() })
+          .eq('id', loggedInUser.id)
+        setLoggedInUser((prev) => (prev ? { ...prev, activated_at: new Date().toISOString() } : prev))
+      }
+      setShowChangePassword(false)
+      setChangePasswordValue('')
+      setChangePasswordConfirm('')
+    } catch (error) {
+      console.error(error)
+      setChangePasswordError('Could not change password — check the console for details.')
+    } finally {
+      setChangePasswordBusy(false)
     }
   }
 
@@ -2709,10 +2737,15 @@ function App() {
   }
 
   // Calls the /api/invite-user serverless function (holds the service-role
-  // key server-side), which links a matching `users` row and hands back a
-  // raw action link rather than emailing it -- Supabase's own default email
-  // sending is unreliable without a custom SMTP provider configured, so the
-  // admin copies this link and sends it themselves however they like.
+  // key server-side), which sets a real, working, randomly-generated
+  // temporary password directly rather than sending a one-time link --
+  // those links break whenever they're relayed through anything that
+  // auto-previews URLs (Teams, Outlook, Slack...), since the preview
+  // fetch itself silently consumes the one-time token before the person
+  // ever clicks it. A plain temporary password has no such problem: it's
+  // just text, safe to paste into any of those tools, and works the
+  // instant the account is created -- they can change it themselves later
+  // from the Change Password button once logged in.
   async function handleInviteUser() {
     const email = inviteEmail.trim()
     if (!email) {
@@ -2720,7 +2753,7 @@ function App() {
       return
     }
     setInviting(true)
-    setInviteLink(null)
+    setInvitePassword(null)
     try {
       const {
         data: { session },
@@ -2738,11 +2771,11 @@ function App() {
 
       flashUsersStatus(
         body.reused
-          ? `Password reset link ready for ${email} — copy it below and send it to them.`
-          : `Account created for ${email} — copy the link below and send it to them.`,
+          ? `Password reset for ${email} — copy it below and send it to them.`
+          : `Account created for ${email} — copy the temporary password below and send it to them.`,
         true
       )
-      setInviteLink(body.link || null)
+      setInvitePassword(body.password || null)
       setInviteEmail('')
       setInviteRoles([])
       await loadUsers()
@@ -3327,10 +3360,59 @@ function App() {
             Ticketing ↗
           </a>
         )}
+        <button className="btn-secondary" onClick={() => setShowChangePassword((v) => !v)}>
+          Change Password
+        </button>
         <button className="btn-secondary" onClick={handleLogout}>
           Log out
         </button>
       </div>
+
+      {showChangePassword && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Change Password</h2>
+          </div>
+          <form onSubmit={handleChangePassword} className="add-form">
+            <label htmlFor="change_password_new">New password</label>
+            <input
+              id="change_password_new"
+              type="password"
+              autoFocus
+              placeholder="At least 8 characters"
+              value={changePasswordValue}
+              onChange={(e) => setChangePasswordValue(e.target.value)}
+            />
+            <label htmlFor="change_password_confirm">Confirm password</label>
+            <input
+              id="change_password_confirm"
+              type="password"
+              placeholder="Re-enter password"
+              value={changePasswordConfirm}
+              onChange={(e) => setChangePasswordConfirm(e.target.value)}
+            />
+            <div className="form-actions">
+              <button className="btn-primary" type="submit" disabled={changePasswordBusy}>
+                {changePasswordBusy ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setShowChangePassword(false)
+                  setChangePasswordValue('')
+                  setChangePasswordConfirm('')
+                  setChangePasswordError(null)
+                }}
+                disabled={changePasswordBusy}
+              >
+                Cancel
+              </button>
+            </div>
+            {changePasswordError && <div className="status err">{changePasswordError}</div>}
+          </form>
+        </div>
+      )}
 
       {activeTab === 'master' && (
         <MasterListTab
@@ -3554,15 +3636,13 @@ function App() {
           savingUsers={savingUsers}
           handleSaveUsers={handleSaveUsers}
           handleDeleteUser={handleDeleteUser}
-          pendingUsers={pendingUsers}
-          handleCancelPendingInvite={handleCancelPendingInvite}
           inviteEmail={inviteEmail}
           setInviteEmail={setInviteEmail}
           inviteRoles={inviteRoles}
           toggleInviteRole={toggleInviteRole}
           inviting={inviting}
           handleInviteUser={handleInviteUser}
-          inviteLink={inviteLink}
+          invitePassword={invitePassword}
           draftBudgetCategories={draftBudgetCategories}
           addDraftBudgetCategoryRow={addDraftBudgetCategoryRow}
           removeDraftBudgetCategoryRow={removeDraftBudgetCategoryRow}

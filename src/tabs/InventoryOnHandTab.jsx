@@ -559,11 +559,24 @@ function InventoryOnHandTab({
               const singleProjectView =
                 !stockEditMode && !locationEditMode && !transferMode && stockViewProjectId !== 'all'
               const viewProject = singleProjectView ? projects.find((p) => p.id === stockViewProjectId) : null
+              // table-layout: fixed splits width strictly by each column's %,
+              // so once every project + total column claims a fixed share,
+              // GCS P/N and Description (the only two with no set width) get
+              // squeezed toward nothing -- wrapping every character onto its
+              // own line. A min-width lets the table grow past 100% and
+              // actually use .sheet-wrap's horizontal scroll instead.
+              const minTableWidth = singleProjectView
+                ? undefined
+                : 70 +
+                  180 +
+                  projects.length * 80 +
+                  5 * 70 +
+                  (recordUseMode || transferMode ? 70 + 120 : 0)
               return (
-            <table className="sheet">
+            <table className="sheet" style={minTableWidth ? { minWidth: minTableWidth } : undefined}>
               <colgroup>
-                <col className="col-rowhead" />
-                <col />
+                <col className="col-rowhead" style={!singleProjectView ? { width: '70px' } : undefined} />
+                <col style={!singleProjectView ? { width: '180px' } : undefined} />
                 {singleProjectView ? (
                   <col style={{ width: '8%' }} />
                 ) : (

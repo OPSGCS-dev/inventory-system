@@ -9,6 +9,8 @@ function UsersTab({
   savingUsers,
   handleSaveUsers,
   handleDeleteUser,
+  pendingUsers,
+  handleCancelPendingInvite,
   inviteEmail,
   setInviteEmail,
   inviteRoles,
@@ -279,6 +281,47 @@ function UsersTab({
           )}
         </div>
       </div>
+
+      {pendingUsers.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Pending Invites ({pendingUsers.length})</h2>
+            <p className="sub" style={{ margin: 0 }}>
+              Sent but not yet completed — they won't show above, or count as a real user anywhere,
+              until they actually finish setting a password.
+            </p>
+          </div>
+          <div className="sheet-wrap">
+            <table className="sheet">
+              <colgroup>
+                <col />
+                <col style={{ width: '20%' }} />
+                <col className="col-last" />
+              </colgroup>
+              <thead>
+                <tr className="header-row">
+                  <th>Email</th>
+                  <th>Invited</th>
+                  <th className="col-last"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingUsers.map((u) => (
+                  <tr key={u.id}>
+                    <td>{u.name}</td>
+                    <td>{new Date(u.created_at).toLocaleDateString()}</td>
+                    <td className="col-last">
+                      <button className="del-btn" onClick={() => handleCancelPendingInvite(u)}>
+                        Cancel
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="card-header">

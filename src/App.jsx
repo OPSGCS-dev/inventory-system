@@ -373,9 +373,32 @@ function App() {
   // whatever was last loaded from the server, so edits start from a clean
   // baseline after every save/reload. Vendor-logon accounts (vendor_id set)
   // are managed from the Vendors table instead, so they're excluded here.
+  // A pending (not-yet-activated) invite is excluded too -- it isn't a real
+  // account yet and has no roles/active state worth editing; it shows in
+  // its own list instead (see pendingUsers below).
   useEffect(() => {
-    setDraftUsers(users.filter((u) => !u.vendor_id).map((u) => ({ ...u, _existing: true })))
+    setDraftUsers(
+      users.filter((u) => !u.vendor_id && u.activated_at).map((u) => ({ ...u, _existing: true }))
+    )
   }, [users])
+
+  const pendingUsers = useMemo(
+    () => users.filter((u) => !u.vendor_id && !u.activated_at),
+    [users]
+  )
+
+  async function handleCancelPendingInvite(user) {
+    if (!window.confirm(`Cancel the pending invite for ${user.name}?`)) return
+    try {
+      const { error } = await supabase.from('users').delete().eq('id', user.id)
+      if (error) throw error
+      flashUsersStatus(`Cancelled invite for ${user.name}.`, true)
+      await loadUsers()
+    } catch (error) {
+      console.error(error)
+      flashUsersStatus('Could not cancel invite — check the console for details.', false)
+    }
+  }
 
   async function loadVendors() {
     const { data, error } = await supabase.from('vendors').select('*').order('name', { ascending: true })
@@ -543,6 +566,15 @@ function App() {
       // Clear the invite/recovery token out of the URL now that it's used.
       window.history.replaceState(null, '', window.location.pathname)
       const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        // A brand-new invite starts active:false, activated_at:null (see
+        // api/invite-user.js) precisely so it can't be mistaken for a real
+        // account until this point -- actually completing password setup.
+        await supabase
+          .from('users')
+          .update({ active: true, activated_at: new Date().toISOString() })
+          .eq('auth_user_id', session.user.id)
+      }
       await loadUserForSession(session)
     } catch (error) {
       console.error(error)
@@ -3522,6 +3554,8 @@ function App() {
           savingUsers={savingUsers}
           handleSaveUsers={handleSaveUsers}
           handleDeleteUser={handleDeleteUser}
+          pendingUsers={pendingUsers}
+          handleCancelPendingInvite={handleCancelPendingInvite}
           inviteEmail={inviteEmail}
           setInviteEmail={setInviteEmail}
           inviteRoles={inviteRoles}

@@ -87,11 +87,15 @@ export default async function handler(req, res) {
     // wiping an admin's roles to [] because none of the checkboxes were
     // ticked for what was meant to be a no-op reset).
     if (!existing) {
+      // Starts inactive -- becomes active only once they actually finish
+      // setting a password (handlePasswordSetup in App.jsx flips this),
+      // so a pending invite can't be mistaken for a real working account
+      // (and can't do anything role-gated) before that happens.
       const { error: insertError } = await admin.from('users').insert({
         auth_user_id: authUserId,
         name: normalizedEmail,
         roles: roles || [],
-        active: true,
+        active: false,
         vendor_id: vendor_id ?? null,
       })
       if (insertError) throw insertError

@@ -677,6 +677,7 @@ function InventoryOnHandTab({
                       const storageQty = row.storage_qty === '' ? 0 : Number(row.storage_qty)
                       const barnQty = row.barn_qty === '' ? 0 : Number(row.barn_qty)
                       const projectQty = row.onHandSum - storageQty - barnQty
+                      const targetSum = computeTargetSum(Object.values(row.perProject))
                       return (
                         <tr key={row.gcs_id}>
                           <td className="row-head">{row.gcs_id}</td>
@@ -689,7 +690,7 @@ function InventoryOnHandTab({
                               </td>
                             )
                           })}
-                          <td className="center-cell total-col">—</td>
+                          <td className="center-cell total-col">{targetSum}</td>
                           <td className="center-cell total-col">{row.onHandSum}</td>
                           <td className="center-cell total-col" style={projectQty < 0 ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
                             {projectQty}

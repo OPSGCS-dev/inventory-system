@@ -1751,7 +1751,13 @@ function App() {
       flashStockStatus(`Not enough on hand at this project (${fromCurrent} available).`, false)
       return
     }
-    const toCurrent = item?.perProject?.[transferToProjectId]?.onHand ?? 0
+    const toEntry = item?.perProject?.[transferToProjectId]
+    if (!toEntry) {
+      const toName = projects.find((p) => String(p.id) === String(transferToProjectId))?.name || 'That entity'
+      flashStockStatus(`${toName} doesn't use this part — add it on Required Inventory first.`, false)
+      return
+    }
+    const toCurrent = toEntry.onHand ?? 0
     const toNew = toCurrent + qty
 
     const fromProjectName =

@@ -845,7 +845,9 @@ function InventoryOnHandTab({
                             </td>
                           </>
                         )}
-                        {transferMode && (
+                        {transferMode && (() => {
+                          const destinationUsesPart = Boolean(item.perProject[transferToProjectId])
+                          return (
                           <>
                             <td className="center-cell">
                               <input
@@ -860,9 +862,15 @@ function InventoryOnHandTab({
                                 className="btn-secondary"
                                 style={{ whiteSpace: 'nowrap' }}
                                 onClick={() => handleStockTransfer(item.gcs_id)}
+                                title={
+                                  transferToProjectId && !destinationUsesPart
+                                    ? "Destination entity doesn't use this part — add it on Required Inventory first."
+                                    : undefined
+                                }
                                 disabled={
                                   savingTransferPartId === item.gcs_id ||
                                   !transferToProjectId ||
+                                  !destinationUsesPart ||
                                   !transferNote.trim() ||
                                   !transferQtyByPart[item.gcs_id]
                                 }
@@ -871,7 +879,8 @@ function InventoryOnHandTab({
                               </button>
                             </td>
                           </>
-                        )}
+                          )
+                        })()}
                       </tr>
                     )
                   })

@@ -178,7 +178,20 @@ function InventoryOnHandTab({
         {transferMode && (
           <div className="edit-toolbar" style={{ marginTop: 8 }}>
             <span className="sub" style={{ margin: 0 }}>
-              To project:
+              From:
+            </span>
+            <select
+              value={stockViewProjectId === 'all' ? '' : stockViewProjectId}
+              onChange={(e) => handleChangeStockViewProject(e.target.value)}
+            >
+              {projects.map((p) => (
+                <option value={p.id} key={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <span className="sub" style={{ margin: 0 }}>
+              To:
             </span>
             <select
               value={transferToProjectId ?? ''}
@@ -492,12 +505,12 @@ function InventoryOnHandTab({
                       : visibleStockItems.length
                   })`}
             </h2>
-            {!stockEditMode && !locationEditMode && (
+            {!stockEditMode && !locationEditMode && !transferMode && (
               <div
                 className="project-select-wrap"
                 style={{ maxWidth: 280, flex: 'none', display: 'flex', alignItems: 'center', gap: 8 }}
               >
-                {(recordUseMode || transferMode) && (
+                {recordUseMode && (
                   <label htmlFor="stock_view_project" className="sub" style={{ margin: 0, whiteSpace: 'nowrap' }}>
                     From Project:
                   </label>
@@ -507,7 +520,7 @@ function InventoryOnHandTab({
                   value={stockViewProjectId}
                   onChange={(e) => handleChangeStockViewProject(e.target.value)}
                 >
-                  {!(recordUseMode || transferMode) && <option value="all">All Entities</option>}
+                  {!recordUseMode && <option value="all">All Entities</option>}
                   {projects.map((p) => (
                     <option value={p.id} key={p.id}>
                       {p.name}
@@ -530,6 +543,12 @@ function InventoryOnHandTab({
               and logs an entry in History.
             </p>
           )}
+          {transferMode && (
+            <p className="sub" style={{ margin: 0 }}>
+              Every entity's on-hand is shown for comparison — the From and To columns are
+              highlighted below. Enter a quantity and hit Transfer on the part's row.
+            </p>
+          )}
         </div>
 
         {stockLoading ? (
@@ -537,7 +556,8 @@ function InventoryOnHandTab({
         ) : (
           <div className="sheet-wrap">
             {(() => {
-              const singleProjectView = !stockEditMode && !locationEditMode && stockViewProjectId !== 'all'
+              const singleProjectView =
+                !stockEditMode && !locationEditMode && !transferMode && stockViewProjectId !== 'all'
               const viewProject = singleProjectView ? projects.find((p) => p.id === stockViewProjectId) : null
               return (
             <table className="sheet">
@@ -570,11 +590,23 @@ function InventoryOnHandTab({
                   {singleProjectView ? (
                     <th className="center-cell" rowSpan={2}>{shortProjectName(viewProject?.name || '')}</th>
                   ) : (
-                    projects.map((p) => (
-                      <th className="center-cell" key={p.id} rowSpan={2} title={p.name}>
-                        {shortProjectName(p.name)}
-                      </th>
-                    ))
+                    projects.map((p) => {
+                      const isFrom = transferMode && String(p.id) === String(stockViewProjectId)
+                      const isTo = transferMode && String(p.id) === String(transferToProjectId)
+                      return (
+                        <th
+                          className="center-cell"
+                          key={p.id}
+                          rowSpan={2}
+                          title={p.name}
+                          style={isFrom ? { background: '#fde2e2' } : isTo ? { background: '#dbeafe' } : undefined}
+                        >
+                          {shortProjectName(p.name)}
+                          {isFrom && ' (From)'}
+                          {isTo && ' (To)'}
+                        </th>
+                      )
+                    })
                   )}
                   <th className="center-cell total-col" rowSpan={2}>Target Stock</th>
                   <th className="center-cell total-col" rowSpan={2}>
@@ -752,8 +784,14 @@ function InventoryOnHandTab({
                         ) : (
                           projects.map((p) => {
                             const entry = item.perProject[p.id]
+                            const isFrom = transferMode && String(p.id) === String(stockViewProjectId)
+                            const isTo = transferMode && String(p.id) === String(transferToProjectId)
                             return (
-                              <td className="center-cell" key={p.id}>
+                              <td
+                                className="center-cell"
+                                key={p.id}
+                                style={isFrom ? { background: '#fde2e2' } : isTo ? { background: '#dbeafe' } : undefined}
+                              >
                                 {entry ? entry.onHand : '—'}
                               </td>
                             )

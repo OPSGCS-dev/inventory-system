@@ -62,16 +62,22 @@ export default async function handler(req, res) {
     const { data: existingList } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 })
     const existing = existingList?.users?.find((u) => u.email?.toLowerCase() === normalizedEmail)
 
-    if (existing) {
-      authUserId = existing.id
-    } else {
-      const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-        normalizedEmail,
-        { redirectTo: origin }
-      )
-      if (inviteError) throw inviteError
-      authUserId = invited.user.id
-    }
+    // generateLink never actually emails anyone -- it just creates the auth
+    // account (for a new invite) and hands back the raw action link, which
+    // the admin then copies and sends however they want. This sidesteps
+    // Supabase's own default email sending, which is unreliable without a
+    // custom SMTP provider configured (see inviteUserByEmail's old
+    // behaviour -- it reported success even when the email silently never
+    // arrived). A new account gets an 'invite' link (sets their first
+    // password); an existing one gets a 'recovery' link (resets it).
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+      type: existing ? 'recovery' : 'invite',
+      email: normalizedEmail,
+      options: { redirectTo: origin },
+    })
+    if (linkError) throw linkError
+    authUserId = existing ? existing.id : linkData.user.id
+    const actionLink = linkData.properties?.action_link
 
     const { error: upsertError } = await admin
       .from('users')
@@ -87,7 +93,7 @@ export default async function handler(req, res) {
       )
     if (upsertError) throw upsertError
 
-    res.status(200).json({ ok: true })
+    res.status(200).json({ ok: true, link: actionLink, reused: Boolean(existing) })
   } catch (error) {
     console.error(error)
     res.status(500).json({ error: error.message || 'Could not invite user.' })

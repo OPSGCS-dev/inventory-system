@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { PO_ROLE_OPTIONS } from '../utils'
 
 function UsersTab({
@@ -14,6 +15,7 @@ function UsersTab({
   toggleInviteRole,
   inviting,
   handleInviteUser,
+  inviteLink,
   draftBudgetCategories,
   addDraftBudgetCategoryRow,
   removeDraftBudgetCategoryRow,
@@ -70,6 +72,19 @@ function UsersTab({
   handleConfirmAdminImport,
   resetAdminImportPanel,
 }) {
+  const [linkCopied, setLinkCopied] = useState(false)
+
+  async function copyInviteLink() {
+    try {
+      await navigator.clipboard.writeText(inviteLink)
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2000)
+    } catch {
+      // Clipboard API unavailable (e.g. non-HTTPS) -- the link is still
+      // selectable/copyable by hand from the text box.
+    }
+  }
+
   return (
     <>
       <div className="card">
@@ -223,7 +238,9 @@ function UsersTab({
         </div>
 
         <div className="add-form" style={{ marginTop: 16 }}>
-          <label htmlFor="invite_email">Invite New User (sends them a password-setup email)</label>
+          <label htmlFor="invite_email">
+            Invite New User (creates their account and gives you a link to send them)
+          </label>
           <input
             id="invite_email"
             type="email"
@@ -245,9 +262,21 @@ function UsersTab({
           </div>
           <div className="form-actions">
             <button className="btn-primary" onClick={handleInviteUser} disabled={inviting}>
-              {inviting ? 'Sending invite…' : 'Send Invite'}
+              {inviting ? 'Creating…' : 'Create Invite Link'}
             </button>
           </div>
+
+          {inviteLink && (
+            <div style={{ marginTop: 12 }}>
+              <label htmlFor="invite_link">Send this link to them (it expires, so don't wait too long)</label>
+              <div className="field-row" style={{ alignItems: 'center' }}>
+                <input id="invite_link" type="text" readOnly value={inviteLink} onFocus={(e) => e.target.select()} />
+                <button className="btn-secondary" onClick={copyInviteLink} type="button">
+                  {linkCopied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

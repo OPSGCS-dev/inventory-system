@@ -184,6 +184,7 @@ function App() {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRoles, setInviteRoles] = useState([])
   const [inviting, setInviting] = useState(false)
+  const [inviteLink, setInviteLink] = useState(null)
 
   const [showVendorForm, setShowVendorForm] = useState(false)
   const [editingVendorId, setEditingVendorId] = useState(null)
@@ -2665,8 +2666,10 @@ function App() {
   }
 
   // Calls the /api/invite-user serverless function (holds the service-role
-  // key server-side) which sends a real Supabase Auth invite email and links
-  // a matching `users` row once accepted.
+  // key server-side), which links a matching `users` row and hands back a
+  // raw action link rather than emailing it -- Supabase's own default email
+  // sending is unreliable without a custom SMTP provider configured, so the
+  // admin copies this link and sends it themselves however they like.
   async function handleInviteUser() {
     const email = inviteEmail.trim()
     if (!email) {
@@ -2674,6 +2677,7 @@ function App() {
       return
     }
     setInviting(true)
+    setInviteLink(null)
     try {
       const {
         data: { session },
@@ -2689,7 +2693,13 @@ function App() {
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || 'Could not invite user.')
 
-      flashUsersStatus(`Invite sent to ${email}.`, true)
+      flashUsersStatus(
+        body.reused
+          ? `Password reset link ready for ${email} — copy it below and send it to them.`
+          : `Account created for ${email} — copy the link below and send it to them.`,
+        true
+      )
+      setInviteLink(body.link || null)
       setInviteEmail('')
       setInviteRoles([])
       await loadUsers()
@@ -3507,6 +3517,7 @@ function App() {
           toggleInviteRole={toggleInviteRole}
           inviting={inviting}
           handleInviteUser={handleInviteUser}
+          inviteLink={inviteLink}
           draftBudgetCategories={draftBudgetCategories}
           addDraftBudgetCategoryRow={addDraftBudgetCategoryRow}
           removeDraftBudgetCategoryRow={removeDraftBudgetCategoryRow}

@@ -7,6 +7,7 @@ function UsersTab({
   toggleDraftUserRole,
   savingUsers,
   handleSaveUsers,
+  handleDeleteUser,
   inviteEmail,
   setInviteEmail,
   inviteRoles,
@@ -157,11 +158,12 @@ function UsersTab({
         <div className="sheet-wrap">
           <table className="sheet">
             <colgroup>
-              <col style={{ width: '24%' }} />
+              <col style={{ width: '22%' }} />
               {PO_ROLE_OPTIONS.map((r) => (
-                <col style={{ width: '9%' }} key={r.value} />
+                <col style={{ width: '8%' }} key={r.value} />
               ))}
               <col style={{ width: '8%' }} />
+              <col style={{ width: '10%' }} />
             </colgroup>
             <thead>
               <tr className="header-row">
@@ -172,12 +174,13 @@ function UsersTab({
                   </th>
                 ))}
                 <th className="center-cell">Active</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {draftUsers.length === 0 ? (
                 <tr>
-                  <td className="empty" colSpan={PO_ROLE_OPTIONS.length + 2}>
+                  <td className="empty" colSpan={PO_ROLE_OPTIONS.length + 3}>
                     No users yet.
                   </td>
                 </tr>
@@ -200,6 +203,11 @@ function UsersTab({
                         checked={Boolean(u.active)}
                         onChange={(e) => updateDraftUserField(i, 'active', e.target.checked)}
                       />
+                    </td>
+                    <td className="center-cell">
+                      <button className="del-btn" onClick={() => handleDeleteUser(u)}>
+                        Remove
+                      </button>
                     </td>
                   </tr>
                 ))

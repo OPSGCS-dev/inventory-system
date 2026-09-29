@@ -2725,6 +2725,35 @@ function App() {
     }
   }
 
+  // Soft-delete, not a real row delete: clears roles and deactivates, which
+  // already blocks login here (loadUserForSession rejects inactive rows) and
+  // on the ticket-system side (its own eligibility check re-runs live on
+  // every login there, and its Sync also deactivates the matching account).
+  // The row stays so old purchase requests still show who requested/approved
+  // them. auth_user_id is left alone -- no need to touch their actual login
+  // account, "active" already fully blocks it.
+  async function handleDeleteUser(user) {
+    if (user.id === loggedInUser?.id) {
+      flashUsersStatus("You can't remove your own account.", false)
+      return
+    }
+    if (!window.confirm(`Remove ${user.name} from Inventory? They'll lose access immediately.`)) {
+      return
+    }
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ roles: [], active: false })
+        .eq('id', user.id)
+      if (error) throw error
+      flashUsersStatus(`Removed ${user.name}.`, true)
+      await loadUsers()
+    } catch (error) {
+      console.error(error)
+      flashUsersStatus('Could not remove — check the console for details.', false)
+    }
+  }
+
   function addDraftBudgetCategoryRow() {
     setDraftBudgetCategories((prev) => [
       ...prev,
@@ -3471,6 +3500,7 @@ function App() {
           toggleDraftUserRole={toggleDraftUserRole}
           savingUsers={savingUsers}
           handleSaveUsers={handleSaveUsers}
+          handleDeleteUser={handleDeleteUser}
           inviteEmail={inviteEmail}
           setInviteEmail={setInviteEmail}
           inviteRoles={inviteRoles}

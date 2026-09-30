@@ -19,6 +19,7 @@ import {
   canCreatePurchaseRequests,
   linesAreMixedType,
   poLineType,
+  canMarkPaymentPaid,
   TICKETING_URL,
 } from './utils'
 import MasterListTab from './tabs/MasterListTab'
@@ -2602,6 +2603,10 @@ function App() {
   async function handleSetPaymentStatus(request, paymentStatus) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
+      return
+    }
+    if (paymentStatus === 'paid' && !canMarkPaymentPaid(request)) {
+      flashPoStatus('Every invoice must be marked paid first.', false)
       return
     }
     setPoActionBusyId(request.id)

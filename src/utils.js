@@ -95,6 +95,15 @@ export function computePaymentStatus(request) {
   return request?.payment_status || 'unpaid'
 }
 
+// Payment Status can only be set to 'paid' once every invoice actually on
+// file is marked paid -- otherwise the label would claim something the
+// Receipts & Invoices table doesn't back up. Requires at least one invoice,
+// same reasoning as allInvoicesFullyResolved below.
+export function canMarkPaymentPaid(request) {
+  const invoices = request?.invoices || []
+  return invoices.length > 0 && invoices.every((inv) => inv.paid)
+}
+
 // Every receipt has been matched to an invoice, every invoice has been
 // matched to a receipt, and every invoice has been approved and paid -- i.e.
 // nothing is left dangling. Requires at least one of each so an empty PO

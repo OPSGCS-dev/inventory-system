@@ -11,6 +11,7 @@ import {
   canClosePo,
   computeWorkStatus,
   computePaymentStatus,
+  canMarkPaymentPaid,
   WORK_STATUS_LABELS,
   PAYMENT_STATUS_LABELS,
   PO_PROGRESS_STAGES,
@@ -336,7 +337,16 @@ function PurchaseOrdersTab({
                       onChange={(e) => handleSetPaymentStatus(r, e.target.value)}
                     >
                       {Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => (
-                        <option value={value} key={value}>
+                        <option
+                          value={value}
+                          key={value}
+                          disabled={value === 'paid' && !canMarkPaymentPaid(r)}
+                          title={
+                            value === 'paid' && !canMarkPaymentPaid(r)
+                              ? 'Every invoice must be marked paid first.'
+                              : undefined
+                          }
+                        >
                           {label}
                         </option>
                       ))}

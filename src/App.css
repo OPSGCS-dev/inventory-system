@@ -445,6 +445,8 @@ table.sheet td.total-col {
 .po-badge-submitted { background: #fdf1d6; color: var(--warn); }
 .po-badge-approved { background: #e3edfb; color: var(--accent-dark); }
 .po-badge-issued { background: #ece2fb; color: #6a3fae; }
+.po-badge-in_progress { background: #fdf1d6; color: var(--warn); }
+.po-badge-paid { background: #e6f4ea; color: var(--success); }
 .po-badge-closed { background: #e6f4ea; color: var(--success); }
 
 .po-work-badge-not_started { background: #ece7de; color: var(--muted); }

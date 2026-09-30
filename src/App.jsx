@@ -2508,141 +2508,114 @@ function App() {
     }
   }
 
-  // Confirming receipt (parts) or completion (service) now requires
-  // uploading evidence — a photo/packing-slip for parts, or the service
-  // report PDF for a service PO — rather than just clicking a button. The
-  // stock/journal update logic is unchanged; it only ever applies to part
-  // lines, which a service PO has none of.
-  async function handleUploadReceiptAndConfirm(request, file) {
-    if (!loggedInUser) {
-      flashPoStatus('You must be logged in.', false)
-      return
-    }
-    if (!file) return
-    const isService = poLineType(request) === 'service'
-    if (isService && file.type !== 'application/pdf') {
-      flashPoStatus('Please choose a PDF service report.', false)
-      return
-    }
-    if (!isService && !file.type.startsWith('image/') && file.type !== 'application/pdf') {
-      flashPoStatus('Please choose a photo or PDF.', false)
-      return
-    }
-    setPoActionBusyId(request.id)
-    try {
-      const ext = file.name.split('.').pop() || 'dat'
-      const path = `po-${request.id}-${Date.now()}.${ext}`
-      const { error: uploadError } = await supabase.storage
-        .from('receipts')
-        .upload(path, file, { contentType: file.type })
-      if (uploadError) throw uploadError
-      const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(path)
-
-      const partLines = (request.purchase_request_lines || []).filter(
-        (l) => l.line_type === 'part' && l.part_gcs_id
-      )
-      let stockUpdates = []
-
-      if (partLines.length > 0) {
-        const gcsIds = [...new Set(partLines.map((l) => l.part_gcs_id))]
-        const { data: existingStock, error: stockError } = await supabase
-          .from('stock_on_hand')
-          .select('project_id, part_gcs_id, quantity')
-          .eq('project_id', request.project_id)
-          .in('part_gcs_id', gcsIds)
-        if (stockError) throw stockError
-
-        const prevMap = new Map((existingStock ?? []).map((s) => [s.part_gcs_id, s.quantity]))
-        const byPart = new Map()
-        for (const line of partLines) {
-          byPart.set(line.part_gcs_id, (byPart.get(line.part_gcs_id) ?? 0) + (Number(line.quantity) || 0))
-        }
-
-        stockUpdates = [...byPart.entries()].map(([gcsId, qty]) => {
-          const previous = prevMap.get(gcsId) ?? 0
-          return { part_gcs_id: gcsId, previous, next: previous + qty }
-        })
-
-        const { error: upsertError } = await supabase
-          .from('stock_on_hand')
-          .upsert(
-            stockUpdates.map((u) => ({
-              project_id: request.project_id,
-              part_gcs_id: u.part_gcs_id,
-              quantity: u.next,
-            })),
-            { onConflict: 'project_id,part_gcs_id' }
-          )
-        if (upsertError) throw upsertError
-
-        const vendorName = request.vendors?.name || 'Unknown Vendor'
-        const { data: journalRow, error: journalError } = await supabase
-          .from('inventory_journal')
-          .insert({
-            entry_type: 'adjustment',
-            note: `PO ${request.po_number || '#' + request.id} received from ${vendorName}`,
-          })
-          .select()
-          .single()
-        if (journalError) throw journalError
-
-        const { error: lineError } = await supabase.from('inventory_journal_lines').insert(
-          stockUpdates.map((u) => ({
-            journal_id: journalRow.id,
-            project_id: request.project_id,
-            part_gcs_id: u.part_gcs_id,
-            previous_quantity: u.previous,
-            new_quantity: u.next,
-          }))
-        )
-        if (lineError) throw lineError
-      }
-
-      const { error } = await supabase
-        .from('purchase_requests')
-        .update({
-          received_by: loggedInUser.id,
-          received_at: new Date().toISOString(),
-          receipt_file_url: urlData.publicUrl,
-          receipt_file_name: file.name,
-          work_status: 'complete',
-        })
-        .eq('id', request.id)
-      if (error) throw error
-
-      flashPoStatus(
-        isService ? 'Marked complete — service report uploaded.' : 'Marked received — inventory updated.',
-        true
-      )
-      await Promise.all([loadPurchaseRequests(), loadStock()])
-    } catch (error) {
-      console.error(error)
-      flashPoStatus('Could not confirm — check the console for details.', false)
-    } finally {
-      setPoActionBusyId(null)
-    }
-  }
-
-  // The 'not_started' <-> 'partial' transition needs no supporting file --
-  // only the move into 'complete' does (handleUploadReceiptAndConfirm
-  // above), to preserve an audit trail for the highest-stakes transition.
+  // A plain dropdown -- no evidence file required for any transition. Moving
+  // into 'complete' for the first time also rolls the PO's part quantities
+  // into stock (same effect the old photo-upload confirmation had, just
+  // without requiring a file); re-selecting 'complete' after moving away
+  // from it would roll stock in again, so this only fires on the actual
+  // not-complete -> complete transition.
   async function handleSetWorkStatus(request, workStatus) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
     }
+    const enteringComplete = workStatus === 'complete' && request.work_status !== 'complete'
+    setPoActionBusyId(request.id)
+    try {
+      if (enteringComplete) {
+        const partLines = (request.purchase_request_lines || []).filter(
+          (l) => l.line_type === 'part' && l.part_gcs_id
+        )
+        if (partLines.length > 0) {
+          const gcsIds = [...new Set(partLines.map((l) => l.part_gcs_id))]
+          const { data: existingStock, error: stockError } = await supabase
+            .from('stock_on_hand')
+            .select('project_id, part_gcs_id, quantity')
+            .eq('project_id', request.project_id)
+            .in('part_gcs_id', gcsIds)
+          if (stockError) throw stockError
+
+          const prevMap = new Map((existingStock ?? []).map((s) => [s.part_gcs_id, s.quantity]))
+          const byPart = new Map()
+          for (const line of partLines) {
+            byPart.set(line.part_gcs_id, (byPart.get(line.part_gcs_id) ?? 0) + (Number(line.quantity) || 0))
+          }
+
+          const stockUpdates = [...byPart.entries()].map(([gcsId, qty]) => {
+            const previous = prevMap.get(gcsId) ?? 0
+            return { part_gcs_id: gcsId, previous, next: previous + qty }
+          })
+
+          const { error: upsertError } = await supabase
+            .from('stock_on_hand')
+            .upsert(
+              stockUpdates.map((u) => ({
+                project_id: request.project_id,
+                part_gcs_id: u.part_gcs_id,
+                quantity: u.next,
+              })),
+              { onConflict: 'project_id,part_gcs_id' }
+            )
+          if (upsertError) throw upsertError
+
+          const vendorName = request.vendors?.name || 'Unknown Vendor'
+          const { data: journalRow, error: journalError } = await supabase
+            .from('inventory_journal')
+            .insert({
+              entry_type: 'adjustment',
+              note: `PO ${request.po_number || '#' + request.id} received from ${vendorName}`,
+            })
+            .select()
+            .single()
+          if (journalError) throw journalError
+
+          const { error: lineError } = await supabase.from('inventory_journal_lines').insert(
+            stockUpdates.map((u) => ({
+              journal_id: journalRow.id,
+              project_id: request.project_id,
+              part_gcs_id: u.part_gcs_id,
+              previous_quantity: u.previous,
+              new_quantity: u.next,
+            }))
+          )
+          if (lineError) throw lineError
+        }
+      }
+
+      const payload = { work_status: workStatus }
+      if (enteringComplete) {
+        payload.received_by = loggedInUser.id
+        payload.received_at = new Date().toISOString()
+      }
+      const { error } = await supabase.from('purchase_requests').update(payload).eq('id', request.id)
+      if (error) throw error
+      flashPoStatus('Work status updated.', true)
+      await Promise.all([loadPurchaseRequests(), loadStock()])
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not update work status — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  async function handleSetPaymentStatus(request, paymentStatus) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
     setPoActionBusyId(request.id)
     try {
       const { error } = await supabase
         .from('purchase_requests')
-        .update({ work_status: workStatus })
+        .update({ payment_status: paymentStatus })
         .eq('id', request.id)
       if (error) throw error
-      flashPoStatus('Work status updated.', true)
+      flashPoStatus('Payment status updated.', true)
       await loadPurchaseRequests()
     } catch (error) {
       console.error(error)
-      flashPoStatus('Could not update work status — check the console for details.', false)
+      flashPoStatus('Could not update payment status — check the console for details.', false)
     } finally {
       setPoActionBusyId(null)
     }
@@ -3781,8 +3754,8 @@ function App() {
           pendingPoNumber={pendingPoNumber}
           computingPoNumber={computingPoNumber}
           handleIssuePurchaseOrder={handleIssuePurchaseOrder}
-          handleUploadReceiptAndConfirm={handleUploadReceiptAndConfirm}
           handleSetWorkStatus={handleSetWorkStatus}
+          handleSetPaymentStatus={handleSetPaymentStatus}
           handleAddInvoice={handleAddInvoice}
           handleApproveInvoice={handleApproveInvoice}
           handlePayInvoice={handlePayInvoice}

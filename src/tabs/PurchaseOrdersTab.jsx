@@ -11,6 +11,11 @@ import {
   canClosePo,
   computeWorkStatus,
   computePaymentStatus,
+  WORK_STATUS_LABELS,
+  PAYMENT_STATUS_LABELS,
+  PO_PROGRESS_STAGES,
+  PO_PROGRESS_STAGE_LABELS,
+  computePoProgressStage,
   lineTotal,
   filterPartsForSearch,
   isApprovedOrLater,
@@ -37,16 +42,16 @@ const PO_DESCRIPTION_MAX_LEN = 50
 
 // The summary list's progress stepper only covers the "in flight" statuses —
 // a draft hasn't entered the workflow yet, so every dot starts unfilled.
-// Work Status / Payment Status are shown as their own columns instead of
-// extra stepper dots, since a PO can now have any number of invoices.
-const PO_PROGRESS_STATUSES = PO_STATUS_ORDER.filter((s) => s !== 'draft')
+// 'in_progress'/'paid' aren't real status values -- they're display-only
+// stages computed from the Work Status / Payment Status dropdowns while a
+// PO sits at 'issued' (see computePoProgressStage).
+const PO_PROGRESS_ALL_LABELS = PO_PROGRESS_STAGES.map((s) => PO_PROGRESS_STAGE_LABELS[s])
 
-const PO_PROGRESS_ALL_LABELS = PO_PROGRESS_STATUSES.map(poStatusLabel)
-
-function PoProgressStepper({ status }) {
-  const currentIndex = PO_PROGRESS_STATUSES.indexOf(status)
+function PoProgressStepper({ request }) {
+  const stage = computePoProgressStage(request)
+  const currentIndex = PO_PROGRESS_STAGES.indexOf(stage)
   const labels = PO_PROGRESS_ALL_LABELS
-  const filled = PO_PROGRESS_STATUSES.map((_, i) => i <= currentIndex)
+  const filled = PO_PROGRESS_STAGES.map((_, i) => i <= currentIndex)
   return (
     <div className="po-progress">
       {labels.map((label, i) => (
@@ -129,8 +134,8 @@ function PurchaseOrdersTab({
   pendingPoNumber,
   computingPoNumber,
   handleIssuePurchaseOrder,
-  handleUploadReceiptAndConfirm,
   handleSetWorkStatus,
+  handleSetPaymentStatus,
   handleAddInvoice,
   handleApproveInvoice,
   handlePayInvoice,
@@ -199,7 +204,9 @@ function PurchaseOrdersTab({
               Request #{r.id} — {r.projects?.name || '—'}
             </h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span className={`po-badge po-badge-${r.status}`}>{poStatusLabel(r.status)}</span>
+              <span className={`po-badge po-badge-${computePoProgressStage(r)}`}>
+                {PO_PROGRESS_STAGE_LABELS[computePoProgressStage(r)] || poStatusLabel(r.status)}
+              </span>
               {canDelete && (
                 <button
                   className="btn-secondary"
@@ -301,11 +308,43 @@ function PurchaseOrdersTab({
               </tr>
               <tr>
                 <th>Work Status</th>
-                <td>{workStatusLabel(computeWorkStatus(r))}</td>
+                <td>
+                  {r.status === 'issued' && canConfirmReceipt(loggedInUser, r) ? (
+                    <select
+                      value={computeWorkStatus(r)}
+                      disabled={busy}
+                      onChange={(e) => handleSetWorkStatus(r, e.target.value)}
+                    >
+                      {Object.entries(WORK_STATUS_LABELS).map(([value, label]) => (
+                        <option value={value} key={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    workStatusLabel(computeWorkStatus(r))
+                  )}
+                </td>
               </tr>
               <tr>
                 <th>Payment Status</th>
-                <td>{paymentStatusLabel(computePaymentStatus(r))}</td>
+                <td>
+                  {r.status === 'issued' && canManageInvoicing(loggedInUser) ? (
+                    <select
+                      value={computePaymentStatus(r)}
+                      disabled={busy}
+                      onChange={(e) => handleSetPaymentStatus(r, e.target.value)}
+                    >
+                      {Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => (
+                        <option value={value} key={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    paymentStatusLabel(computePaymentStatus(r))
+                  )}
+                </td>
               </tr>
               {r.status === 'closed' && (
                 <tr>
@@ -614,53 +653,10 @@ function PurchaseOrdersTab({
                 </span>
               ))}
 
-            {r.status === 'issued' &&
-              computeWorkStatus(r) !== 'complete' &&
-              (canConfirmReceipt(loggedInUser, r) ? (
-                <>
-                  {computeWorkStatus(r) === 'not_started' && (
-                    <button
-                      className="btn-secondary"
-                      onClick={() => handleSetWorkStatus(r, 'partial')}
-                      disabled={busy}
-                    >
-                      Mark Partially Complete
-                    </button>
-                  )}
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                    {poLineType(r) === 'service'
-                      ? 'Upload Service Report to Confirm Complete:'
-                      : 'Upload Photo to Confirm Receipt:'}
-                    <input
-                      type="file"
-                      accept={poLineType(r) === 'service' ? 'application/pdf' : 'image/*,application/pdf'}
-                      disabled={busy}
-                      onChange={(e) => {
-                        const file = e.target.files[0]
-                        if (file) handleUploadReceiptAndConfirm(r, file)
-                        e.target.value = ''
-                      }}
-                    />
-                  </label>
-                </>
-              ) : (
-                <span className="sub" style={{ margin: 0 }}>
-                  Waiting on {findUserName(users, r.requested_by)} to confirm.
-                </span>
-              ))}
-
-            {r.status === 'issued' && canConfirmReceipt(loggedInUser, r) && (
-              canClosePo(loggedInUser, r) ? (
-                <button className="btn-primary" onClick={() => handleClosePo(r)} disabled={busy}>
-                  {busy ? 'Closing…' : 'Close PO'}
-                </button>
-              ) : (
-                <span className="sub" style={{ margin: 0 }}>
-                  {computeWorkStatus(r) !== 'complete'
-                    ? 'Work must be marked Complete and fully paid before closing.'
-                    : 'All invoices must be paid in full before closing.'}
-                </span>
-              )
+            {r.status === 'issued' && canClosePo(loggedInUser, r) && (
+              <button className="btn-primary" onClick={() => handleClosePo(r)} disabled={busy}>
+                {busy ? 'Closing…' : 'Close PO'}
+              </button>
             )}
 
             {r.status === 'closed' && (
@@ -1227,7 +1223,7 @@ function PurchaseOrdersTab({
                       <td className="nowrap-cell">{r.projects?.name || '—'}</td>
                       <td>{r.vendors?.name || '—'}</td>
                       <td className="center-cell">
-                        <PoProgressStepper status={r.status} />
+                        <PoProgressStepper request={r} />
                       </td>
                       <td className="center-cell">
                         {(r.status === 'issued' || r.status === 'closed') && (
@@ -1276,37 +1272,21 @@ function PurchaseOrdersTab({
                             Convert to PO
                           </button>
                         )}
-                        {r.status === 'issued' && workStatus !== 'complete' && canConfirmReceipt(loggedInUser, r) && (
-                          <label
+                        {r.status === 'issued' && canManageInvoicing(loggedInUser) && (
+                          <button
                             className="btn-primary po-action-btn"
-                            style={{
-                              cursor: busy ? 'not-allowed' : 'pointer',
-                              opacity: busy ? 0.6 : 1,
-                              textAlign: 'center',
-                            }}
+                            onClick={() => toggleExpandedPo(r.id)}
                           >
-                            {busy
-                              ? 'Uploading…'
-                              : poLineType(r) === 'service'
-                              ? 'Confirm Complete'
-                              : 'Receive'}
-                            <input
-                              type="file"
-                              accept={
-                                poLineType(r) === 'service' ? 'application/pdf' : 'image/*,application/pdf'
-                              }
-                              disabled={busy}
-                              style={{ display: 'none' }}
-                              onChange={(e) => {
-                                const file = e.target.files[0]
-                                if (file) {
-                                  handleUploadReceiptAndConfirm(r, file)
-                                  toggleExpandedPo(r.id)
-                                }
-                                e.target.value = ''
-                              }}
-                            />
-                          </label>
+                            Upload Invoice
+                          </button>
+                        )}
+                        {r.status === 'issued' && canConfirmReceipt(loggedInUser, r) && (
+                          <button
+                            className="btn-primary po-action-btn"
+                            onClick={() => toggleExpandedPo(r.id)}
+                          >
+                            Upload Receipt
+                          </button>
                         )}
                         {r.status === 'issued' && canClosePo(loggedInUser, r) && (
                           <button

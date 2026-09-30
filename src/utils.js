@@ -91,41 +91,54 @@ export function computeWorkStatus(request) {
   return request?.work_status || 'not_started'
 }
 
-// Rounds to the cent before comparing so floating-point drift (e.g.
-// 99.999999999) never produces a false "partial" instead of "paid".
-function roundCents(n) {
-  return Math.round((Number(n) || 0) * 100) / 100
-}
-
-export function computeInvoiceTotals(invoices) {
-  const list = invoices || []
-  const invoicedTotal = list.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0)
-  const paidTotal = list.reduce((sum, inv) => sum + (inv.paid ? Number(inv.amount) || 0 : 0), 0)
-  return { invoicedTotal, paidTotal }
-}
-
-// Payment status is derived from the invoices table, never stored -- it can
-// never drift out of sync with the invoices actually on file.
 export function computePaymentStatus(request) {
-  const { paidTotal } = computeInvoiceTotals(request?.invoices)
-  const grandTotal = roundCents(computePoTotals(request).grandTotal)
-  const paid = roundCents(paidTotal)
-  if (paid <= 0) return 'unpaid'
-  if (paid >= grandTotal) return 'paid'
-  return 'partial'
+  return request?.payment_status || 'unpaid'
+}
+
+// A PO is closeable once every receipt has been matched to an invoice, every
+// invoice has been matched to a receipt, and every invoice has been approved
+// and paid -- i.e. nothing is left dangling. This is independent of the
+// manual Work Status / Payment Status labels above (those are just display
+// stages now, not a gate), and requires at least one of each so an empty PO
+// can't be closed with nothing on file.
+export function allInvoicesFullyResolved(request) {
+  const invoices = request?.invoices || []
+  const receipts = request?.receipts || []
+  if (invoices.length === 0 || receipts.length === 0) return false
+  const matchedReceiptIds = new Set(invoices.filter((inv) => inv.matched_receipt_id).map((inv) => inv.matched_receipt_id))
+  const allReceiptsMatched = receipts.every((r) => matchedReceiptIds.has(r.id))
+  const allInvoicesResolved = invoices.every((inv) => inv.matched_receipt_id && inv.approved && inv.paid)
+  return allReceiptsMatched && allInvoicesResolved
 }
 
 // The original requester (or, for a service PO, the PO's own vendor-user)
-// does the final close once accounting has approved and paid every invoice
-// -- accounting's sign-off already happened via the invoice approve/pay
-// steps, so closing doesn't need its own separate role gate.
+// does the final close once every receipt/invoice on file is matched,
+// approved, and paid.
 export function canClosePo(user, request) {
-  return (
-    canConfirmReceipt(user, request) &&
-    request?.status === 'issued' &&
-    computeWorkStatus(request) === 'complete' &&
-    computePaymentStatus(request) === 'paid'
-  )
+  return canConfirmReceipt(user, request) && request?.status === 'issued' && allInvoicesFullyResolved(request)
+}
+
+// Purely a display concept -- 'issued' expands into two extra stepper/badge
+// stages driven by the manual Work Status / Payment Status dropdowns, since
+// there's no real status value for "issued but nothing done yet" vs. "issued
+// and fully done, just not closed." The real `status` column never holds
+// 'in_progress' or 'paid'.
+export const PO_PROGRESS_STAGES = ['submitted', 'approved', 'issued', 'in_progress', 'paid', 'closed']
+
+export const PO_PROGRESS_STAGE_LABELS = {
+  submitted: 'Requested',
+  approved: 'Approved',
+  issued: 'PO Issued',
+  in_progress: 'In Progress',
+  paid: 'Paid',
+  closed: 'Closed',
+}
+
+export function computePoProgressStage(request) {
+  if (request?.status !== 'issued') return request?.status
+  const workDone = computeWorkStatus(request) === 'complete'
+  const paid = computePaymentStatus(request) === 'paid'
+  return workDone && paid ? 'paid' : 'in_progress'
 }
 
 // A purchase request is either entirely parts or entirely a service — never

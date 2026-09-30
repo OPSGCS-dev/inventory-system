@@ -459,7 +459,7 @@ table.sheet td.total-col {
 
 .po-category-badge-purchase { background: #e3edfb; color: var(--accent-dark); }
 .po-category-badge-service { background: #ece2fb; color: #6a3fae; }
-.po-category-badge-not_to_exceed { background: #fdf1d6; color: var(--warn); }
+.po-category-badge-nte { background: #fdf1d6; color: var(--warn); }
 
 .po-badge-overcap { background: #fdecea; color: var(--danger); }
 .po-badge-onhold { background: #fdf1d6; color: var(--warn); }

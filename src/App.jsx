@@ -165,6 +165,7 @@ function App() {
   const [poDraftTaxRate, setPoDraftTaxRate] = useState('13')
   const [poDraftShippingHandling, setPoDraftShippingHandling] = useState('0')
   const [poDraftCredit, setPoDraftCredit] = useState('0')
+  const [poDraftNotToExceed, setPoDraftNotToExceed] = useState(false)
   const [poDraftSpendingCap, setPoDraftSpendingCap] = useState('')
   const [poDraftCurrency, setPoDraftCurrency] = useState('CAD')
   const [poDraftLines, setPoDraftLines] = useState([])
@@ -2174,6 +2175,7 @@ function App() {
       setPoDraftCredit(
         existing.credit === null || existing.credit === undefined ? '0' : String(existing.credit)
       )
+      setPoDraftNotToExceed(Boolean(existing.not_to_exceed))
       setPoDraftSpendingCap(
         existing.spending_cap === null || existing.spending_cap === undefined
           ? ''
@@ -2213,6 +2215,7 @@ function App() {
       setPoDraftTaxRate('13')
       setPoDraftShippingHandling('0')
       setPoDraftCredit('0')
+      setPoDraftNotToExceed(false)
       setPoDraftSpendingCap('')
       setPoDraftCurrency('CAD')
       setPoDraftLines([blankPurchaseRequestLine(categoryLineType('purchase'))])
@@ -2307,6 +2310,12 @@ function App() {
     setPoDraftCategory(category)
     const lineType = categoryLineType(category)
     setPoDraftLines((prev) => prev.map((l) => ({ ...l, line_type: lineType })))
+    // Not to Exceed only ever makes sense on a Service PO -- switching away
+    // from Service clears it rather than leaving a stale flag/cap behind.
+    if (category !== 'service') {
+      setPoDraftNotToExceed(false)
+      setPoDraftSpendingCap('')
+    }
   }
 
   function updatePoDraftLineField(index, field, value) {
@@ -2367,8 +2376,8 @@ function App() {
         ? 0
         : Number(poDraftShippingHandling)
       : 0
-    const spendingCapToSave =
-      poDraftCategory === 'not_to_exceed' && poDraftSpendingCap !== '' ? Number(poDraftSpendingCap) : null
+    const notToExceedToSave = poDraftCategory === 'service' && poDraftNotToExceed
+    const spendingCapToSave = notToExceedToSave && poDraftSpendingCap !== '' ? Number(poDraftSpendingCap) : null
 
     setSavingPoRequest(true)
     try {
@@ -2407,6 +2416,7 @@ function App() {
             tax_rate: poDraftTaxRate === '' ? 13 : Number(poDraftTaxRate),
             shipping_handling: shippingToSave,
             credit: poDraftCredit === '' ? 0 : Number(poDraftCredit),
+            not_to_exceed: notToExceedToSave,
             spending_cap: spendingCapToSave,
             currency: poDraftCurrency.trim() || 'CAD',
           })
@@ -2438,6 +2448,7 @@ function App() {
             tax_rate: poDraftTaxRate === '' ? 13 : Number(poDraftTaxRate),
             shipping_handling: shippingToSave,
             credit: poDraftCredit === '' ? 0 : Number(poDraftCredit),
+            not_to_exceed: notToExceedToSave,
             spending_cap: spendingCapToSave,
             currency: poDraftCurrency.trim() || 'CAD',
             status: 'draft',
@@ -3972,6 +3983,8 @@ function App() {
           setPoDraftShippingHandling={setPoDraftShippingHandling}
           poDraftCredit={poDraftCredit}
           setPoDraftCredit={setPoDraftCredit}
+          poDraftNotToExceed={poDraftNotToExceed}
+          setPoDraftNotToExceed={setPoDraftNotToExceed}
           poDraftSpendingCap={poDraftSpendingCap}
           setPoDraftSpendingCap={setPoDraftSpendingCap}
           poDraftCurrency={poDraftCurrency}

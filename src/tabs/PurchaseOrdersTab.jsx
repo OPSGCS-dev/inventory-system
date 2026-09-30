@@ -37,6 +37,7 @@ import {
   PO_CATEGORY_OPTIONS,
   PO_CATEGORY_LABELS,
   poCategory,
+  isNotToExceed,
   computeInvoicedTotal,
   isOverSpendingCap,
 } from '../utils'
@@ -133,6 +134,8 @@ function PurchaseOrdersTab({
   setPoDraftShippingHandling,
   poDraftCredit,
   setPoDraftCredit,
+  poDraftNotToExceed,
+  setPoDraftNotToExceed,
   poDraftSpendingCap,
   setPoDraftSpendingCap,
   poDraftCurrency,
@@ -228,6 +231,7 @@ function PurchaseOrdersTab({
               <span className={`po-badge po-category-badge-${poCategory(r)}`}>
                 {PO_CATEGORY_LABELS[poCategory(r)]}
               </span>
+              {isNotToExceed(r) && <span className="po-badge po-category-badge-nte">Not to Exceed</span>}
               <span className={`po-badge po-badge-${computePoProgressStage(r)}`}>
                 {PO_PROGRESS_STAGE_LABELS[computePoProgressStage(r)] || poStatusLabel(r.status)}
               </span>
@@ -263,7 +267,7 @@ function PurchaseOrdersTab({
                 <span className="po-detail-value">{r.sub_projects.name}</span>
               </div>
             )}
-            {poCategory(r) === 'not_to_exceed' && (
+            {isNotToExceed(r) && (
               <>
                 <div className="po-detail-meta-item">
                   <span className="po-detail-label">Spending Cap</span>
@@ -620,7 +624,7 @@ function PurchaseOrdersTab({
                             <th>Grand Total</th>
                             <td>${totals.grandTotal.toFixed(2)}</td>
                           </tr>
-                          {poCategory(r) === 'not_to_exceed' && (
+                          {isNotToExceed(r) && (
                             <tr>
                               <th>Spending Cap</th>
                               <td style={isOverSpendingCap(r) ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
@@ -1102,19 +1106,35 @@ function PurchaseOrdersTab({
             </div>
           )}
 
-          {poDraftCategory === 'not_to_exceed' && (
+          {poDraftCategory === 'service' && (
             <div className="field-row" style={{ marginTop: 12 }}>
               <div>
-                <label htmlFor="po_draft_spending_cap">Spending Cap</label>
-                <input
-                  id="po_draft_spending_cap"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={poDraftSpendingCap}
-                  onChange={(e) => setPoDraftSpendingCap(e.target.value)}
-                />
+                <label htmlFor="po_draft_not_to_exceed" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    id="po_draft_not_to_exceed"
+                    type="checkbox"
+                    checked={poDraftNotToExceed}
+                    onChange={(e) => {
+                      setPoDraftNotToExceed(e.target.checked)
+                      if (!e.target.checked) setPoDraftSpendingCap('')
+                    }}
+                  />
+                  Not to Exceed
+                </label>
               </div>
+              {poDraftNotToExceed && (
+                <div>
+                  <label htmlFor="po_draft_spending_cap">Spending Cap</label>
+                  <input
+                    id="po_draft_spending_cap"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={poDraftSpendingCap}
+                    onChange={(e) => setPoDraftSpendingCap(e.target.value)}
+                  />
+                </div>
+              )}
             </div>
           )}
 

@@ -177,24 +177,30 @@ export function linesAreMixedType(lines) {
 export const PO_CATEGORY_OPTIONS = [
   { value: 'purchase', label: 'Purchase' },
   { value: 'service', label: 'Service' },
-  { value: 'not_to_exceed', label: 'Not to Exceed' },
 ]
 
 export const PO_CATEGORY_LABELS = {
   purchase: 'Purchase',
   service: 'Service',
-  not_to_exceed: 'Not to Exceed',
 }
 
 export function poCategory(request) {
   return request?.po_category || 'purchase'
 }
 
-// A PO's category now dictates its line type outright -- Purchase POs are
-// parts only, Service and Not to Exceed POs are services only -- so there's
+// A PO's category dictates its line type outright -- Purchase POs are parts
+// only, Service POs (Not to Exceed or not) are services only -- so there's
 // no separate per-line type picker for the requester to get wrong.
 export function categoryLineType(category) {
   return category === 'purchase' ? 'part' : 'service'
+}
+
+// Not to Exceed is a checkbox on a Service PO, not its own category -- it
+// only ever means anything once category is 'service', but this guards it
+// directly in case a stale row still has the flag set from before a
+// category change.
+export function isNotToExceed(request) {
+  return poCategory(request) === 'service' && Boolean(request?.not_to_exceed)
 }
 
 // Sum of every invoice on file for a request, regardless of approval/paid
@@ -208,7 +214,7 @@ export function computeInvoicedTotal(request) {
 // invoiced amounts run past it, so accounting/the requester can catch it
 // regardless of how many invoices are still unapproved or unpaid.
 export function isOverSpendingCap(request) {
-  if (poCategory(request) !== 'not_to_exceed') return false
+  if (!isNotToExceed(request)) return false
   const cap = Number(request?.spending_cap)
   if (!cap) return false
   return computeInvoicedTotal(request) > cap

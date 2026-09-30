@@ -17,6 +17,9 @@ import {
   canEditInventory,
   canAccessTicketing,
   canCreatePurchaseRequests,
+  canApproveRequests,
+  canIssuePurchaseOrder,
+  ENTITY_SCOPED_ROLES,
   linesAreMixedType,
   poLineType,
   canMarkPaymentPaid,
@@ -128,6 +131,10 @@ function App() {
 
   // --- Purchase Orders ---
   const [users, setUsers] = useState([])
+  // Rows from user_role_entities: which entities a user is scoped to for an
+  // entity-scoped role (purchase_rec_approval / po_issue). A role holder
+  // with no rows here is unscoped -- sees every entity.
+  const [userRoleEntities, setUserRoleEntities] = useState([])
   const [vendors, setVendors] = useState([])
   const [purchaseRequests, setPurchaseRequests] = useState([])
   const [poLoading, setPoLoading] = useState(true)
@@ -382,6 +389,15 @@ function App() {
     setUsers(data ?? [])
   }
 
+  async function loadUserRoleEntities() {
+    const { data, error } = await supabase.from('user_role_entities').select('*')
+    if (error) {
+      console.error(error)
+      return
+    }
+    setUserRoleEntities(data ?? [])
+  }
+
   // The Admin tab's Users table is always directly editable (it's already
   // gated to admins only) — this keeps the on-screen draft in sync with
   // whatever was last loaded from the server, so edits start from a clean
@@ -393,8 +409,28 @@ function App() {
   // state to hide; activated_at just flags whether they're still on that
   // temporary password (see the "Temp password" note next to their email).
   useEffect(() => {
-    setDraftUsers(users.filter((u) => !u.vendor_id).map((u) => ({ ...u, _existing: true })))
-  }, [users])
+    setDraftUsers(
+      users
+        .filter((u) => !u.vendor_id)
+        .map((u) => {
+          const entityAssignments = {}
+          for (const role of ENTITY_SCOPED_ROLES) {
+            entityAssignments[role] = userRoleEntities
+              .filter((row) => row.user_id === u.id && row.role === role)
+              .map((row) => row.project_id)
+          }
+          return { ...u, _existing: true, entityAssignments }
+        })
+    )
+  }, [users, userRoleEntities])
+
+  function updateDraftUserEntityAssignment(index, role, projectIds) {
+    setDraftUsers((prev) =>
+      prev.map((u, i) =>
+        i === index ? { ...u, entityAssignments: { ...u.entityAssignments, [role]: projectIds } } : u
+      )
+    )
+  }
 
   async function loadVendors() {
     const { data, error } = await supabase.from('vendors').select('*').order('name', { ascending: true })
@@ -463,6 +499,7 @@ function App() {
   useEffect(() => {
     if (loggedInUser) {
       loadUsers()
+      loadUserRoleEntities()
       loadVendors()
       loadPurchaseRequests()
       loadBudgetCategories()
@@ -850,10 +887,13 @@ function App() {
       Name: u.name,
       Admin: u.roles?.includes('admin') ? 'Yes' : '',
       Inventory: u.roles?.includes('inventory') ? 'Yes' : '',
-      'Ticket/Purchase Req': u.roles?.includes('purchase_req') ? 'Yes' : '',
-      Approve: u.roles?.includes('approve') ? 'Yes' : '',
-      Receive: u.roles?.includes('receive') ? 'Yes' : '',
-      Accounting: u.roles?.includes('accounting') ? 'Yes' : '',
+      Ticketing: u.roles?.includes('ticketing') ? 'Yes' : '',
+      'Purchase Rec': u.roles?.includes('purchase_req') ? 'Yes' : '',
+      'Purchase Rec Approval': u.roles?.includes('purchase_rec_approval') ? 'Yes' : '',
+      'PO Issue': u.roles?.includes('po_issue') ? 'Yes' : '',
+      'Invoice Matching': u.roles?.includes('invoice_matching') ? 'Yes' : '',
+      'Invoice Approval': u.roles?.includes('invoice_approval') ? 'Yes' : '',
+      Payment: u.roles?.includes('payment') ? 'Yes' : '',
       Active: u.active ? 'Yes' : 'No',
     }))
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(userRows), 'Users')
@@ -940,10 +980,13 @@ function App() {
       const roles = []
       if (truthyCsvFlag(getCell(row, 'Admin'))) roles.push('admin')
       if (truthyCsvFlag(getCell(row, 'Inventory'))) roles.push('inventory')
-      if (truthyCsvFlag(getCell(row, 'Ticket/Purchase Req'))) roles.push('purchase_req')
-      if (truthyCsvFlag(getCell(row, 'Approve'))) roles.push('approve')
-      if (truthyCsvFlag(getCell(row, 'Receive'))) roles.push('receive')
-      if (truthyCsvFlag(getCell(row, 'Accounting'))) roles.push('accounting')
+      if (truthyCsvFlag(getCell(row, 'Ticketing'))) roles.push('ticketing')
+      if (truthyCsvFlag(getCell(row, 'Purchase Rec'))) roles.push('purchase_req')
+      if (truthyCsvFlag(getCell(row, 'Purchase Rec Approval'))) roles.push('purchase_rec_approval')
+      if (truthyCsvFlag(getCell(row, 'PO Issue'))) roles.push('po_issue')
+      if (truthyCsvFlag(getCell(row, 'Invoice Matching'))) roles.push('invoice_matching')
+      if (truthyCsvFlag(getCell(row, 'Invoice Approval'))) roles.push('invoice_approval')
+      if (truthyCsvFlag(getCell(row, 'Payment'))) roles.push('payment')
       const activeCell = getCell(row, 'Active')
       const active = activeCell !== undefined ? truthyCsvFlag(activeCell) : true
       rows.push({
@@ -2028,43 +2071,61 @@ function App() {
     setTimeout(() => setPoStatus(null), 3000)
   }
 
+  // Attaches this session's per-role entity scope (from user_role_entities)
+  // onto loggedInUser so canApproveRequests/canIssuePurchaseOrder can read
+  // `user.entity_scopes` -- a role with no rows here is unscoped (sees every
+  // entity), same as before this existed.
+  const loggedInUserWithScopes = useMemo(() => {
+    if (!loggedInUser) return loggedInUser
+    const scopes = {}
+    for (const row of userRoleEntities) {
+      if (row.user_id !== loggedInUser.id) continue
+      if (!scopes[row.role]) scopes[row.role] = []
+      scopes[row.role].push(row.project_id)
+    }
+    return { ...loggedInUser, entity_scopes: scopes }
+  }, [loggedInUser, userRoleEntities])
+
   const visiblePurchaseRequests = useMemo(() => {
     let list = purchaseRequests
     // A vendor-logon account only ever sees their own vendor's actual POs —
     // once a PO number has been issued, not drafts/requisitions/approvals.
-    if (isVendorUser(loggedInUser)) {
+    if (isVendorUser(loggedInUserWithScopes)) {
       list = list.filter(
-        (r) => r.vendor_id === loggedInUser.vendor_id && (r.status === 'issued' || r.status === 'closed')
+        (r) =>
+          r.vendor_id === loggedInUserWithScopes.vendor_id && (r.status === 'issued' || r.status === 'closed')
       )
     }
-    // "My POs for Approval" / "My Invoices for Approval" are role-based
-    // presets, not per-request assignment -- anyone holding the role sees
-    // every request/invoice waiting on that role, company-wide.
+    // "My POs for Approval" / "My POs to Issue" are role-based presets
+    // (entity-scoped per user), not per-request assignment -- anyone
+    // holding the role, for that request's entity, sees it.
     if (poView === 'my-approvals') {
-      list = list.filter((r) => r.status === 'submitted')
+      list = list.filter((r) => r.status === 'submitted' && canApproveRequests(loggedInUserWithScopes, r))
+    }
+    if (poView === 'my-issue') {
+      list = list.filter((r) => r.status === 'approved' && canIssuePurchaseOrder(loggedInUserWithScopes, r))
     }
     if (poStatusFilter) list = list.filter((r) => r.status === poStatusFilter)
     if (poProjectFilter) list = list.filter((r) => String(r.project_id) === poProjectFilter)
     return list
-  }, [purchaseRequests, poStatusFilter, poProjectFilter, loggedInUser, poView])
+  }, [purchaseRequests, poStatusFilter, poProjectFilter, loggedInUserWithScopes, poView])
 
   // Flattened { request, invoice } pairs for the "My Invoices for Approval"
   // view -- its rows are invoices, not purchase requests, so it can't reuse
-  // the PO summary table's row shape. Approval is gated to the specific
-  // person who approved that PO's original requisition (canApproveInvoice),
-  // not a general role, so this is inherently personal -- only invoices this
-  // logged-in user is actually allowed to approve show up here.
+  // the PO summary table's row shape. Approval is a company-wide role
+  // (invoice_approval), not scoped to any particular person or entity, so
+  // every unapproved matched invoice shows up here for anyone holding it.
   const invoicesPendingApproval = useMemo(() => {
     const pairs = []
     for (const r of purchaseRequests) {
       for (const invoice of r.invoices || []) {
-        if (!invoice.approved && invoice.matched_receipt_id && r.approved_by === loggedInUser?.id) {
+        if (!invoice.approved && invoice.matched_receipt_id) {
           pairs.push({ request: r, invoice })
         }
       }
     }
     return pairs
-  }, [purchaseRequests, loggedInUser])
+  }, [purchaseRequests])
 
   function toggleExpandedPo(id) {
     setExpandedPoId((prev) => (prev === id ? null : id))
@@ -2801,9 +2862,9 @@ function App() {
   }
 
   // Pairs (or unpairs, when receiptId is null) a specific invoice with a
-  // specific receipt -- gated by canManageInvoicing, same as adding an
-  // invoice. Approving that pair is a separate, more specific gate
-  // (canApproveInvoice) handled by handleApproveInvoice above.
+  // specific receipt -- gated by Invoice Matching, same as adding an
+  // invoice. Approving that pair is a separate role (Invoice Approval)
+  // handled by handleApproveInvoice above.
   async function handleMatchInvoiceReceipt(invoice, receiptId) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
@@ -2938,10 +2999,28 @@ function App() {
           .update({ roles: row.roles || [], active: row.active })
           .eq('id', row.id)
         if (error) throw error
+
+        // Full-replace the entity assignments for each entity-scoped role,
+        // same "just overwrite it" approach as the roles array above.
+        for (const role of ENTITY_SCOPED_ROLES) {
+          const projectIds = row.entityAssignments?.[role] || []
+          const { error: deleteError } = await supabase
+            .from('user_role_entities')
+            .delete()
+            .eq('user_id', row.id)
+            .eq('role', role)
+          if (deleteError) throw deleteError
+          if (projectIds.length > 0) {
+            const { error: insertError } = await supabase
+              .from('user_role_entities')
+              .insert(projectIds.map((projectId) => ({ user_id: row.id, role, project_id: projectId })))
+            if (insertError) throw insertError
+          }
+        }
       }
 
       flashUsersStatus('Changes saved.', true)
-      await loadUsers()
+      await Promise.all([loadUsers(), loadUserRoleEntities()])
     } catch (error) {
       console.error(error)
       flashUsersStatus('Could not save — check the console for details.', false)
@@ -3690,7 +3769,7 @@ function App() {
 
       {activeTab === 'po' && (
         <PurchaseOrdersTab
-          loggedInUser={loggedInUser}
+          loggedInUser={loggedInUserWithScopes}
           users={users}
           vendors={vendors}
           poStatus={poStatus}
@@ -3780,6 +3859,7 @@ function App() {
           usersStatus={usersStatus}
           updateDraftUserField={updateDraftUserField}
           toggleDraftUserRole={toggleDraftUserRole}
+          updateDraftUserEntityAssignment={updateDraftUserEntityAssignment}
           savingUsers={savingUsers}
           handleSaveUsers={handleSaveUsers}
           handleDeleteUser={handleDeleteUser}

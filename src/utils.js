@@ -171,14 +171,27 @@ export function linesAreMixedType(lines) {
   return types.has('part') && types.has('service')
 }
 
+// One role per step of the PO process, plus the other roles the app needs.
+// Strictly additive, same as before -- admin only grants Admin-tab editing,
+// not any of these. 'purchase_rec_approval' and 'po_issue' can additionally
+// be scoped to specific entities (see ENTITY_SCOPED_ROLES below); every
+// other role here is company-wide.
 export const PO_ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
   { value: 'inventory', label: 'Inventory' },
-  { value: 'purchase_req', label: 'Ticket/Purchase Req' },
-  { value: 'approve', label: 'Approve' },
-  { value: 'receive', label: 'Receive' },
-  { value: 'accounting', label: 'Accounting' },
+  { value: 'ticketing', label: 'Ticketing' },
+  { value: 'purchase_req', label: 'Purchase Rec' },
+  { value: 'purchase_rec_approval', label: 'Purchase Rec Approval' },
+  { value: 'po_issue', label: 'PO Issue' },
+  { value: 'invoice_matching', label: 'Invoice Matching' },
+  { value: 'invoice_approval', label: 'Invoice Approval' },
+  { value: 'payment', label: 'Payment' },
 ]
+
+// Roles whose access can be narrowed to specific entities via the Users
+// tab's "Entity Assignments" table (user_role_entities). A role holder with
+// no rows there sees every entity, same as before this existed.
+export const ENTITY_SCOPED_ROLES = ['purchase_rec_approval', 'po_issue']
 
 export const blankPurchaseRequestLine = (lineType = 'part') => ({
   _tempId: crypto.randomUUID(),
@@ -223,27 +236,37 @@ export function canCreatePurchaseRequests(user) {
   return userHasRole(user, 'purchase_req')
 }
 
-// Mirrors the ticket system's own eligibility check (lib/inventoryAccess.ts
-// there) -- admin, Ticket/Purchase Req, or vendor. Only used to decide
-// whether to show the "Ticketing" link; the ticket system re-checks this
-// itself on login regardless.
+// Its own explicit role now, decoupled from Purchase Rec -- only used to
+// decide whether to show the "Ticketing" link; the ticket system re-checks
+// eligibility itself on login regardless.
 export function canAccessTicketing(user) {
-  return isAdmin(user) || userHasRole(user, 'purchase_req') || isVendorUser(user)
+  return isAdmin(user) || userHasRole(user, 'ticketing') || isVendorUser(user)
 }
 
-export function canApproveRequests(user) {
-  return userHasRole(user, 'approve')
+// A user's entity_scopes field (attached by App.jsx from the
+// user_role_entities table) maps role -> array of project ids they're
+// scoped to. No rows for that role = unscoped = every entity, so granting
+// an entity-scoped role doesn't silently lock someone out until an admin
+// gets around to assigning entities.
+export function isEntityAllowed(user, role, projectId) {
+  const scope = user?.entity_scopes?.[role]
+  if (!scope || scope.length === 0) return true
+  return scope.includes(projectId)
 }
 
-// Issuing the PO number and emailing/printing it to the vendor is folded
-// into the Approve role — there's no separate "purchaser" role in the new
-// model.
-export function canIssuePurchaseOrder(user) {
-  return userHasRole(user, 'approve')
+// `request` is optional -- omit it to just check whether the user holds the
+// role at all (e.g. deciding whether to show a tab), pass it to also check
+// that specific request's entity against their assigned scope.
+export function canApproveRequests(user, request) {
+  if (!userHasRole(user, 'purchase_rec_approval')) return false
+  if (!request) return true
+  return isEntityAllowed(user, 'purchase_rec_approval', request.project_id)
 }
 
-export function canReceive(user) {
-  return userHasRole(user, 'receive')
+export function canIssuePurchaseOrder(user, request) {
+  if (!userHasRole(user, 'po_issue')) return false
+  if (!request) return true
+  return isEntityAllowed(user, 'po_issue', request.project_id)
 }
 
 // Whoever created the purchase request is the one who must confirm its
@@ -261,23 +284,24 @@ export function canConfirmReceipt(user, request) {
   return false
 }
 
-// Adding an invoice, matching it to a receipt, marking one paid, and
-// deleting a mis-added invoice/receipt are all gated by this one role —
-// accounting doesn't need any other purchasing permission to do any of it.
-// Approving a matched pair is its own, more specific gate (see
-// canApproveInvoice below), not part of this.
-export function canManageInvoicing(user) {
-  return userHasRole(user, 'accounting')
+// Adding an invoice and matching it to a receipt -- its own role, separate
+// from approving or paying it.
+export function canMatchInvoices(user) {
+  return userHasRole(user, 'invoice_matching')
 }
 
-// Only the specific person who approved this PO's original requisition can
-// approve one of its matched invoice/receipt pairs — not just anyone holding
-// the general "approve" role, and only once accounting has actually paired
-// an invoice with a receipt (an unmatched invoice has nothing to approve
-// yet).
-export function canApproveInvoice(user, request, invoice) {
+// Approving a matched invoice/receipt pair -- company-wide, not scoped to
+// whoever happened to approve that PO's original requisition. Only matters
+// once accounting has actually paired an invoice with a receipt (an
+// unmatched invoice has nothing to approve yet).
+export function canApproveInvoice(user, invoice) {
   if (!invoice?.matched_receipt_id) return false
-  return Boolean(user?.id) && user.id === request?.approved_by
+  return userHasRole(user, 'invoice_approval')
+}
+
+// Marking an invoice paid and setting the manual Payment Status dropdown.
+export function canManagePayment(user) {
+  return userHasRole(user, 'payment')
 }
 
 export function isApprovedOrLater(status) {
@@ -306,11 +330,11 @@ export function nextStepInfo(request, users) {
     case 'draft':
       return { step: 'Submit', who: findUserName(users, request.requested_by) }
     case 'submitted': {
-      const names = usersWithRole(users, 'approve')
+      const names = usersWithRole(users, 'purchase_rec_approval')
       return { step: 'Approval', who: names.length ? names.join(', ') : '—' }
     }
     case 'approved': {
-      const names = usersWithRole(users, 'approve')
+      const names = usersWithRole(users, 'po_issue')
       return { step: 'Issue PO', who: names.length ? names.join(', ') : '—' }
     }
     case 'issued': {
@@ -322,7 +346,7 @@ export function nextStepInfo(request, users) {
       if (workStatus !== 'complete') {
         return { step: 'Receive/Complete', who: findUserName(users, request.requested_by) }
       }
-      return { step: 'Invoicing', who: usersWithRole(users, 'accounting').join(', ') || '—' }
+      return { step: 'Invoicing', who: usersWithRole(users, 'invoice_matching').join(', ') || '—' }
     }
     case 'closed':
       return { step: 'Done', who: null }

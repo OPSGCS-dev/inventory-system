@@ -6,8 +6,10 @@ import {
   findUserName,
   userHasRole,
   canCreatePurchaseRequests,
-  canManageInvoicing,
+  canMatchInvoices,
+  canManagePayment,
   canApproveRequests,
+  canIssuePurchaseOrder,
   canClosePo,
   computeWorkStatus,
   computePaymentStatus,
@@ -151,7 +153,8 @@ function PurchaseOrdersTab({
   const canCreate = canCreatePurchaseRequests(loggedInUser)
   const canDelete = isAdmin(loggedInUser)
   const canSeeApprovalsView = canApproveRequests(loggedInUser)
-  const canSeeInvoicesView = canManageInvoicing(loggedInUser)
+  const canSeeIssueView = canIssuePurchaseOrder(loggedInUser)
+  const canSeeInvoicesView = userHasRole(loggedInUser, 'invoice_approval')
   const availableSubcategories = budgetSubcategories.filter(
     (sc) => sc.category_id === poDraftBudgetCategoryId
   )
@@ -330,7 +333,7 @@ function PurchaseOrdersTab({
               <tr>
                 <th>Payment Status</th>
                 <td>
-                  {r.status === 'issued' && canManageInvoicing(loggedInUser) ? (
+                  {r.status === 'issued' && canManagePayment(loggedInUser) ? (
                     <select
                       value={computePaymentStatus(r)}
                       disabled={busy}
@@ -614,7 +617,7 @@ function PurchaseOrdersTab({
             )}
 
             {r.status === 'submitted' &&
-              (userHasRole(loggedInUser, 'approve') ? (
+              (canApproveRequests(loggedInUser, r) ? (
                 <button
                   className="btn-primary"
                   onClick={() => handleApprovePurchaseRequest(r)}
@@ -629,7 +632,7 @@ function PurchaseOrdersTab({
               ))}
 
             {r.status === 'approved' &&
-              (userHasRole(loggedInUser, 'approve') ? (
+              (canIssuePurchaseOrder(loggedInUser, r) ? (
                 issuingThis ? (
                   <>
                     <span className="sub" style={{ margin: 0 }}>
@@ -685,7 +688,7 @@ function PurchaseOrdersTab({
                 {poLineType(r) === 'service' ? 'View Service Report' : 'View Photo'}
               </a>
             )}
-            {isApprovedOrLater(r.status) && userHasRole(loggedInUser, 'approve') && (
+            {isApprovedOrLater(r.status) && canIssuePurchaseOrder(loggedInUser, r) && (
               <>
                 <button className="btn-secondary" onClick={() => window.print()}>
                   Print PO
@@ -1120,6 +1123,14 @@ function PurchaseOrdersTab({
               My POs for Approval
             </button>
           )}
+          {canSeeIssueView && (
+            <button
+              className={poView === 'my-issue' ? 'btn-primary' : 'btn-secondary'}
+              onClick={() => setPoView('my-issue')}
+            >
+              My POs to Issue
+            </button>
+          )}
           {canSeeInvoicesView && (
             <button
               className={poView === 'my-invoices' ? 'btn-primary' : 'btn-secondary'}
@@ -1140,7 +1151,11 @@ function PurchaseOrdersTab({
       <div className="card">
         <div className="card-header">
           <h2>
-            {poView === 'my-approvals' ? 'My POs for Approval' : 'Purchase Requests'}{' '}
+            {poView === 'my-approvals'
+              ? 'My POs for Approval'
+              : poView === 'my-issue'
+              ? 'My POs to Issue'
+              : 'Purchase Requests'}{' '}
             {poLoading ? '' : `(${visiblePurchaseRequests.length})`}
           </h2>
           <div className="header-actions">
@@ -1262,7 +1277,7 @@ function PurchaseOrdersTab({
                             {busy ? 'Submitting…' : 'Submit'}
                           </button>
                         )}
-                        {r.status === 'submitted' && userHasRole(loggedInUser, 'approve') && (
+                        {r.status === 'submitted' && canApproveRequests(loggedInUser, r) && (
                           <button
                             className="btn-primary po-action-btn"
                             onClick={() => handleApprovePurchaseRequest(r)}
@@ -1271,7 +1286,7 @@ function PurchaseOrdersTab({
                             {busy ? 'Approving…' : 'Approve'}
                           </button>
                         )}
-                        {r.status === 'approved' && userHasRole(loggedInUser, 'approve') && (
+                        {r.status === 'approved' && canIssuePurchaseOrder(loggedInUser, r) && (
                           <button
                             className="btn-primary po-action-btn"
                             onClick={() => {
@@ -1282,7 +1297,7 @@ function PurchaseOrdersTab({
                             Convert to PO
                           </button>
                         )}
-                        {r.status === 'issued' && canManageInvoicing(loggedInUser) && (
+                        {r.status === 'issued' && canMatchInvoices(loggedInUser) && (
                           <button
                             className="btn-primary po-action-btn"
                             onClick={() => toggleExpandedPo(r.id)}

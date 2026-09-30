@@ -1,12 +1,20 @@
 import { useState } from 'react'
-import { canManageInvoicing, canApproveInvoice, canConfirmReceipt, findUserName, isAdmin } from '../utils'
+import {
+  canMatchInvoices,
+  canApproveInvoice,
+  canManagePayment,
+  canConfirmReceipt,
+  usersWithRole,
+  findUserName,
+  isAdmin,
+} from '../utils'
 
-// Receipts & Invoices table for a PO's detail view. Accounting uploads
-// invoices and the requisitioner uploads receipts independently/in
-// parallel; each row below is either a matched pair, an invoice still
-// waiting on a receipt, or a receipt still waiting on an invoice. Approving
-// a matched pair is gated to the specific person who approved this PO's
-// original requisition (canApproveInvoice), not just any accounting user.
+// Receipts & Invoices table for a PO's detail view. The requisitioner
+// uploads receipts and Invoice Matching uploads/pairs invoices,
+// independently/in parallel; each row below is either a matched pair, an
+// invoice still waiting on a receipt, or a receipt still waiting on an
+// invoice. Approving a matched pair (Invoice Approval) and marking it paid
+// (Payment) are their own separate roles, distinct from matching.
 function InvoicesPanel({
   request,
   loggedInUser,
@@ -20,7 +28,8 @@ function InvoicesPanel({
   handleDeleteReceipt,
   handleMatchInvoiceReceipt,
 }) {
-  const canManage = canManageInvoicing(loggedInUser)
+  const canManage = canMatchInvoices(loggedInUser)
+  const canPay = canManagePayment(loggedInUser)
   const canAddReceipt = canConfirmReceipt(loggedInUser, request)
   const canDelete = isAdmin(loggedInUser)
   const invoices = request.invoices || []
@@ -237,7 +246,7 @@ function InvoicesPanel({
                     </td>
                     <td className="center-cell">
                       {matched ? (
-                        canApproveInvoice(loggedInUser, request, row.invoice) ? (
+                        canApproveInvoice(loggedInUser, row.invoice) ? (
                           <input
                             type="checkbox"
                             checked={Boolean(row.invoice.approved)}
@@ -248,7 +257,7 @@ function InvoicesPanel({
                           'Yes'
                         ) : (
                           <span className="sub" style={{ margin: 0 }}>
-                            Waiting on {findUserName(users, request.approved_by)}
+                            Waiting on {usersWithRole(users, 'invoice_approval').join(', ') || 'Invoice Approval'}
                           </span>
                         )
                       ) : (
@@ -257,7 +266,7 @@ function InvoicesPanel({
                     </td>
                     <td>
                       {row.invoice && row.invoice.approved ? (
-                        canManage ? (
+                        canPay ? (
                           <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
                             <input
                               type="checkbox"

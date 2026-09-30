@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { PO_ROLE_OPTIONS } from '../utils'
+import { PO_ROLE_OPTIONS, ENTITY_SCOPED_ROLES } from '../utils'
 
 function UsersTab({
   draftUsers,
   usersStatus,
   updateDraftUserField,
   toggleDraftUserRole,
+  updateDraftUserEntityAssignment,
   savingUsers,
   handleSaveUsers,
   handleDeleteUser,
@@ -299,6 +300,76 @@ function UsersTab({
             </div>
           )}
         </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <h2>Entity Assignments</h2>
+        </div>
+        <p className="sub" style={{ margin: '0 0 12px' }}>
+          Limits what a Purchase Rec Approval / PO Issue holder sees to specific entities. Leave an
+          entity list empty to see every entity — the default. Saved together with the Users table
+          above (Save button there).
+        </p>
+
+        {ENTITY_SCOPED_ROLES.map((role) => {
+          const label = PO_ROLE_OPTIONS.find((r) => r.value === role)?.label || role
+          const rows = draftUsers
+            .map((u, i) => ({ u, i }))
+            .filter(({ u }) => (u.roles || []).includes(role))
+          return (
+            <div key={role} style={{ marginBottom: 16 }}>
+              <h3 style={{ fontSize: 14, margin: '0 0 8px' }}>{label}</h3>
+              {rows.length === 0 ? (
+                <p className="sub" style={{ margin: 0 }}>
+                  Nobody holds this role yet.
+                </p>
+              ) : (
+                <div className="sheet-wrap">
+                  <table className="sheet">
+                    <colgroup>
+                      <col style={{ width: '30%' }} />
+                      <col />
+                    </colgroup>
+                    <thead>
+                      <tr className="header-row">
+                        <th>Email</th>
+                        <th>Entities (none selected = all)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map(({ u, i }) => (
+                        <tr key={u.id}>
+                          <td>{u.name}</td>
+                          <td>
+                            <select
+                              multiple
+                              size={Math.min(6, Math.max(3, projects.length))}
+                              value={(u.entityAssignments?.[role] || []).map(String)}
+                              onChange={(e) => {
+                                const selected = Array.from(e.target.selectedOptions).map((o) =>
+                                  Number(o.value)
+                                )
+                                updateDraftUserEntityAssignment(i, role, selected)
+                              }}
+                              style={{ width: '100%' }}
+                            >
+                              {projects.map((p) => (
+                                <option value={p.id} key={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       <div className="card">

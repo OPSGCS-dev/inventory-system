@@ -1,6 +1,79 @@
 import { useState } from 'react'
 import { PO_ROLE_OPTIONS, ENTITY_SCOPED_ROLES } from '../utils'
 
+// Compact "add one at a time" control instead of a tall multi-select: a
+// one-line dropdown + Add button, with already-assigned entities shown as
+// small removable chips above it. Keeps each user's row short even when a
+// couple of entities are assigned.
+function EntityAssignmentCell({ projects, assignedIds, onAdd, onRemove }) {
+  const [pendingId, setPendingId] = useState('')
+  const available = projects.filter((p) => !assignedIds.includes(p.id))
+
+  return (
+    <div>
+      {assignedIds.length === 0 ? (
+        <span className="sub" style={{ margin: 0 }}>
+          All entities
+        </span>
+      ) : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+          {assignedIds.map((id) => {
+            const project = projects.find((p) => p.id === id)
+            return (
+              <span
+                key={id}
+                className="po-badge po-badge-issued"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                {project?.name || id}
+                <button
+                  type="button"
+                  onClick={() => onRemove(id)}
+                  title="Remove"
+                  style={{
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    color: 'inherit',
+                    fontWeight: 700,
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            )
+          })}
+        </div>
+      )}
+      {available.length > 0 && (
+        <div style={{ display: 'flex', gap: 6 }}>
+          <select value={pendingId} onChange={(e) => setPendingId(e.target.value)} style={{ flex: 1 }}>
+            <option value="">Add entity…</option>
+            {available.map((p) => (
+              <option value={p.id} key={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={!pendingId}
+            onClick={() => {
+              onAdd(Number(pendingId))
+              setPendingId('')
+            }}
+          >
+            + Add
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function UsersTab({
   draftUsers,
   usersStatus,
@@ -338,31 +411,30 @@ function UsersTab({
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map(({ u, i }) => (
-                        <tr key={u.id}>
-                          <td>{u.name}</td>
-                          <td>
-                            <select
-                              multiple
-                              size={Math.min(6, Math.max(3, projects.length))}
-                              value={(u.entityAssignments?.[role] || []).map(String)}
-                              onChange={(e) => {
-                                const selected = Array.from(e.target.selectedOptions).map((o) =>
-                                  Number(o.value)
-                                )
-                                updateDraftUserEntityAssignment(i, role, selected)
-                              }}
-                              style={{ width: '100%' }}
-                            >
-                              {projects.map((p) => (
-                                <option value={p.id} key={p.id}>
-                                  {p.name}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                        </tr>
-                      ))}
+                      {rows.map(({ u, i }) => {
+                        const assignedIds = u.entityAssignments?.[role] || []
+                        return (
+                          <tr key={u.id}>
+                            <td>{u.name}</td>
+                            <td>
+                              <EntityAssignmentCell
+                                projects={projects}
+                                assignedIds={assignedIds}
+                                onAdd={(projectId) =>
+                                  updateDraftUserEntityAssignment(i, role, [...assignedIds, projectId])
+                                }
+                                onRemove={(projectId) =>
+                                  updateDraftUserEntityAssignment(
+                                    i,
+                                    role,
+                                    assignedIds.filter((id) => id !== projectId)
+                                  )
+                                }
+                              />
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>

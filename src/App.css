@@ -497,11 +497,13 @@ table.sheet th.nowrap-cell {
   text-overflow: ellipsis;
 }
 
-/* Below this width the columns can no longer all fit without wrapping or
-   collapsing the Description column — .sheet-wrap scrolls horizontally
-   instead of squeezing them. */
+/* Every column here has an explicit width (see the colgroup), so
+   table-layout: fixed scales them all proportionally to fill whatever width
+   is available instead of any one collapsing to 0 -- no min-width needed,
+   and the whole table fits without a horizontal scrollbar. A small floor
+   keeps it from getting uncomfortably cramped on a narrow window. */
 table.po-summary-table {
-  min-width: 1560px;
+  min-width: 1000px;
 }
 
 /* Status heading + flow legend shown once above the summary table, rather

@@ -1187,17 +1187,17 @@ function PurchaseOrdersTab({
             </div>
             <table className="sheet po-summary-table">
               <colgroup>
-                <col style={{ width: '44px' }} />
-                <col style={{ width: '260px' }} />
-                <col style={{ width: '140px' }} />
-                <col style={{ width: '110px' }} />
+                <col style={{ width: '36px' }} />
                 <col style={{ width: '190px' }} />
-                <col style={{ width: '110px' }} />
-                <col style={{ width: '110px' }} />
-                <col style={{ width: '130px' }} />
-                <col style={{ width: '150px' }} />
+                <col style={{ width: '100px' }} />
+                <col style={{ width: '85px' }} />
+                <col style={{ width: '170px' }} />
+                <col style={{ width: '80px' }} />
+                <col style={{ width: '80px' }} />
                 <col style={{ width: '90px' }} />
-                <col style={{ width: '140px' }} />
+                <col style={{ width: '110px' }} />
+                <col style={{ width: '75px' }} />
+                <col style={{ width: '130px' }} />
                 <col className="col-last" />
               </colgroup>
               <thead>
@@ -1227,11 +1227,11 @@ function PurchaseOrdersTab({
                   return (
                     <tr key={r.id}>
                       <td className="row-head">{r.id}</td>
-                      <td title={r.description || undefined}>
+                      <td className="nowrap-cell" title={r.description || undefined}>
                         {r.description ? truncate(r.description, PO_DESCRIPTION_MAX_LEN) : '—'}
                       </td>
                       <td className="nowrap-cell">{r.projects?.name || '—'}</td>
-                      <td>{r.vendors?.name || '—'}</td>
+                      <td className="nowrap-cell">{r.vendors?.name || '—'}</td>
                       <td className="center-cell">
                         <PoProgressStepper request={r} />
                       </td>
@@ -1249,9 +1249,9 @@ function PurchaseOrdersTab({
                           </span>
                         )}
                       </td>
-                      <td>{findUserName(users, r.requested_by)}</td>
+                      <td className="nowrap-cell">{findUserName(users, r.requested_by)}</td>
                       <td className="nowrap-cell">{next.who || '—'}</td>
-                      <td>{r.po_number || '—'}</td>
+                      <td className="nowrap-cell">{r.po_number || '—'}</td>
                       <td>
                         {r.status === 'draft' && canCreate && (
                           <button

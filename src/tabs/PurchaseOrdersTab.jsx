@@ -197,7 +197,19 @@ function PurchaseOrdersTab({
             <h2>
               Request #{r.id} — {r.projects?.name || '—'}
             </h2>
-            <span className={`po-badge po-badge-${r.status}`}>{poStatusLabel(r.status)}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className={`po-badge po-badge-${r.status}`}>{poStatusLabel(r.status)}</span>
+              {canDelete && (
+                <button
+                  className="btn-secondary"
+                  style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                  onClick={() => handleDeletePurchaseRequest(r)}
+                  disabled={busy}
+                >
+                  {busy ? 'Deleting…' : 'Delete'}
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="po-detail-meta">
@@ -650,9 +662,9 @@ function PurchaseOrdersTab({
               )
             )}
 
-            {(r.status === 'received' || r.status === 'closed') && (
+            {r.status === 'closed' && (
               <span className="sub" style={{ margin: 0 }}>
-                {r.status === 'closed' ? 'Closed.' : 'Complete.'}
+                Closed.
               </span>
             )}
 
@@ -681,16 +693,6 @@ function PurchaseOrdersTab({
                   </span>
                 )}
               </>
-            )}
-            {canDelete && (
-              <button
-                className="btn-secondary"
-                style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                onClick={() => handleDeletePurchaseRequest(r)}
-                disabled={busy}
-              >
-                {busy ? 'Deleting…' : 'Delete'}
-              </button>
             )}
           </div>
 

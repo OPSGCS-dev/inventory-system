@@ -60,7 +60,6 @@ export const PO_STATUS_LABELS = {
   submitted: 'Requested',
   approved: 'Approved',
   issued: 'PO Issued',
-  received: 'Complete/Received',
   closed: 'Closed',
 }
 
@@ -253,7 +252,7 @@ export function canApproveInvoice(user, request, invoice) {
 }
 
 export function isApprovedOrLater(status) {
-  return ['approved', 'issued', 'received', 'closed'].includes(status)
+  return ['approved', 'issued', 'closed'].includes(status)
 }
 
 // Named person(s) who actually hold a given role — since roles are strictly
@@ -288,8 +287,6 @@ export function nextStepInfo(request, users) {
       }
       return { step: 'Invoicing', who: usersWithRole(users, 'accounting').join(', ') || '—' }
     }
-    case 'received':
-      return { step: 'Complete', who: null }
     case 'closed':
       return { step: 'Done', who: null }
     default:

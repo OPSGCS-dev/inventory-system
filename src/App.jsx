@@ -2033,9 +2033,7 @@ function App() {
     // once a PO number has been issued, not drafts/requisitions/approvals.
     if (isVendorUser(loggedInUser)) {
       list = list.filter(
-        (r) =>
-          r.vendor_id === loggedInUser.vendor_id &&
-          (r.status === 'issued' || r.status === 'received' || r.status === 'closed')
+        (r) => r.vendor_id === loggedInUser.vendor_id && (r.status === 'issued' || r.status === 'closed')
       )
     }
     // "My POs for Approval" / "My Invoices for Approval" are role-based
@@ -2654,7 +2652,7 @@ function App() {
   // requisitioner adding a receipt (handleAddReceipt below) -- neither
   // blocks the other. They start out unpaired; handleMatchInvoiceReceipt
   // pairs a specific invoice with a specific receipt afterward.
-  async function handleAddInvoice(request, { invoiceNumber, amount, file }) {
+  async function handleAddInvoice(request, { invoiceNumber, amount, file, matchToReceiptId }) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
@@ -2688,9 +2686,10 @@ function App() {
         file_url: urlData.publicUrl,
         file_name: file.name,
         uploaded_by: loggedInUser.id,
+        matched_receipt_id: matchToReceiptId || null,
       })
       if (error) throw error
-      flashPoStatus('Invoice added.', true)
+      flashPoStatus(matchToReceiptId ? 'Invoice added and matched.' : 'Invoice added.', true)
       await loadPurchaseRequests()
     } catch (error) {
       console.error(error)
@@ -2764,7 +2763,7 @@ function App() {
   // uploads proof of delivery/work independently of accounting's invoices --
   // purely a reconciliation document, with no stock-on-hand effect (that
   // stays tied to the separate Work Status "Complete" action above).
-  async function handleAddReceipt(request, file) {
+  async function handleAddReceipt(request, file, matchToInvoiceId) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
@@ -2779,14 +2778,25 @@ function App() {
         .upload(path, file, { contentType: file.type })
       if (uploadError) throw uploadError
       const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(path)
-      const { error } = await supabase.from('receipts').insert({
-        purchase_request_id: request.id,
-        file_url: urlData.publicUrl,
-        file_name: file.name,
-        uploaded_by: loggedInUser.id,
-      })
+      const { data: inserted, error } = await supabase
+        .from('receipts')
+        .insert({
+          purchase_request_id: request.id,
+          file_url: urlData.publicUrl,
+          file_name: file.name,
+          uploaded_by: loggedInUser.id,
+        })
+        .select()
+        .single()
       if (error) throw error
-      flashPoStatus('Receipt added.', true)
+      if (matchToInvoiceId) {
+        const { error: matchError } = await supabase
+          .from('invoices')
+          .update({ matched_receipt_id: inserted.id })
+          .eq('id', matchToInvoiceId)
+        if (matchError) throw matchError
+      }
+      flashPoStatus(matchToInvoiceId ? 'Receipt added and matched.' : 'Receipt added.', true)
       await loadPurchaseRequests()
     } catch (error) {
       console.error(error)

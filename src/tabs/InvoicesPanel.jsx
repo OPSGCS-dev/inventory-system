@@ -28,6 +28,14 @@ function InvoicesPanel({
 
   const [invoiceNumberDraft, setInvoiceNumberDraft] = useState('')
   const [invoiceAmountDraft, setInvoiceAmountDraft] = useState('')
+  // Per-row draft invoice#/amount for the inline "add & match" mini-form
+  // that appears in an unmatched receipt's empty Invoice cell, keyed by
+  // receipt id (several unmatched receipts can each have their own draft).
+  const [rowInvoiceDrafts, setRowInvoiceDrafts] = useState({})
+
+  function setRowInvoiceDraft(receiptId, field, value) {
+    setRowInvoiceDrafts((prev) => ({ ...prev, [receiptId]: { ...prev[receiptId], [field]: value } }))
+  }
 
   const unmatchedReceiptIds = new Set(receipts.map((r) => r.id))
   for (const inv of invoices) {
@@ -98,21 +106,41 @@ function InvoicesPanel({
                             </>
                           )}
                         </>
-                      ) : canManage && unmatchedReceipts.length > 0 ? (
-                        <select
-                          defaultValue=""
-                          disabled={busy}
-                          onChange={(e) => {
-                            if (e.target.value) handleMatchInvoiceReceipt(row.invoice, Number(e.target.value))
-                          }}
-                        >
-                          <option value="">Match to receipt…</option>
-                          {unmatchedReceipts.map((r) => (
-                            <option value={r.id} key={r.id}>
-                              {findUserName(users, r.uploaded_by)} — {new Date(r.uploaded_at).toLocaleDateString()}
-                            </option>
-                          ))}
-                        </select>
+                      ) : canManage || canAddReceipt ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {canManage && unmatchedReceipts.length > 0 && (
+                            <select
+                              defaultValue=""
+                              disabled={busy}
+                              onChange={(e) => {
+                                if (e.target.value) handleMatchInvoiceReceipt(row.invoice, Number(e.target.value))
+                              }}
+                            >
+                              <option value="">Match to existing receipt…</option>
+                              {unmatchedReceipts.map((r) => (
+                                <option value={r.id} key={r.id}>
+                                  {findUserName(users, r.uploaded_by)} —{' '}
+                                  {new Date(r.uploaded_at).toLocaleDateString()}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {canAddReceipt && (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                              Add &amp; match:
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                disabled={busy}
+                                onChange={(e) => {
+                                  const file = e.target.files[0]
+                                  if (file) handleAddReceipt(request, file, row.invoice.id)
+                                  e.target.value = ''
+                                }}
+                              />
+                            </label>
+                          )}
+                        </div>
                       ) : (
                         <span className="sub" style={{ margin: 0 }}>
                           Unmatched
@@ -137,23 +165,70 @@ function InvoicesPanel({
                             </>
                           )}
                         </>
-                      ) : canManage && unmatchedInvoices.length > 0 ? (
-                        <select
-                          defaultValue=""
-                          disabled={busy}
-                          onChange={(e) => {
-                            if (!e.target.value) return
-                            const invoice = unmatchedInvoices.find((inv) => String(inv.id) === e.target.value)
-                            if (invoice) handleMatchInvoiceReceipt(invoice, row.receipt.id)
-                          }}
-                        >
-                          <option value="">Match to invoice…</option>
-                          {unmatchedInvoices.map((inv) => (
-                            <option value={inv.id} key={inv.id}>
-                              {inv.invoice_number || '—'} — ${Number(inv.amount).toFixed(2)}
-                            </option>
-                          ))}
-                        </select>
+                      ) : canManage ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {unmatchedInvoices.length > 0 && (
+                            <select
+                              defaultValue=""
+                              disabled={busy}
+                              onChange={(e) => {
+                                if (!e.target.value) return
+                                const invoice = unmatchedInvoices.find((inv) => String(inv.id) === e.target.value)
+                                if (invoice) handleMatchInvoiceReceipt(invoice, row.receipt.id)
+                              }}
+                            >
+                              <option value="">Match to existing invoice…</option>
+                              {unmatchedInvoices.map((inv) => (
+                                <option value={inv.id} key={inv.id}>
+                                  {inv.invoice_number || '—'} — ${Number(inv.amount).toFixed(2)}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span className="sub" style={{ margin: 0 }}>
+                              Add &amp; match:
+                            </span>
+                            <input
+                              type="text"
+                              placeholder="Invoice #"
+                              value={rowInvoiceDrafts[row.receipt.id]?.number || ''}
+                              onChange={(e) => setRowInvoiceDraft(row.receipt.id, 'number', e.target.value)}
+                              style={{ maxWidth: 100 }}
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="Amount"
+                              value={rowInvoiceDrafts[row.receipt.id]?.amount || ''}
+                              onChange={(e) => setRowInvoiceDraft(row.receipt.id, 'amount', e.target.value)}
+                              style={{ maxWidth: 90 }}
+                            />
+                            <input
+                              type="file"
+                              accept="application/pdf"
+                              disabled={busy}
+                              onChange={(e) => {
+                                const file = e.target.files[0]
+                                if (!file) return
+                                const draft = rowInvoiceDrafts[row.receipt.id] || {}
+                                handleAddInvoice(request, {
+                                  invoiceNumber: draft.number,
+                                  amount: draft.amount,
+                                  file,
+                                  matchToReceiptId: row.receipt.id,
+                                })
+                                e.target.value = ''
+                                setRowInvoiceDrafts((prev) => {
+                                  const next = { ...prev }
+                                  delete next[row.receipt.id]
+                                  return next
+                                })
+                              }}
+                            />
+                          </div>
+                        </div>
                       ) : (
                         <span className="sub" style={{ margin: 0 }}>
                           Unmatched

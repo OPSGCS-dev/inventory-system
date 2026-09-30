@@ -1179,15 +1179,15 @@ function PurchaseOrdersTab({
             <table className="sheet po-summary-table">
               <colgroup>
                 <col style={{ width: '44px' }} />
-                <col />
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '8%' }} />
+                <col style={{ width: '260px' }} />
+                <col style={{ width: '140px' }} />
+                <col style={{ width: '110px' }} />
                 <col style={{ width: '190px' }} />
                 <col style={{ width: '110px' }} />
                 <col style={{ width: '110px' }} />
-                <col style={{ width: '13%' }} />
-                <col style={{ width: '13%' }} />
-                <col style={{ width: '6%' }} />
+                <col style={{ width: '130px' }} />
+                <col style={{ width: '150px' }} />
+                <col style={{ width: '90px' }} />
                 <col style={{ width: '140px' }} />
                 <col className="col-last" />
               </colgroup>

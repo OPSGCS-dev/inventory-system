@@ -500,7 +500,7 @@ table.sheet th.nowrap-cell {
    collapsing the Description column — .sheet-wrap scrolls horizontally
    instead of squeezing them. */
 table.po-summary-table {
-  min-width: 1470px;
+  min-width: 1560px;
 }
 
 /* Status heading + flow legend shown once above the summary table, rather

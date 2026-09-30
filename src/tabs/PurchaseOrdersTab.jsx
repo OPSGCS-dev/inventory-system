@@ -1,9 +1,16 @@
 import { Fragment, useLayoutEffect, useRef, useState } from 'react'
 import {
   poStatusLabel,
+  workStatusLabel,
+  paymentStatusLabel,
   findUserName,
   userHasRole,
   canCreatePurchaseRequests,
+  canManageInvoicing,
+  canApproveRequests,
+  canClosePo,
+  computeWorkStatus,
+  computePaymentStatus,
   lineTotal,
   filterPartsForSearch,
   isApprovedOrLater,
@@ -18,6 +25,8 @@ import {
   TICKETING_URL,
   isAdmin,
 } from '../utils'
+import InvoicesPanel from './InvoicesPanel'
+import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
 
 function formatTicketNumber(n) {
   return `TK-${String(n).padStart(5, '0')}`
@@ -27,25 +36,16 @@ const PO_DESCRIPTION_MAX_LEN = 50
 
 // The summary list's progress stepper only covers the "in flight" statuses —
 // a draft hasn't entered the workflow yet, so every dot starts unfilled.
+// Work Status / Payment Status are shown as their own columns instead of
+// extra stepper dots, since a PO can now have any number of invoices.
 const PO_PROGRESS_STATUSES = PO_STATUS_ORDER.filter((s) => s !== 'draft')
 
-// Invoice Match / Invoice Approved / Paid aren't part of the status state
-// machine — they're independent accounting checkboxes — so they're appended
-// to the same stepper as extra dots driven directly by their own boolean,
-// not by the status index.
-const PO_PROGRESS_EXTRA_STEPS = ['Invoice Match', 'Invoice Approved', 'Paid']
+const PO_PROGRESS_ALL_LABELS = PO_PROGRESS_STATUSES.map(poStatusLabel)
 
-const PO_PROGRESS_ALL_LABELS = [...PO_PROGRESS_STATUSES.map(poStatusLabel), ...PO_PROGRESS_EXTRA_STEPS]
-
-function PoProgressStepper({ status, invoiceMatched, invoiceApproved, paid }) {
+function PoProgressStepper({ status }) {
   const currentIndex = PO_PROGRESS_STATUSES.indexOf(status)
   const labels = PO_PROGRESS_ALL_LABELS
-  const filled = [
-    ...PO_PROGRESS_STATUSES.map((_, i) => i <= currentIndex),
-    Boolean(invoiceMatched),
-    Boolean(invoiceApproved),
-    Boolean(paid),
-  ]
+  const filled = PO_PROGRESS_STATUSES.map((_, i) => i <= currentIndex)
   return (
     <div className="po-progress">
       {labels.map((label, i) => (
@@ -67,9 +67,12 @@ function PurchaseOrdersTab({
   setPoStatusFilter,
   poProjectFilter,
   setPoProjectFilter,
+  poView,
+  setPoView,
   projects,
   poLoading,
   visiblePurchaseRequests,
+  invoicesPendingApproval,
   expandedPoId,
   toggleExpandedPo,
   poFormOpen,
@@ -126,15 +129,22 @@ function PurchaseOrdersTab({
   computingPoNumber,
   handleIssuePurchaseOrder,
   handleUploadReceiptAndConfirm,
-  handleUploadInvoiceAndMatch,
-  handleToggleInvoiceMatched,
-  handleToggleInvoiceApproved,
-  handleTogglePaid,
+  handleSetWorkStatus,
+  handleAddInvoice,
+  handleApproveInvoice,
+  handlePayInvoice,
+  handleDeleteInvoice,
+  handleAddReceipt,
+  handleDeleteReceipt,
+  handleMatchInvoiceReceipt,
+  handleClosePo,
   poActionBusyId,
   handleDeletePurchaseRequest,
 }) {
   const canCreate = canCreatePurchaseRequests(loggedInUser)
   const canDelete = isAdmin(loggedInUser)
+  const canSeeApprovalsView = canApproveRequests(loggedInUser)
+  const canSeeInvoicesView = canManageInvoicing(loggedInUser)
   const availableSubcategories = budgetSubcategories.filter(
     (sc) => sc.category_id === poDraftBudgetCategoryId
   )
@@ -277,33 +287,23 @@ function PurchaseOrdersTab({
                 </td>
               </tr>
               <tr>
-                <th>Invoice Match</th>
-                <td>
-                  {r.invoice_matched_by
-                    ? `${findUserName(users, r.invoice_matched_by)} — ${new Date(
-                        r.invoice_matched_at
-                      ).toLocaleString()}${r.invoice_file_name ? ` (${r.invoice_file_name})` : ''}`
-                    : '—'}
-                </td>
+                <th>Work Status</th>
+                <td>{workStatusLabel(computeWorkStatus(r))}</td>
               </tr>
               <tr>
-                <th>Invoice Approved</th>
-                <td>
-                  {r.invoice_approved_by
-                    ? `${findUserName(users, r.invoice_approved_by)} — ${new Date(
-                        r.invoice_approved_at
-                      ).toLocaleString()}`
-                    : '—'}
-                </td>
+                <th>Payment Status</th>
+                <td>{paymentStatusLabel(computePaymentStatus(r))}</td>
               </tr>
-              <tr>
-                <th>Paid</th>
-                <td>
-                  {r.paid_by
-                    ? `${findUserName(users, r.paid_by)} — ${new Date(r.paid_at).toLocaleString()}`
-                    : '—'}
-                </td>
-              </tr>
+              {r.status === 'closed' && (
+                <tr>
+                  <th>Closed</th>
+                  <td>
+                    {r.closed_by
+                      ? `${findUserName(users, r.closed_by)} — ${new Date(r.closed_at).toLocaleString()}`
+                      : '—'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
 
@@ -602,31 +602,57 @@ function PurchaseOrdersTab({
               ))}
 
             {r.status === 'issued' &&
+              computeWorkStatus(r) !== 'complete' &&
               (canConfirmReceipt(loggedInUser, r) ? (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                  {poLineType(r) === 'service'
-                    ? 'Upload Service Report to Confirm Complete:'
-                    : 'Upload Photo to Confirm Receipt:'}
-                  <input
-                    type="file"
-                    accept={poLineType(r) === 'service' ? 'application/pdf' : 'image/*,application/pdf'}
-                    disabled={busy}
-                    onChange={(e) => {
-                      const file = e.target.files[0]
-                      if (file) handleUploadReceiptAndConfirm(r, file)
-                      e.target.value = ''
-                    }}
-                  />
-                </label>
+                <>
+                  {computeWorkStatus(r) === 'not_started' && (
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleSetWorkStatus(r, 'partial')}
+                      disabled={busy}
+                    >
+                      Mark Partially Complete
+                    </button>
+                  )}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                    {poLineType(r) === 'service'
+                      ? 'Upload Service Report to Confirm Complete:'
+                      : 'Upload Photo to Confirm Receipt:'}
+                    <input
+                      type="file"
+                      accept={poLineType(r) === 'service' ? 'application/pdf' : 'image/*,application/pdf'}
+                      disabled={busy}
+                      onChange={(e) => {
+                        const file = e.target.files[0]
+                        if (file) handleUploadReceiptAndConfirm(r, file)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                </>
               ) : (
                 <span className="sub" style={{ margin: 0 }}>
                   Waiting on {findUserName(users, r.requested_by)} to confirm.
                 </span>
               ))}
 
-            {r.status === 'received' && (
+            {r.status === 'issued' && canConfirmReceipt(loggedInUser, r) && (
+              canClosePo(loggedInUser, r) ? (
+                <button className="btn-primary" onClick={() => handleClosePo(r)} disabled={busy}>
+                  {busy ? 'Closing…' : 'Close PO'}
+                </button>
+              ) : (
+                <span className="sub" style={{ margin: 0 }}>
+                  {computeWorkStatus(r) !== 'complete'
+                    ? 'Work must be marked Complete and fully paid before closing.'
+                    : 'All invoices must be paid in full before closing.'}
+                </span>
+              )
+            )}
+
+            {(r.status === 'received' || r.status === 'closed') && (
               <span className="sub" style={{ margin: 0 }}>
-                Complete.
+                {r.status === 'closed' ? 'Closed.' : 'Complete.'}
               </span>
             )}
 
@@ -634,11 +660,6 @@ function PurchaseOrdersTab({
               <button className="btn-secondary" onClick={() => setShowPoPreview((v) => !v)}>
                 {showPoPreview ? 'Hide PO' : 'View PO'}
               </button>
-            )}
-            {r.invoice_file_url && (
-              <a className="btn-secondary" href={r.invoice_file_url} target="_blank" rel="noreferrer">
-                View Invoice
-              </a>
             )}
             {r.receipt_file_url && (
               <a className="btn-secondary" href={r.receipt_file_url} target="_blank" rel="noreferrer">
@@ -673,51 +694,21 @@ function PurchaseOrdersTab({
             )}
           </div>
 
-          {(r.status === 'issued' || r.status === 'received') &&
-            userHasRole(loggedInUser, 'accounting') && (
-              <div className="edit-toolbar" style={{ marginTop: 12, flexWrap: 'wrap' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                  {r.invoice_matched ? 'Replace Invoice PDF:' : 'Upload Invoice PDF to Match:'}
-                  <input
-                    type="file"
-                    accept="application/pdf"
-                    disabled={busy}
-                    onChange={(e) => {
-                      const file = e.target.files[0]
-                      if (file) handleUploadInvoiceAndMatch(r, file)
-                      e.target.value = ''
-                    }}
-                  />
-                </label>
-                {r.invoice_matched && (
-                  <button
-                    className="btn-secondary"
-                    onClick={() => handleToggleInvoiceMatched(r, false)}
-                    disabled={busy}
-                  >
-                    Clear Match
-                  </button>
-                )}
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(r.invoice_approved)}
-                    onChange={(e) => handleToggleInvoiceApproved(r, e.target.checked)}
-                    disabled={busy}
-                  />
-                  Invoice Approved
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(r.paid)}
-                    onChange={(e) => handleTogglePaid(r, e.target.checked)}
-                    disabled={busy}
-                  />
-                  Paid
-                </label>
-              </div>
-            )}
+          {(r.status === 'issued' || r.status === 'closed') && (
+            <InvoicesPanel
+              request={r}
+              loggedInUser={loggedInUser}
+              users={users}
+              busy={busy}
+              handleAddInvoice={handleAddInvoice}
+              handleApproveInvoice={handleApproveInvoice}
+              handlePayInvoice={handlePayInvoice}
+              handleDeleteInvoice={handleDeleteInvoice}
+              handleAddReceipt={handleAddReceipt}
+              handleDeleteReceipt={handleDeleteReceipt}
+              handleMatchInvoiceReceipt={handleMatchInvoiceReceipt}
+            />
+          )}
         </div>
       </>
     )
@@ -1108,8 +1099,41 @@ function PurchaseOrdersTab({
       )}
 
       <div className="card">
+        <div className="edit-toolbar">
+          <button className={poView === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPoView('all')}>
+            All POs
+          </button>
+          {canSeeApprovalsView && (
+            <button
+              className={poView === 'my-approvals' ? 'btn-primary' : 'btn-secondary'}
+              onClick={() => setPoView('my-approvals')}
+            >
+              My POs for Approval
+            </button>
+          )}
+          {canSeeInvoicesView && (
+            <button
+              className={poView === 'my-invoices' ? 'btn-primary' : 'btn-secondary'}
+              onClick={() => setPoView('my-invoices')}
+            >
+              My Invoices for Approval
+            </button>
+          )}
+        </div>
+      </div>
+
+      {poView === 'my-invoices' ? (
+        <MyInvoicesForApprovalTable
+          invoicesPendingApproval={invoicesPendingApproval}
+          toggleExpandedPo={toggleExpandedPo}
+        />
+      ) : (
+      <div className="card">
         <div className="card-header">
-          <h2>Purchase Requests {poLoading ? '' : `(${visiblePurchaseRequests.length})`}</h2>
+          <h2>
+            {poView === 'my-approvals' ? 'My POs for Approval' : 'Purchase Requests'}{' '}
+            {poLoading ? '' : `(${visiblePurchaseRequests.length})`}
+          </h2>
           <div className="header-actions">
             <select value={poStatusFilter} onChange={(e) => setPoStatusFilter(e.target.value)}>
               <option value="">All Statuses</option>
@@ -1156,12 +1180,14 @@ function PurchaseOrdersTab({
               <colgroup>
                 <col style={{ width: '44px' }} />
                 <col />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '9%' }} />
-                <col style={{ width: '200px' }} />
-                <col style={{ width: '16%' }} />
-                <col style={{ width: '16%' }} />
-                <col style={{ width: '7%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '190px' }} />
+                <col style={{ width: '110px' }} />
+                <col style={{ width: '110px' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '6%' }} />
                 <col style={{ width: '140px' }} />
                 <col className="col-last" />
               </colgroup>
@@ -1174,6 +1200,8 @@ function PurchaseOrdersTab({
                   <th ref={statusHeaderRef} className="center-cell">
                     Status
                   </th>
+                  <th className="center-cell">Work</th>
+                  <th className="center-cell">Payment</th>
                   <th>Requestor</th>
                   <th>Responsible for Next Action</th>
                   <th>PO #</th>
@@ -1185,6 +1213,8 @@ function PurchaseOrdersTab({
                 {visiblePurchaseRequests.map((r) => {
                   const next = nextStepInfo(r, users)
                   const busy = poActionBusyId === r.id
+                  const workStatus = computeWorkStatus(r)
+                  const paymentStatus = computePaymentStatus(r)
                   return (
                     <tr key={r.id}>
                       <td className="row-head">{r.id}</td>
@@ -1194,12 +1224,21 @@ function PurchaseOrdersTab({
                       <td className="nowrap-cell">{r.projects?.name || '—'}</td>
                       <td>{r.vendors?.name || '—'}</td>
                       <td className="center-cell">
-                        <PoProgressStepper
-                          status={r.status}
-                          invoiceMatched={r.invoice_matched}
-                          invoiceApproved={r.invoice_approved}
-                          paid={r.paid}
-                        />
+                        <PoProgressStepper status={r.status} />
+                      </td>
+                      <td className="center-cell">
+                        {(r.status === 'issued' || r.status === 'closed') && (
+                          <span className={`po-badge po-work-badge-${workStatus}`}>
+                            {workStatusLabel(workStatus)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="center-cell">
+                        {(r.status === 'issued' || r.status === 'closed') && (
+                          <span className={`po-badge po-payment-badge-${paymentStatus}`}>
+                            {paymentStatusLabel(paymentStatus)}
+                          </span>
+                        )}
                       </td>
                       <td>{findUserName(users, r.requested_by)}</td>
                       <td className="nowrap-cell">{next.who || '—'}</td>
@@ -1234,7 +1273,7 @@ function PurchaseOrdersTab({
                             Convert to PO
                           </button>
                         )}
-                        {r.status === 'issued' && canConfirmReceipt(loggedInUser, r) && (
+                        {r.status === 'issued' && workStatus !== 'complete' && canConfirmReceipt(loggedInUser, r) && (
                           <label
                             className="btn-primary po-action-btn"
                             style={{
@@ -1266,59 +1305,16 @@ function PurchaseOrdersTab({
                             />
                           </label>
                         )}
-                        {r.status === 'received' &&
-                          userHasRole(loggedInUser, 'accounting') &&
-                          !r.invoice_matched && (
-                            <label
-                              className="btn-primary po-action-btn"
-                              style={{
-                                cursor: busy ? 'not-allowed' : 'pointer',
-                                opacity: busy ? 0.6 : 1,
-                                textAlign: 'center',
-                              }}
-                            >
-                              {busy ? 'Uploading…' : 'Match Invoice'}
-                              <input
-                                type="file"
-                                accept="application/pdf"
-                                disabled={busy}
-                                style={{ display: 'none' }}
-                                onChange={(e) => {
-                                  const file = e.target.files[0]
-                                  if (file) {
-                                    handleUploadInvoiceAndMatch(r, file)
-                                    toggleExpandedPo(r.id)
-                                  }
-                                  e.target.value = ''
-                                }}
-                              />
-                            </label>
-                          )}
-                        {r.status === 'received' &&
-                          userHasRole(loggedInUser, 'accounting') &&
-                          r.invoice_matched &&
-                          !r.invoice_approved && (
-                            <button
-                              className="btn-primary po-action-btn"
-                              onClick={() => handleToggleInvoiceApproved(r, true)}
-                              disabled={busy}
-                            >
-                              {busy ? 'Approving…' : 'Approve Invoice'}
-                            </button>
-                          )}
-                        {r.status === 'received' &&
-                          userHasRole(loggedInUser, 'accounting') &&
-                          r.invoice_approved &&
-                          !r.paid && (
-                            <button
-                              className="btn-primary po-action-btn"
-                              onClick={() => handleTogglePaid(r, true)}
-                              disabled={busy}
-                            >
-                              {busy ? 'Marking…' : 'Confirm Paid'}
-                            </button>
-                          )}
-                        {r.status === 'received' && r.invoice_approved && r.paid && (
+                        {r.status === 'issued' && canClosePo(loggedInUser, r) && (
+                          <button
+                            className="btn-primary po-action-btn"
+                            onClick={() => handleClosePo(r)}
+                            disabled={busy}
+                          >
+                            {busy ? 'Closing…' : 'Close PO'}
+                          </button>
+                        )}
+                        {r.status === 'closed' && (
                           <span className="sub" style={{ margin: 0 }}>
                             Closed
                           </span>
@@ -1337,6 +1333,7 @@ function PurchaseOrdersTab({
           </div>
         )}
       </div>
+      )}
     </>
   )
 }

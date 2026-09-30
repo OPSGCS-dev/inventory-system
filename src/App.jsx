@@ -134,6 +134,9 @@ function App() {
 
   const [poStatusFilter, setPoStatusFilter] = useState('')
   const [poProjectFilter, setPoProjectFilter] = useState('')
+  // 'all' | 'my-approvals' | 'my-invoices' -- persistent sub-tabs within the
+  // Purchase Orders tab, same pattern as InventoryOnHandTab's stockPanel.
+  const [poView, setPoView] = useState('all')
   const [expandedPoId, setExpandedPoId] = useState(null)
   const [poActionBusyId, setPoActionBusyId] = useState(null)
 
@@ -442,7 +445,7 @@ function App() {
     const { data, error } = await supabase
       .from('purchase_requests')
       .select(
-        '*, purchase_request_lines(*, parts(*)), projects(*), sub_projects(*), vendors(*), budget_categories(*), budget_subcategories(*)'
+        '*, purchase_request_lines(*, parts(*)), projects(*), sub_projects(*), vendors(*), budget_categories(*), budget_subcategories(*), invoices(*), receipts(*)'
       )
       .order('created_at', { ascending: false })
 
@@ -2031,13 +2034,38 @@ function App() {
     if (isVendorUser(loggedInUser)) {
       list = list.filter(
         (r) =>
-          r.vendor_id === loggedInUser.vendor_id && (r.status === 'issued' || r.status === 'received')
+          r.vendor_id === loggedInUser.vendor_id &&
+          (r.status === 'issued' || r.status === 'received' || r.status === 'closed')
       )
+    }
+    // "My POs for Approval" / "My Invoices for Approval" are role-based
+    // presets, not per-request assignment -- anyone holding the role sees
+    // every request/invoice waiting on that role, company-wide.
+    if (poView === 'my-approvals') {
+      list = list.filter((r) => r.status === 'submitted')
     }
     if (poStatusFilter) list = list.filter((r) => r.status === poStatusFilter)
     if (poProjectFilter) list = list.filter((r) => String(r.project_id) === poProjectFilter)
     return list
-  }, [purchaseRequests, poStatusFilter, poProjectFilter, loggedInUser])
+  }, [purchaseRequests, poStatusFilter, poProjectFilter, loggedInUser, poView])
+
+  // Flattened { request, invoice } pairs for the "My Invoices for Approval"
+  // view -- its rows are invoices, not purchase requests, so it can't reuse
+  // the PO summary table's row shape. Approval is gated to the specific
+  // person who approved that PO's original requisition (canApproveInvoice),
+  // not a general role, so this is inherently personal -- only invoices this
+  // logged-in user is actually allowed to approve show up here.
+  const invoicesPendingApproval = useMemo(() => {
+    const pairs = []
+    for (const r of purchaseRequests) {
+      for (const invoice of r.invoices || []) {
+        if (!invoice.approved && invoice.matched_receipt_id && r.approved_by === loggedInUser?.id) {
+          pairs.push({ request: r, invoice })
+        }
+      }
+    }
+    return pairs
+  }, [purchaseRequests, loggedInUser])
 
   function toggleExpandedPo(id) {
     setExpandedPoId((prev) => (prev === id ? null : id))
@@ -2575,11 +2603,11 @@ function App() {
       const { error } = await supabase
         .from('purchase_requests')
         .update({
-          status: 'received',
           received_by: loggedInUser.id,
           received_at: new Date().toISOString(),
           receipt_file_url: urlData.publicUrl,
           receipt_file_name: file.name,
+          work_status: 'complete',
         })
         .eq('id', request.id)
       if (error) throw error
@@ -2597,17 +2625,51 @@ function App() {
     }
   }
 
-  // Matching an invoice now requires actually uploading the PDF, not just
-  // ticking a box — the file goes to the public "invoices" Storage bucket
-  // and its URL/name are saved alongside the usual by/at attribution.
-  async function handleUploadInvoiceAndMatch(request, file) {
+  // The 'not_started' <-> 'partial' transition needs no supporting file --
+  // only the move into 'complete' does (handleUploadReceiptAndConfirm
+  // above), to preserve an audit trail for the highest-stakes transition.
+  async function handleSetWorkStatus(request, workStatus) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
     }
-    if (!file) return
+    setPoActionBusyId(request.id)
+    try {
+      const { error } = await supabase
+        .from('purchase_requests')
+        .update({ work_status: workStatus })
+        .eq('id', request.id)
+      if (error) throw error
+      flashPoStatus('Work status updated.', true)
+      await loadPurchaseRequests()
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not update work status — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // Accounting adds an invoice independently of, and in parallel with, the
+  // requisitioner adding a receipt (handleAddReceipt below) -- neither
+  // blocks the other. They start out unpaired; handleMatchInvoiceReceipt
+  // pairs a specific invoice with a specific receipt afterward.
+  async function handleAddInvoice(request, { invoiceNumber, amount, file }) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    if (!file) {
+      flashPoStatus('Please choose a PDF file.', false)
+      return
+    }
     if (file.type !== 'application/pdf') {
       flashPoStatus('Please choose a PDF file.', false)
+      return
+    }
+    const numericAmount = Number(amount)
+    if (!amount || Number.isNaN(numericAmount) || numericAmount <= 0) {
+      flashPoStatus('Please enter a valid invoice amount.', false)
       return
     }
     setPoActionBusyId(request.id)
@@ -2619,72 +2681,36 @@ function App() {
         .upload(path, file, { contentType: 'application/pdf' })
       if (uploadError) throw uploadError
       const { data: urlData } = supabase.storage.from('invoices').getPublicUrl(path)
-      const payload = {
-        invoice_matched: true,
-        invoice_matched_by: loggedInUser.id,
-        invoice_matched_at: new Date().toISOString(),
-        invoice_file_url: urlData.publicUrl,
-        invoice_file_name: file.name,
-      }
-      const { error } = await supabase.from('purchase_requests').update(payload).eq('id', request.id)
+      const { error } = await supabase.from('invoices').insert({
+        purchase_request_id: request.id,
+        invoice_number: invoiceNumber || null,
+        amount: numericAmount,
+        file_url: urlData.publicUrl,
+        file_name: file.name,
+        uploaded_by: loggedInUser.id,
+      })
       if (error) throw error
-      flashPoStatus('Invoice uploaded and marked matched.', true)
+      flashPoStatus('Invoice added.', true)
       await loadPurchaseRequests()
     } catch (error) {
       console.error(error)
-      flashPoStatus('Could not upload the invoice — check the console for details.', false)
+      flashPoStatus('Could not add the invoice — check the console for details.', false)
     } finally {
       setPoActionBusyId(null)
     }
   }
 
-  async function handleToggleInvoiceMatched(request, checked) {
+  async function handleApproveInvoice(invoice, checked) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
     }
-    setPoActionBusyId(request.id)
+    setPoActionBusyId(invoice.purchase_request_id)
     try {
       const payload = checked
-        ? {
-            invoice_matched: true,
-            invoice_matched_by: loggedInUser.id,
-            invoice_matched_at: new Date().toISOString(),
-          }
-        : {
-            invoice_matched: false,
-            invoice_matched_by: null,
-            invoice_matched_at: null,
-            invoice_file_url: null,
-            invoice_file_name: null,
-          }
-      const { error } = await supabase.from('purchase_requests').update(payload).eq('id', request.id)
-      if (error) throw error
-      flashPoStatus(checked ? 'Invoice marked matched.' : 'Invoice match cleared.', true)
-      await loadPurchaseRequests()
-    } catch (error) {
-      console.error(error)
-      flashPoStatus('Could not update invoice match — check the console for details.', false)
-    } finally {
-      setPoActionBusyId(null)
-    }
-  }
-
-  async function handleToggleInvoiceApproved(request, checked) {
-    if (!loggedInUser) {
-      flashPoStatus('You must be logged in.', false)
-      return
-    }
-    setPoActionBusyId(request.id)
-    try {
-      const payload = checked
-        ? {
-            invoice_approved: true,
-            invoice_approved_by: loggedInUser.id,
-            invoice_approved_at: new Date().toISOString(),
-          }
-        : { invoice_approved: false, invoice_approved_by: null, invoice_approved_at: null }
-      const { error } = await supabase.from('purchase_requests').update(payload).eq('id', request.id)
+        ? { approved: true, approved_by: loggedInUser.id, approved_at: new Date().toISOString() }
+        : { approved: false, approved_by: null, approved_at: null }
+      const { error } = await supabase.from('invoices').update(payload).eq('id', invoice.id)
       if (error) throw error
       flashPoStatus(checked ? 'Invoice marked approved.' : 'Invoice approval cleared.', true)
       await loadPurchaseRequests()
@@ -2696,23 +2722,142 @@ function App() {
     }
   }
 
-  async function handleTogglePaid(request, checked) {
+  async function handlePayInvoice(invoice, checked) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
     }
-    setPoActionBusyId(request.id)
+    setPoActionBusyId(invoice.purchase_request_id)
     try {
       const payload = checked
         ? { paid: true, paid_by: loggedInUser.id, paid_at: new Date().toISOString() }
         : { paid: false, paid_by: null, paid_at: null }
-      const { error } = await supabase.from('purchase_requests').update(payload).eq('id', request.id)
+      const { error } = await supabase.from('invoices').update(payload).eq('id', invoice.id)
       if (error) throw error
       flashPoStatus(checked ? 'Marked paid.' : 'Paid status cleared.', true)
       await loadPurchaseRequests()
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not update paid status — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  async function handleDeleteInvoice(invoice) {
+    if (!window.confirm('Delete this invoice? This cannot be undone.')) return
+    setPoActionBusyId(invoice.purchase_request_id)
+    try {
+      const { error } = await supabase.from('invoices').delete().eq('id', invoice.id)
+      if (error) throw error
+      flashPoStatus('Invoice deleted.', true)
+      await loadPurchaseRequests()
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not delete the invoice — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // The requisitioner (or, for a service PO, the PO's own vendor-user)
+  // uploads proof of delivery/work independently of accounting's invoices --
+  // purely a reconciliation document, with no stock-on-hand effect (that
+  // stays tied to the separate Work Status "Complete" action above).
+  async function handleAddReceipt(request, file) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    if (!file) return
+    setPoActionBusyId(request.id)
+    try {
+      const ext = file.name.split('.').pop() || 'dat'
+      const path = `po-${request.id}-receipt-${Date.now()}.${ext}`
+      const { error: uploadError } = await supabase.storage
+        .from('receipts')
+        .upload(path, file, { contentType: file.type })
+      if (uploadError) throw uploadError
+      const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(path)
+      const { error } = await supabase.from('receipts').insert({
+        purchase_request_id: request.id,
+        file_url: urlData.publicUrl,
+        file_name: file.name,
+        uploaded_by: loggedInUser.id,
+      })
+      if (error) throw error
+      flashPoStatus('Receipt added.', true)
+      await loadPurchaseRequests()
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not add the receipt — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  async function handleDeleteReceipt(receipt) {
+    if (!window.confirm('Delete this receipt? This cannot be undone.')) return
+    setPoActionBusyId(receipt.purchase_request_id)
+    try {
+      const { error } = await supabase.from('receipts').delete().eq('id', receipt.id)
+      if (error) throw error
+      flashPoStatus('Receipt deleted.', true)
+      await loadPurchaseRequests()
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not delete the receipt — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // Pairs (or unpairs, when receiptId is null) a specific invoice with a
+  // specific receipt -- gated by canManageInvoicing, same as adding an
+  // invoice. Approving that pair is a separate, more specific gate
+  // (canApproveInvoice) handled by handleApproveInvoice above.
+  async function handleMatchInvoiceReceipt(invoice, receiptId) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    setPoActionBusyId(invoice.purchase_request_id)
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ matched_receipt_id: receiptId })
+        .eq('id', invoice.id)
+      if (error) throw error
+      flashPoStatus(receiptId ? 'Invoice matched to receipt.' : 'Match cleared.', true)
+      await loadPurchaseRequests()
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not update the match — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // Gated by canClosePo -- the original requester, once work is complete and
+  // every invoice is paid in full (accounting's sign-off already happened
+  // via the invoice approve/pay steps above).
+  async function handleClosePo(request) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    setPoActionBusyId(request.id)
+    try {
+      const { error } = await supabase
+        .from('purchase_requests')
+        .update({ status: 'closed', closed_by: loggedInUser.id, closed_at: new Date().toISOString() })
+        .eq('id', request.id)
+      if (error) throw error
+      flashPoStatus('PO closed.', true)
+      await loadPurchaseRequests()
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not close the PO — check the console for details.', false)
     } finally {
       setPoActionBusyId(null)
     }
@@ -3565,9 +3710,12 @@ function App() {
           setPoStatusFilter={setPoStatusFilter}
           poProjectFilter={poProjectFilter}
           setPoProjectFilter={setPoProjectFilter}
+          poView={poView}
+          setPoView={setPoView}
           projects={projects}
           poLoading={poLoading}
           visiblePurchaseRequests={visiblePurchaseRequests}
+          invoicesPendingApproval={invoicesPendingApproval}
           expandedPoId={expandedPoId}
           toggleExpandedPo={toggleExpandedPo}
           poFormOpen={poFormOpen}
@@ -3624,10 +3772,15 @@ function App() {
           computingPoNumber={computingPoNumber}
           handleIssuePurchaseOrder={handleIssuePurchaseOrder}
           handleUploadReceiptAndConfirm={handleUploadReceiptAndConfirm}
-          handleUploadInvoiceAndMatch={handleUploadInvoiceAndMatch}
-          handleToggleInvoiceMatched={handleToggleInvoiceMatched}
-          handleToggleInvoiceApproved={handleToggleInvoiceApproved}
-          handleTogglePaid={handleTogglePaid}
+          handleSetWorkStatus={handleSetWorkStatus}
+          handleAddInvoice={handleAddInvoice}
+          handleApproveInvoice={handleApproveInvoice}
+          handlePayInvoice={handlePayInvoice}
+          handleDeleteInvoice={handleDeleteInvoice}
+          handleAddReceipt={handleAddReceipt}
+          handleDeleteReceipt={handleDeleteReceipt}
+          handleMatchInvoiceReceipt={handleMatchInvoiceReceipt}
+          handleClosePo={handleClosePo}
           poActionBusyId={poActionBusyId}
           handleDeletePurchaseRequest={handleDeletePurchaseRequest}
         />

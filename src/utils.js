@@ -53,7 +53,7 @@ export function normalizeHeader(h) {
 
 // --- Purchase Orders ---
 
-export const PO_STATUS_ORDER = ['draft', 'submitted', 'approved', 'issued', 'received']
+export const PO_STATUS_ORDER = ['draft', 'submitted', 'approved', 'issued', 'closed']
 
 export const PO_STATUS_LABELS = {
   draft: 'Draft',
@@ -61,10 +61,72 @@ export const PO_STATUS_LABELS = {
   approved: 'Approved',
   issued: 'PO Issued',
   received: 'Complete/Received',
+  closed: 'Closed',
 }
 
 export function poStatusLabel(status) {
   return PO_STATUS_LABELS[status] || status
+}
+
+export const WORK_STATUS_LABELS = {
+  not_started: 'Not Started',
+  partial: 'Partially Complete',
+  complete: 'Complete',
+}
+
+export function workStatusLabel(workStatus) {
+  return WORK_STATUS_LABELS[workStatus] || workStatus
+}
+
+export const PAYMENT_STATUS_LABELS = {
+  unpaid: 'Unpaid',
+  partial: 'Partially Paid',
+  paid: 'Paid',
+}
+
+export function paymentStatusLabel(paymentStatus) {
+  return PAYMENT_STATUS_LABELS[paymentStatus] || paymentStatus
+}
+
+export function computeWorkStatus(request) {
+  return request?.work_status || 'not_started'
+}
+
+// Rounds to the cent before comparing so floating-point drift (e.g.
+// 99.999999999) never produces a false "partial" instead of "paid".
+function roundCents(n) {
+  return Math.round((Number(n) || 0) * 100) / 100
+}
+
+export function computeInvoiceTotals(invoices) {
+  const list = invoices || []
+  const invoicedTotal = list.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0)
+  const paidTotal = list.reduce((sum, inv) => sum + (inv.paid ? Number(inv.amount) || 0 : 0), 0)
+  return { invoicedTotal, paidTotal }
+}
+
+// Payment status is derived from the invoices table, never stored -- it can
+// never drift out of sync with the invoices actually on file.
+export function computePaymentStatus(request) {
+  const { paidTotal } = computeInvoiceTotals(request?.invoices)
+  const grandTotal = roundCents(computePoTotals(request).grandTotal)
+  const paid = roundCents(paidTotal)
+  if (paid <= 0) return 'unpaid'
+  if (paid >= grandTotal) return 'paid'
+  return 'partial'
+}
+
+// The original requester (or, for a service PO, the PO's own vendor-user)
+// does the final close once accounting has approved and paid every invoice
+// -- accounting's sign-off already happened via the invoice approve/pay
+// steps, so closing doesn't need its own separate role gate.
+export function canClosePo(user, request) {
+  return (
+    canConfirmReceipt(user, request) &&
+    request?.status === 'issued' &&
+    computeWorkStatus(request) === 'complete' &&
+    computePaymentStatus(request) === 'paid'
+  )
 }
 
 // A purchase request is either entirely parts or entirely a service — never
@@ -157,10 +219,12 @@ export function canReceive(user) {
 }
 
 // Whoever created the purchase request is the one who must confirm its
-// receipt — not just anyone holding the general "receive" role. For a
-// service PO, the vendor who did the work can also upload the service
-// report themselves (a parts receipt/photo still stays internal-only, since
-// the vendor isn't the one physically receiving the parts).
+// receipt (Work Status) and the one who can add receipts to the new
+// Receipts & Invoices table below — not just anyone holding the general
+// "receive" role. For a service PO, the vendor who did the work can also
+// upload the service report / a receipt themselves (a parts receipt/photo
+// still stays internal-only, since the vendor isn't the one physically
+// receiving the parts).
 export function canConfirmReceipt(user, request) {
   if (user?.id && user.id === request?.requested_by) return true
   if (isVendorUser(user) && poLineType(request) === 'service' && user?.vendor_id === request?.vendor_id) {
@@ -169,15 +233,27 @@ export function canConfirmReceipt(user, request) {
   return false
 }
 
-// Marking an invoice approved and marking it paid are both gated by this
-// one role — accounting doesn't need any other purchasing permission to do
-// either.
+// Adding an invoice, matching it to a receipt, marking one paid, and
+// deleting a mis-added invoice/receipt are all gated by this one role —
+// accounting doesn't need any other purchasing permission to do any of it.
+// Approving a matched pair is its own, more specific gate (see
+// canApproveInvoice below), not part of this.
 export function canManageInvoicing(user) {
   return userHasRole(user, 'accounting')
 }
 
+// Only the specific person who approved this PO's original requisition can
+// approve one of its matched invoice/receipt pairs — not just anyone holding
+// the general "approve" role, and only once accounting has actually paired
+// an invoice with a receipt (an unmatched invoice has nothing to approve
+// yet).
+export function canApproveInvoice(user, request, invoice) {
+  if (!invoice?.matched_receipt_id) return false
+  return Boolean(user?.id) && user.id === request?.approved_by
+}
+
 export function isApprovedOrLater(status) {
-  return ['approved', 'issued', 'received'].includes(status)
+  return ['approved', 'issued', 'received', 'closed'].includes(status)
 }
 
 // Named person(s) who actually hold a given role — since roles are strictly
@@ -201,10 +277,21 @@ export function nextStepInfo(request, users) {
       const names = usersWithRole(users, 'approve')
       return { step: 'Issue PO', who: names.length ? names.join(', ') : '—' }
     }
-    case 'issued':
-      return { step: 'Receive', who: findUserName(users, request.requested_by) }
+    case 'issued': {
+      const workStatus = computeWorkStatus(request)
+      const paymentStatus = computePaymentStatus(request)
+      if (workStatus === 'complete' && paymentStatus === 'paid') {
+        return { step: 'Close PO', who: findUserName(users, request.requested_by) }
+      }
+      if (workStatus !== 'complete') {
+        return { step: 'Receive/Complete', who: findUserName(users, request.requested_by) }
+      }
+      return { step: 'Invoicing', who: usersWithRole(users, 'accounting').join(', ') || '—' }
+    }
     case 'received':
       return { step: 'Complete', who: null }
+    case 'closed':
+      return { step: 'Done', who: null }
     default:
       return { step: '—', who: null }
   }

@@ -2489,6 +2489,12 @@ function App() {
     try {
       const { error } = await supabase.from('purchase_requests').delete().eq('id', request.id)
       if (error) throw error
+      await Promise.all([
+        ...(request.invoices || []).map((inv) => removeStorageFile('invoices', inv.file_url)),
+        ...(request.receipts || []).map((r) => removeStorageFile('receipts', r.file_url)),
+        removeStorageFile('quotes', request.quote_file_url),
+        removeStorageFile('receipts', request.receipt_file_url),
+      ])
       if (expandedPoId === request.id) setExpandedPoId(null)
       flashPoStatus('Purchase request deleted.', true)
       await loadPurchaseRequests()
@@ -2798,6 +2804,27 @@ function App() {
     }
   }
 
+  // Every uploaded PDF (invoice/receipt/quote) is stored as its Storage
+  // object path plus a public URL built from it -- deleting the DB row that
+  // references one doesn't remove the file itself, so every delete path
+  // below also has to clean up its own Storage object. Failing to remove it
+  // is logged but never blocks the delete the user actually asked for --
+  // the DB row being gone is what matters to them.
+  function storagePathFromPublicUrl(bucket, url) {
+    if (!url) return null
+    const marker = `/object/public/${bucket}/`
+    const idx = url.indexOf(marker)
+    if (idx === -1) return null
+    return decodeURIComponent(url.slice(idx + marker.length))
+  }
+
+  async function removeStorageFile(bucket, url) {
+    const path = storagePathFromPublicUrl(bucket, url)
+    if (!path) return
+    const { error } = await supabase.storage.from(bucket).remove([path])
+    if (error) console.error(`Could not remove ${bucket}/${path} from storage:`, error)
+  }
+
   // Accounting adds an invoice independently of, and in parallel with, the
   // requisitioner adding a receipt (handleAddReceipt below) -- neither
   // blocks the other. They start out unpaired; handleMatchInvoiceReceipt
@@ -2899,6 +2926,7 @@ function App() {
     try {
       const { error } = await supabase.from('invoices').delete().eq('id', invoice.id)
       if (error) throw error
+      await removeStorageFile('invoices', invoice.file_url)
       flashPoStatus('Invoice deleted.', true)
       await loadPurchaseRequests()
     } catch (error) {
@@ -2962,6 +2990,7 @@ function App() {
     try {
       const { error } = await supabase.from('receipts').delete().eq('id', receipt.id)
       if (error) throw error
+      await removeStorageFile('receipts', receipt.file_url)
       flashPoStatus('Receipt deleted.', true)
       await loadPurchaseRequests()
     } catch (error) {

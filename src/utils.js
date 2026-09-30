@@ -95,11 +95,9 @@ export function computePaymentStatus(request) {
   return request?.payment_status || 'unpaid'
 }
 
-// A PO is closeable once every receipt has been matched to an invoice, every
-// invoice has been matched to a receipt, and every invoice has been approved
-// and paid -- i.e. nothing is left dangling. This is independent of the
-// manual Work Status / Payment Status labels above (those are just display
-// stages now, not a gate), and requires at least one of each so an empty PO
+// Every receipt has been matched to an invoice, every invoice has been
+// matched to a receipt, and every invoice has been approved and paid -- i.e.
+// nothing is left dangling. Requires at least one of each so an empty PO
 // can't be closed with nothing on file.
 export function allInvoicesFullyResolved(request) {
   const invoices = request?.invoices || []
@@ -112,10 +110,19 @@ export function allInvoicesFullyResolved(request) {
 }
 
 // The original requester (or, for a service PO, the PO's own vendor-user)
-// does the final close once every receipt/invoice on file is matched,
-// approved, and paid.
+// does the final close once Work Status and Payment Status are both
+// manually confirmed AND the underlying receipts/invoices records back that
+// up (every one matched, approved, and paid) -- the manual labels alone
+// aren't enough, since someone could otherwise close a PO still marked
+// Unpaid.
 export function canClosePo(user, request) {
-  return canConfirmReceipt(user, request) && request?.status === 'issued' && allInvoicesFullyResolved(request)
+  return (
+    canConfirmReceipt(user, request) &&
+    request?.status === 'issued' &&
+    computeWorkStatus(request) === 'complete' &&
+    computePaymentStatus(request) === 'paid' &&
+    allInvoicesFullyResolved(request)
+  )
 }
 
 // Purely a display concept -- 'issued' expands into two extra stepper/badge

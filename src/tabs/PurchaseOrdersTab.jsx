@@ -1053,7 +1053,6 @@ function PurchaseOrdersTab({
           <div className={'sheet-wrap' + (poDraftFieldErrors?.lines ? ' field-invalid' : '')}>
             <table className="sheet">
               <colgroup>
-                <col style={{ width: '10%' }} />
                 <col />
                 <col style={{ width: '8%' }} />
                 <col style={{ width: '10%' }} />
@@ -1062,7 +1061,6 @@ function PurchaseOrdersTab({
               </colgroup>
               <thead>
                 <tr className="header-row">
-                  <th>Type</th>
                   <th>Part / Description</th>
                   <th className="center-cell">Qty</th>
                   <th className="center-cell">Unit Cost</th>
@@ -1073,7 +1071,7 @@ function PurchaseOrdersTab({
               <tbody>
                 {poDraftLines.length === 0 ? (
                   <tr>
-                    <td className="empty" colSpan={6}>
+                    <td className="empty" colSpan={5}>
                       No line items yet — click "+ Add Line".
                     </td>
                   </tr>
@@ -1082,21 +1080,6 @@ function PurchaseOrdersTab({
                     const part = line.part_gcs_id ? parts.find((p) => p.gcs_id === line.part_gcs_id) : null
                     return (
                       <tr key={line._tempId}>
-                        <td>
-                          {i === 0 ? (
-                            <select
-                              value={line.line_type}
-                              onChange={(e) => updatePoDraftLineField(i, 'line_type', e.target.value)}
-                            >
-                              <option value="part">Part</option>
-                              <option value="service">Service</option>
-                            </select>
-                          ) : (
-                            <span className="sub" style={{ margin: 0 }}>
-                              {line.line_type === 'part' ? 'Part' : 'Service'}
-                            </span>
-                          )}
-                        </td>
                         <td>
                           {line.line_type === 'part' ? (
                             <>

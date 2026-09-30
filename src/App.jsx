@@ -22,6 +22,7 @@ import {
   ENTITY_SCOPED_ROLES,
   linesAreMixedType,
   poLineType,
+  categoryLineType,
   canMarkPaymentPaid,
   TICKETING_URL,
 } from './utils'
@@ -2205,7 +2206,7 @@ function App() {
       setPoDraftCredit('0')
       setPoDraftSpendingCap('')
       setPoDraftCurrency('CAD')
-      setPoDraftLines([blankPurchaseRequestLine()])
+      setPoDraftLines([blankPurchaseRequestLine(categoryLineType('purchase'))])
     }
     setPoDraftFieldErrors({})
     setPoFormOpen(true)
@@ -2281,23 +2282,25 @@ function App() {
   }, [loggedInUser, projects, subProjects, vendors])
 
   function handleAddPurchaseRequestLine() {
-    // A PO is entirely parts or entirely a service — a new line always
-    // matches whatever the first line already established.
-    setPoDraftLines((prev) => [...prev, blankPurchaseRequestLine(prev[0]?.line_type ?? 'part')])
+    // Line type is dictated by the PO's category now (Purchase = parts,
+    // Service/Not to Exceed = services) -- no per-line type picker anymore.
+    setPoDraftLines((prev) => [...prev, blankPurchaseRequestLine(categoryLineType(poDraftCategory))])
   }
 
   function handleRemovePurchaseRequestLine(index) {
     setPoDraftLines((prev) => prev.filter((_, i) => i !== index))
   }
 
+  // Switching category switches every existing line's type to match, since
+  // Purchase POs are parts-only and Service/Not to Exceed POs are
+  // services-only -- there's no manual per-line override anymore.
+  function updatePoDraftCategory(category) {
+    setPoDraftCategory(category)
+    const lineType = categoryLineType(category)
+    setPoDraftLines((prev) => prev.map((l) => ({ ...l, line_type: lineType })))
+  }
+
   function updatePoDraftLineField(index, field, value) {
-    // A PO is entirely parts or entirely a service — changing the first
-    // line's type changes it for every line, so there's only ever one type
-    // selector shown to the user (on the first line).
-    if (field === 'line_type' && index === 0) {
-      setPoDraftLines((prev) => prev.map((l) => ({ ...l, line_type: value })))
-      return
-    }
     setPoDraftLines((prev) =>
       prev.map((l, i) => {
         if (i !== index) return l
@@ -3841,7 +3844,7 @@ function App() {
           poDraftTicketSystemTicketId={poDraftTicketSystemTicketId}
           poDraftTicketSystemTicketNumber={poDraftTicketSystemTicketNumber}
           poDraftCategory={poDraftCategory}
-          setPoDraftCategory={setPoDraftCategory}
+          setPoDraftCategory={updatePoDraftCategory}
           poDraftMarkupRate={poDraftMarkupRate}
           setPoDraftMarkupRate={setPoDraftMarkupRate}
           poDraftTaxRate={poDraftTaxRate}

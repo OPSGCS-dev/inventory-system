@@ -190,6 +190,13 @@ export function poCategory(request) {
   return request?.po_category || 'purchase'
 }
 
+// A PO's category now dictates its line type outright -- Purchase POs are
+// parts only, Service and Not to Exceed POs are services only -- so there's
+// no separate per-line type picker for the requester to get wrong.
+export function categoryLineType(category) {
+  return category === 'purchase' ? 'part' : 'service'
+}
+
 // Sum of every invoice on file for a request, regardless of approval/paid
 // state -- what's actually been billed against it so far.
 export function computeInvoicedTotal(request) {

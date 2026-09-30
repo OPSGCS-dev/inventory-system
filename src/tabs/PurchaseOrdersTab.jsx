@@ -14,6 +14,7 @@ import {
   lineTotal,
   filterPartsForSearch,
   isApprovedOrLater,
+  canPreviewPo,
   buildPoMailto,
   computePoTotals,
   COMPANY_ADDRESS_BLOCK,
@@ -361,7 +362,7 @@ function PurchaseOrdersTab({
             </p>
           )}
 
-          {isApprovedOrLater(r.status) && (
+          {canPreviewPo(r.status) && (
             <div className={'po-print-area' + (showPoPreview ? ' po-print-area-preview' : '')}>
               <div className="po-print-header">
                 <div className="po-print-header-left">
@@ -668,7 +669,7 @@ function PurchaseOrdersTab({
               </span>
             )}
 
-            {isApprovedOrLater(r.status) && (
+            {canPreviewPo(r.status) && (
               <button className="btn-secondary" onClick={() => setShowPoPreview((v) => !v)}>
                 {showPoPreview ? 'Hide PO' : 'View PO'}
               </button>

@@ -255,6 +255,14 @@ export function isApprovedOrLater(status) {
   return ['approved', 'issued', 'closed'].includes(status)
 }
 
+// A submitted request can already be previewed as a full PO -- markup, tax,
+// and grand total included -- so an approver can see exactly what they'd be
+// signing off on before approving it. Printing/emailing it to the vendor
+// still waits for isApprovedOrLater, since there's no real PO number yet.
+export function canPreviewPo(status) {
+  return status === 'submitted' || isApprovedOrLater(status)
+}
+
 // Named person(s) who actually hold a given role — since roles are strictly
 // additive now (admin included), there's no fallback: if nobody has ticked
 // the role, nobody can act on it yet.

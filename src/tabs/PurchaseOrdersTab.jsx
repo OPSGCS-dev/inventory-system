@@ -115,6 +115,11 @@ function PurchaseOrdersTab({
   setPoDraftChargeableExpense,
   poDraftVendorQuoteNumber,
   setPoDraftVendorQuoteNumber,
+  poDraftQuoteFileUrl,
+  poDraftQuoteFileName,
+  poDraftNewQuoteFile,
+  setPoDraftNewQuoteFile,
+  clearPoDraftQuoteFile,
   poDraftTicketSystemTicketId,
   poDraftTicketSystemTicketNumber,
   poDraftCategory,
@@ -140,6 +145,8 @@ function PurchaseOrdersTab({
   handleCreatePurchaseRequest,
   handleSubmitPurchaseRequest,
   handleApprovePurchaseRequest,
+  handleHoldPurchaseRequest,
+  handleResumeFromHold,
   issuingRequestId,
   startIssuePurchaseOrder,
   cancelIssuePurchaseOrder,
@@ -223,6 +230,7 @@ function PurchaseOrdersTab({
               <span className={`po-badge po-badge-${computePoProgressStage(r)}`}>
                 {PO_PROGRESS_STAGE_LABELS[computePoProgressStage(r)] || poStatusLabel(r.status)}
               </span>
+              {r.on_hold && <span className="po-badge po-badge-onhold">On Hold</span>}
               {isOverSpendingCap(r) && (
                 <span className="po-badge po-badge-overcap">Over Spending Cap</span>
               )}
@@ -272,6 +280,26 @@ function PurchaseOrdersTab({
                   </span>
                 </div>
               </>
+            )}
+            {r.on_hold && (
+              <div className="po-detail-meta-item">
+                <span className="po-detail-label">On Hold</span>
+                <span className="po-detail-value">
+                  {findUserName(users, r.held_by)}
+                  {r.held_at ? ` — ${new Date(r.held_at).toLocaleString()}` : ''}
+                  {r.hold_reason ? `: ${r.hold_reason}` : ''}
+                </span>
+              </div>
+            )}
+            {r.quote_file_url && (
+              <div className="po-detail-meta-item">
+                <span className="po-detail-label">Quote</span>
+                <span className="po-detail-value">
+                  <a href={r.quote_file_url} target="_blank" rel="noreferrer">
+                    {r.quote_file_name || 'View quote'} ↗
+                  </a>
+                </span>
+              </div>
             )}
             {r.description && (
               <div className="po-detail-meta-item">
@@ -667,16 +695,35 @@ function PurchaseOrdersTab({
 
             {r.status === 'submitted' &&
               (canApproveRequests(loggedInUser, r) ? (
-                <button
-                  className="btn-primary"
-                  onClick={() => handleApprovePurchaseRequest(r)}
-                  disabled={busy}
-                >
-                  {busy ? 'Approving…' : 'Approve'}
-                </button>
+                r.on_hold ? (
+                  <button
+                    className="btn-primary"
+                    onClick={() => handleResumeFromHold(r)}
+                    disabled={busy}
+                  >
+                    {busy ? 'Resuming…' : 'Resume'}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      className="btn-primary"
+                      onClick={() => handleApprovePurchaseRequest(r)}
+                      disabled={busy}
+                    >
+                      {busy ? 'Approving…' : 'Approve'}
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleHoldPurchaseRequest(r)}
+                      disabled={busy}
+                    >
+                      Hold
+                    </button>
+                  </>
+                )
               ) : (
                 <span className="sub" style={{ margin: 0 }}>
-                  Waiting on an approver.
+                  {r.on_hold ? 'On hold.' : 'Waiting on an approver.'}
                 </span>
               ))}
 
@@ -946,6 +993,38 @@ function PurchaseOrdersTab({
                 />
                 <span>{poDraftChargeableExpense ? 'Yes' : 'No'}</span>
               </div>
+            </div>
+          </div>
+
+          <div className="field-row" style={{ marginTop: 12 }}>
+            <div>
+              <label htmlFor="po_draft_quote_file">Quote File</label>
+              {poDraftQuoteFileUrl && !poDraftNewQuoteFile && (
+                <div style={{ marginBottom: 6 }}>
+                  <a href={poDraftQuoteFileUrl} target="_blank" rel="noreferrer">
+                    {poDraftQuoteFileName || 'View quote'} ↗
+                  </a>{' '}
+                  <button type="button" className="btn-secondary" onClick={clearPoDraftQuoteFile}>
+                    Remove
+                  </button>
+                </div>
+              )}
+              {poDraftNewQuoteFile && (
+                <div style={{ marginBottom: 6 }}>
+                  <span className="sub" style={{ margin: 0 }}>
+                    {poDraftNewQuoteFile.name} (will upload on save)
+                  </span>{' '}
+                  <button type="button" className="btn-secondary" onClick={clearPoDraftQuoteFile}>
+                    Cancel
+                  </button>
+                </div>
+              )}
+              <input
+                id="po_draft_quote_file"
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => setPoDraftNewQuoteFile(e.target.files?.[0] || null)}
+              />
             </div>
           </div>
 
@@ -1344,15 +1423,25 @@ function PurchaseOrdersTab({
                             {busy ? 'Submitting…' : 'Submit'}
                           </button>
                         )}
-                        {r.status === 'submitted' && canApproveRequests(loggedInUser, r) && (
-                          <button
-                            className="btn-primary po-action-btn"
-                            onClick={() => handleApprovePurchaseRequest(r)}
-                            disabled={busy}
-                          >
-                            {busy ? 'Approving…' : 'Approve'}
-                          </button>
-                        )}
+                        {r.status === 'submitted' &&
+                          canApproveRequests(loggedInUser, r) &&
+                          (r.on_hold ? (
+                            <button
+                              className="btn-primary po-action-btn"
+                              onClick={() => handleResumeFromHold(r)}
+                              disabled={busy}
+                            >
+                              {busy ? 'Resuming…' : 'Resume'}
+                            </button>
+                          ) : (
+                            <button
+                              className="btn-primary po-action-btn"
+                              onClick={() => handleApprovePurchaseRequest(r)}
+                              disabled={busy}
+                            >
+                              {busy ? 'Approving…' : 'Approve'}
+                            </button>
+                          ))}
                         {r.status === 'approved' && canIssuePurchaseOrder(loggedInUser, r) && (
                           <button
                             className="btn-primary po-action-btn"

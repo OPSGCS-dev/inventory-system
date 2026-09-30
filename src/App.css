@@ -462,6 +462,7 @@ table.sheet td.total-col {
 .po-category-badge-not_to_exceed { background: #fdf1d6; color: var(--warn); }
 
 .po-badge-overcap { background: #fdecea; color: var(--danger); }
+.po-badge-onhold { background: #fdf1d6; color: var(--warn); }
 
 .role-check {
   color: var(--success);

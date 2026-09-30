@@ -374,7 +374,10 @@ export function nextStepInfo(request, users) {
       return { step: 'Submit', who: findUserName(users, request.requested_by) }
     case 'submitted': {
       const names = usersWithRole(users, 'purchase_rec_approval')
-      return { step: 'Approval', who: names.length ? names.join(', ') : '—' }
+      return {
+        step: request.on_hold ? 'On Hold' : 'Approval',
+        who: names.length ? names.join(', ') : '—',
+      }
     }
     case 'approved': {
       const names = usersWithRole(users, 'po_issue')

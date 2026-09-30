@@ -157,6 +157,9 @@ function App() {
   const [poDraftDescription, setPoDraftDescription] = useState('')
   const [poDraftChargeableExpense, setPoDraftChargeableExpense] = useState(false)
   const [poDraftVendorQuoteNumber, setPoDraftVendorQuoteNumber] = useState('')
+  const [poDraftQuoteFileUrl, setPoDraftQuoteFileUrl] = useState(null)
+  const [poDraftQuoteFileName, setPoDraftQuoteFileName] = useState(null)
+  const [poDraftNewQuoteFile, setPoDraftNewQuoteFile] = useState(null)
   const [poDraftCategory, setPoDraftCategory] = useState('purchase')
   const [poDraftMarkupRate, setPoDraftMarkupRate] = useState('10')
   const [poDraftTaxRate, setPoDraftTaxRate] = useState('13')
@@ -2153,6 +2156,9 @@ function App() {
       setPoDraftTicketSystemTicketNumber(existing.ticket_system_ticket_number ?? null)
       setPoDraftChargeableExpense(Boolean(existing.chargeable_expense))
       setPoDraftVendorQuoteNumber(existing.vendor_quote_number || '')
+      setPoDraftQuoteFileUrl(existing.quote_file_url || null)
+      setPoDraftQuoteFileName(existing.quote_file_name || null)
+      setPoDraftNewQuoteFile(null)
       setPoDraftCategory(existing.po_category || 'purchase')
       setPoDraftMarkupRate(
         existing.markup_rate === null || existing.markup_rate === undefined ? '10' : String(existing.markup_rate)
@@ -2199,6 +2205,9 @@ function App() {
       setPoDraftTicketSystemTicketNumber(prefill?.ticketSystemTicketNumber ?? null)
       setPoDraftChargeableExpense(false)
       setPoDraftVendorQuoteNumber(prefill?.vendorQuoteNumber ?? '')
+      setPoDraftQuoteFileUrl(null)
+      setPoDraftQuoteFileName(null)
+      setPoDraftNewQuoteFile(null)
       setPoDraftCategory('purchase')
       setPoDraftMarkupRate('10')
       setPoDraftTaxRate('13')
@@ -2342,6 +2351,10 @@ function App() {
       )
       return
     }
+    if (poDraftNewQuoteFile && poDraftNewQuoteFile.type !== 'application/pdf') {
+      flashPoStatus('Quote attachment must be a PDF file.', false)
+      return
+    }
     setPoDraftFieldErrors({})
 
     // Markup/shipping only ever apply to a Purchase-category PO; Service and
@@ -2359,6 +2372,20 @@ function App() {
 
     setSavingPoRequest(true)
     try {
+      let quoteFileUrl = poDraftQuoteFileUrl
+      let quoteFileName = poDraftQuoteFileName
+      if (poDraftNewQuoteFile) {
+        const ext = poDraftNewQuoteFile.name.split('.').pop() || 'pdf'
+        const path = `quote-${crypto.randomUUID()}.${ext}`
+        const { error: uploadError } = await supabase.storage
+          .from('quotes')
+          .upload(path, poDraftNewQuoteFile, { contentType: 'application/pdf' })
+        if (uploadError) throw uploadError
+        const { data: urlData } = supabase.storage.from('quotes').getPublicUrl(path)
+        quoteFileUrl = urlData.publicUrl
+        quoteFileName = poDraftNewQuoteFile.name
+      }
+
       let requestId = poDraftId
       if (requestId) {
         const { error } = await supabase
@@ -2373,6 +2400,8 @@ function App() {
             budget_subcategory_id: poDraftBudgetSubcategoryId,
             chargeable_expense: poDraftChargeableExpense,
             vendor_quote_number: poDraftVendorQuoteNumber.trim() || null,
+            quote_file_url: quoteFileUrl,
+            quote_file_name: quoteFileName,
             po_category: poDraftCategory,
             markup_rate: markupRateToSave,
             tax_rate: poDraftTaxRate === '' ? 13 : Number(poDraftTaxRate),
@@ -2402,6 +2431,8 @@ function App() {
             budget_subcategory_id: poDraftBudgetSubcategoryId,
             chargeable_expense: poDraftChargeableExpense,
             vendor_quote_number: poDraftVendorQuoteNumber.trim() || null,
+            quote_file_url: quoteFileUrl,
+            quote_file_name: quoteFileName,
             po_category: poDraftCategory,
             markup_rate: markupRateToSave,
             tax_rate: poDraftTaxRate === '' ? 13 : Number(poDraftTaxRate),
@@ -2516,6 +2547,56 @@ function App() {
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not approve — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // Puts a submitted request on hold instead of approving it -- an
+  // alternative to the approve decision, not a separate status, so it can be
+  // resumed back to a normal pending-approval request with no history lost.
+  async function handleHoldPurchaseRequest(request) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    const reason = window.prompt('Reason for putting this PO on hold (optional):')
+    if (reason === null) return
+    setPoActionBusyId(request.id)
+    try {
+      const { error } = await supabase
+        .from('purchase_requests')
+        .update({
+          on_hold: true,
+          hold_reason: reason.trim() || null,
+          held_by: loggedInUser.id,
+          held_at: new Date().toISOString(),
+        })
+        .eq('id', request.id)
+      if (error) throw error
+      flashPoStatus('Request put on hold.', true)
+      await loadPurchaseRequests()
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not put the request on hold — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  async function handleResumeFromHold(request) {
+    setPoActionBusyId(request.id)
+    try {
+      const { error } = await supabase
+        .from('purchase_requests')
+        .update({ on_hold: false, hold_reason: null, held_by: null, held_at: null })
+        .eq('id', request.id)
+      if (error) throw error
+      flashPoStatus('Hold removed — back to pending approval.', true)
+      await loadPurchaseRequests()
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not resume the request — check the console for details.', false)
     } finally {
       setPoActionBusyId(null)
     }
@@ -3841,6 +3922,15 @@ function App() {
           setPoDraftChargeableExpense={setPoDraftChargeableExpense}
           poDraftVendorQuoteNumber={poDraftVendorQuoteNumber}
           setPoDraftVendorQuoteNumber={setPoDraftVendorQuoteNumber}
+          poDraftQuoteFileUrl={poDraftQuoteFileUrl}
+          poDraftQuoteFileName={poDraftQuoteFileName}
+          poDraftNewQuoteFile={poDraftNewQuoteFile}
+          setPoDraftNewQuoteFile={setPoDraftNewQuoteFile}
+          clearPoDraftQuoteFile={() => {
+            setPoDraftQuoteFileUrl(null)
+            setPoDraftQuoteFileName(null)
+            setPoDraftNewQuoteFile(null)
+          }}
           poDraftTicketSystemTicketId={poDraftTicketSystemTicketId}
           poDraftTicketSystemTicketNumber={poDraftTicketSystemTicketNumber}
           poDraftCategory={poDraftCategory}
@@ -3866,6 +3956,8 @@ function App() {
           handleCreatePurchaseRequest={handleCreatePurchaseRequest}
           handleSubmitPurchaseRequest={handleSubmitPurchaseRequest}
           handleApprovePurchaseRequest={handleApprovePurchaseRequest}
+          handleHoldPurchaseRequest={handleHoldPurchaseRequest}
+          handleResumeFromHold={handleResumeFromHold}
           issuingRequestId={issuingRequestId}
           startIssuePurchaseOrder={startIssuePurchaseOrder}
           cancelIssuePurchaseOrder={cancelIssuePurchaseOrder}

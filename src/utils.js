@@ -279,6 +279,18 @@ export function canCreatePurchaseRequests(user) {
   return userHasRole(user, 'purchase_req')
 }
 
+// A draft stays editable by anyone who can create requests (matching how
+// "Edit Draft" always worked). Once submitted, only the original requester
+// (or an admin) can still adjust it -- most useful while an approver has put
+// it on hold and is waiting on a fix, since otherwise a hold would just be a
+// dead end with no way to act on the reason for it.
+export function canEditPurchaseRequest(user, request) {
+  if (!request) return false
+  if (request.status === 'draft') return canCreatePurchaseRequests(user)
+  if (request.status === 'submitted') return isAdmin(user) || user?.id === request.requested_by
+  return false
+}
+
 // Its own explicit role now, decoupled from Purchase Rec -- only used to
 // decide whether to show the "Ticketing" link; the ticket system re-checks
 // eligibility itself on login regardless.

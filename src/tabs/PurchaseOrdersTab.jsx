@@ -30,6 +30,7 @@ import {
   nextStepInfo,
   truncate,
   canConfirmReceipt,
+  canEditPurchaseRequest,
   poLineType,
   TICKETING_URL,
   isAdmin,
@@ -674,7 +675,13 @@ function PurchaseOrdersTab({
             {r.status === 'draft' && (
               <>
                 {canCreate && (
-                  <button className="btn-secondary" onClick={() => openPoDraftForm(r)}>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => {
+                      openPoDraftForm(r)
+                      toggleExpandedPo(r.id)
+                    }}
+                  >
                     Edit Draft
                   </button>
                 )}
@@ -691,6 +698,18 @@ function PurchaseOrdersTab({
                   </span>
                 )}
               </>
+            )}
+
+            {r.status === 'submitted' && canEditPurchaseRequest(loggedInUser, r) && (
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  openPoDraftForm(r)
+                  toggleExpandedPo(r.id)
+                }}
+              >
+                Edit Request
+              </button>
             )}
 
             {r.status === 'submitted' &&
@@ -839,7 +858,7 @@ function PurchaseOrdersTab({
       {poFormOpen && (
         <div className="card">
           <div className="card-header">
-            <h2>{poDraftId ? 'Edit Draft Request' : 'New Purchase Request'}</h2>
+            <h2>{poDraftId ? 'Edit Request' : 'New Purchase Request'}</h2>
             {poDraftTicketSystemTicketNumber && (
               <a
                 href={`${TICKETING_URL}/tickets/${poDraftTicketSystemTicketId}`}

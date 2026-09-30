@@ -171,6 +171,42 @@ export function linesAreMixedType(lines) {
   return types.has('part') && types.has('service')
 }
 
+// A PO's category is independent of its line type (part vs service): it
+// decides whether markup/shipping apply and whether a spending cap is
+// tracked. Defaults to 'purchase' for anything created before this existed.
+export const PO_CATEGORY_OPTIONS = [
+  { value: 'purchase', label: 'Purchase' },
+  { value: 'service', label: 'Service' },
+  { value: 'not_to_exceed', label: 'Not to Exceed' },
+]
+
+export const PO_CATEGORY_LABELS = {
+  purchase: 'Purchase',
+  service: 'Service',
+  not_to_exceed: 'Not to Exceed',
+}
+
+export function poCategory(request) {
+  return request?.po_category || 'purchase'
+}
+
+// Sum of every invoice on file for a request, regardless of approval/paid
+// state -- what's actually been billed against it so far.
+export function computeInvoicedTotal(request) {
+  const invoices = request?.invoices || []
+  return invoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0)
+}
+
+// Only meaningful for a Not to Exceed PO with a cap set -- flags once
+// invoiced amounts run past it, so accounting/the requester can catch it
+// regardless of how many invoices are still unapproved or unpaid.
+export function isOverSpendingCap(request) {
+  if (poCategory(request) !== 'not_to_exceed') return false
+  const cap = Number(request?.spending_cap)
+  if (!cap) return false
+  return computeInvoicedTotal(request) > cap
+}
+
 // One role per step of the PO process, plus the other roles the app needs.
 // Strictly additive, same as before -- admin only grants Admin-tab editing,
 // not any of these. 'purchase_rec_approval' and 'po_issue' can additionally
@@ -383,9 +419,13 @@ export function computePoTotals(request) {
     .filter((l) => l.line_type === 'part')
     .reduce((sum, l) => sum + lineTotal(l), 0)
 
+  // Markup and shipping/handling only apply to Purchase-category POs --
+  // Service and Not to Exceed POs never carry either, even if a stale value
+  // is still sitting on the row from before the category was changed.
+  const isPurchaseCategory = poCategory(request) === 'purchase'
   const credit = Number(request?.credit) || 0
-  const shipping = Number(request?.shipping_handling) || 0
-  const markupRate = Number(request?.markup_rate) || 0
+  const shipping = isPurchaseCategory ? Number(request?.shipping_handling) || 0 : 0
+  const markupRate = isPurchaseCategory ? Number(request?.markup_rate) || 0 : 0
   const taxRate = Number(request?.tax_rate) || 0
 
   const markupAmount = partSubtotal * (markupRate / 100)

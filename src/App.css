@@ -457,6 +457,12 @@ table.sheet td.total-col {
 .po-payment-badge-partial { background: #fdf1d6; color: var(--warn); }
 .po-payment-badge-paid { background: #e6f4ea; color: var(--success); }
 
+.po-category-badge-purchase { background: #e3edfb; color: var(--accent-dark); }
+.po-category-badge-service { background: #ece2fb; color: #6a3fae; }
+.po-category-badge-not_to_exceed { background: #fdf1d6; color: var(--warn); }
+
+.po-badge-overcap { background: #fdecea; color: var(--danger); }
+
 .role-check {
   color: var(--success);
   font-weight: 700;

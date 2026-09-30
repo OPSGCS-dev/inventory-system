@@ -156,10 +156,12 @@ function App() {
   const [poDraftDescription, setPoDraftDescription] = useState('')
   const [poDraftChargeableExpense, setPoDraftChargeableExpense] = useState(false)
   const [poDraftVendorQuoteNumber, setPoDraftVendorQuoteNumber] = useState('')
+  const [poDraftCategory, setPoDraftCategory] = useState('purchase')
   const [poDraftMarkupRate, setPoDraftMarkupRate] = useState('10')
   const [poDraftTaxRate, setPoDraftTaxRate] = useState('13')
   const [poDraftShippingHandling, setPoDraftShippingHandling] = useState('0')
   const [poDraftCredit, setPoDraftCredit] = useState('0')
+  const [poDraftSpendingCap, setPoDraftSpendingCap] = useState('')
   const [poDraftCurrency, setPoDraftCurrency] = useState('CAD')
   const [poDraftLines, setPoDraftLines] = useState([])
   const [savingPoRequest, setSavingPoRequest] = useState(false)
@@ -2150,6 +2152,7 @@ function App() {
       setPoDraftTicketSystemTicketNumber(existing.ticket_system_ticket_number ?? null)
       setPoDraftChargeableExpense(Boolean(existing.chargeable_expense))
       setPoDraftVendorQuoteNumber(existing.vendor_quote_number || '')
+      setPoDraftCategory(existing.po_category || 'purchase')
       setPoDraftMarkupRate(
         existing.markup_rate === null || existing.markup_rate === undefined ? '10' : String(existing.markup_rate)
       )
@@ -2163,6 +2166,11 @@ function App() {
       )
       setPoDraftCredit(
         existing.credit === null || existing.credit === undefined ? '0' : String(existing.credit)
+      )
+      setPoDraftSpendingCap(
+        existing.spending_cap === null || existing.spending_cap === undefined
+          ? ''
+          : String(existing.spending_cap)
       )
       setPoDraftCurrency(existing.currency || 'CAD')
       setPoDraftLines(
@@ -2190,10 +2198,12 @@ function App() {
       setPoDraftTicketSystemTicketNumber(prefill?.ticketSystemTicketNumber ?? null)
       setPoDraftChargeableExpense(false)
       setPoDraftVendorQuoteNumber(prefill?.vendorQuoteNumber ?? '')
+      setPoDraftCategory('purchase')
       setPoDraftMarkupRate('10')
       setPoDraftTaxRate('13')
       setPoDraftShippingHandling('0')
       setPoDraftCredit('0')
+      setPoDraftSpendingCap('')
       setPoDraftCurrency('CAD')
       setPoDraftLines([blankPurchaseRequestLine()])
     }
@@ -2331,6 +2341,19 @@ function App() {
     }
     setPoDraftFieldErrors({})
 
+    // Markup/shipping only ever apply to a Purchase-category PO; Service and
+    // Not to Exceed POs get zero for both regardless of what's still in the
+    // (hidden) fields, and only a Not to Exceed PO stores a spending cap.
+    const isPurchaseCategory = poDraftCategory === 'purchase'
+    const markupRateToSave = isPurchaseCategory ? (poDraftMarkupRate === '' ? 10 : Number(poDraftMarkupRate)) : 0
+    const shippingToSave = isPurchaseCategory
+      ? poDraftShippingHandling === ''
+        ? 0
+        : Number(poDraftShippingHandling)
+      : 0
+    const spendingCapToSave =
+      poDraftCategory === 'not_to_exceed' && poDraftSpendingCap !== '' ? Number(poDraftSpendingCap) : null
+
     setSavingPoRequest(true)
     try {
       let requestId = poDraftId
@@ -2347,10 +2370,12 @@ function App() {
             budget_subcategory_id: poDraftBudgetSubcategoryId,
             chargeable_expense: poDraftChargeableExpense,
             vendor_quote_number: poDraftVendorQuoteNumber.trim() || null,
-            markup_rate: poDraftMarkupRate === '' ? 10 : Number(poDraftMarkupRate),
+            po_category: poDraftCategory,
+            markup_rate: markupRateToSave,
             tax_rate: poDraftTaxRate === '' ? 13 : Number(poDraftTaxRate),
-            shipping_handling: poDraftShippingHandling === '' ? 0 : Number(poDraftShippingHandling),
+            shipping_handling: shippingToSave,
             credit: poDraftCredit === '' ? 0 : Number(poDraftCredit),
+            spending_cap: spendingCapToSave,
             currency: poDraftCurrency.trim() || 'CAD',
           })
           .eq('id', requestId)
@@ -2374,10 +2399,12 @@ function App() {
             budget_subcategory_id: poDraftBudgetSubcategoryId,
             chargeable_expense: poDraftChargeableExpense,
             vendor_quote_number: poDraftVendorQuoteNumber.trim() || null,
-            markup_rate: poDraftMarkupRate === '' ? 10 : Number(poDraftMarkupRate),
+            po_category: poDraftCategory,
+            markup_rate: markupRateToSave,
             tax_rate: poDraftTaxRate === '' ? 13 : Number(poDraftTaxRate),
-            shipping_handling: poDraftShippingHandling === '' ? 0 : Number(poDraftShippingHandling),
+            shipping_handling: shippingToSave,
             credit: poDraftCredit === '' ? 0 : Number(poDraftCredit),
+            spending_cap: spendingCapToSave,
             currency: poDraftCurrency.trim() || 'CAD',
             status: 'draft',
             ticket_system_ticket_id: poDraftTicketSystemTicketId,
@@ -3813,6 +3840,8 @@ function App() {
           setPoDraftVendorQuoteNumber={setPoDraftVendorQuoteNumber}
           poDraftTicketSystemTicketId={poDraftTicketSystemTicketId}
           poDraftTicketSystemTicketNumber={poDraftTicketSystemTicketNumber}
+          poDraftCategory={poDraftCategory}
+          setPoDraftCategory={setPoDraftCategory}
           poDraftMarkupRate={poDraftMarkupRate}
           setPoDraftMarkupRate={setPoDraftMarkupRate}
           poDraftTaxRate={poDraftTaxRate}
@@ -3821,6 +3850,8 @@ function App() {
           setPoDraftShippingHandling={setPoDraftShippingHandling}
           poDraftCredit={poDraftCredit}
           setPoDraftCredit={setPoDraftCredit}
+          poDraftSpendingCap={poDraftSpendingCap}
+          setPoDraftSpendingCap={setPoDraftSpendingCap}
           poDraftCurrency={poDraftCurrency}
           setPoDraftCurrency={setPoDraftCurrency}
           poDraftLines={poDraftLines}

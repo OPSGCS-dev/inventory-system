@@ -33,6 +33,11 @@ import {
   poLineType,
   TICKETING_URL,
   isAdmin,
+  PO_CATEGORY_OPTIONS,
+  PO_CATEGORY_LABELS,
+  poCategory,
+  computeInvoicedTotal,
+  isOverSpendingCap,
 } from '../utils'
 import InvoicesPanel from './InvoicesPanel'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
@@ -112,6 +117,8 @@ function PurchaseOrdersTab({
   setPoDraftVendorQuoteNumber,
   poDraftTicketSystemTicketId,
   poDraftTicketSystemTicketNumber,
+  poDraftCategory,
+  setPoDraftCategory,
   poDraftMarkupRate,
   setPoDraftMarkupRate,
   poDraftTaxRate,
@@ -120,6 +127,8 @@ function PurchaseOrdersTab({
   setPoDraftShippingHandling,
   poDraftCredit,
   setPoDraftCredit,
+  poDraftSpendingCap,
+  setPoDraftSpendingCap,
   poDraftCurrency,
   setPoDraftCurrency,
   poDraftLines,
@@ -208,9 +217,15 @@ function PurchaseOrdersTab({
               Request #{r.id} — {r.projects?.name || '—'}
             </h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className={`po-badge po-category-badge-${poCategory(r)}`}>
+                {PO_CATEGORY_LABELS[poCategory(r)]}
+              </span>
               <span className={`po-badge po-badge-${computePoProgressStage(r)}`}>
                 {PO_PROGRESS_STAGE_LABELS[computePoProgressStage(r)] || poStatusLabel(r.status)}
               </span>
+              {isOverSpendingCap(r) && (
+                <span className="po-badge po-badge-overcap">Over Spending Cap</span>
+              )}
               {canDelete && (
                 <button
                   className="btn-secondary"
@@ -238,6 +253,25 @@ function PurchaseOrdersTab({
                 <span className="po-detail-label">Project</span>
                 <span className="po-detail-value">{r.sub_projects.name}</span>
               </div>
+            )}
+            {poCategory(r) === 'not_to_exceed' && (
+              <>
+                <div className="po-detail-meta-item">
+                  <span className="po-detail-label">Spending Cap</span>
+                  <span className="po-detail-value">
+                    {r.spending_cap ? `$${Number(r.spending_cap).toFixed(2)}` : '—'}
+                  </span>
+                </div>
+                <div className="po-detail-meta-item">
+                  <span className="po-detail-label">Invoiced to Date</span>
+                  <span
+                    className="po-detail-value"
+                    style={isOverSpendingCap(r) ? { color: 'var(--danger)', fontWeight: 600 } : undefined}
+                  >
+                    ${computeInvoicedTotal(r).toFixed(2)}
+                  </span>
+                </div>
+              </>
             )}
             {r.description && (
               <div className="po-detail-meta-item">
@@ -533,16 +567,20 @@ function PurchaseOrdersTab({
                             <th>Credit</th>
                             <td>-${totals.credit.toFixed(2)}</td>
                           </tr>
-                          <tr>
-                            <th>Shipping/Handling</th>
-                            <td>${totals.shipping.toFixed(2)}</td>
-                          </tr>
-                          <tr>
-                            <th>Vendor Mark-Up</th>
-                            <td>
-                              {totals.markupRate.toFixed(1)}% ${totals.markupAmount.toFixed(2)}
-                            </td>
-                          </tr>
+                          {poCategory(r) === 'purchase' && (
+                            <tr>
+                              <th>Shipping/Handling</th>
+                              <td>${totals.shipping.toFixed(2)}</td>
+                            </tr>
+                          )}
+                          {poCategory(r) === 'purchase' && (
+                            <tr>
+                              <th>Vendor Mark-Up</th>
+                              <td>
+                                {totals.markupRate.toFixed(1)}% ${totals.markupAmount.toFixed(2)}
+                              </td>
+                            </tr>
+                          )}
                           <tr>
                             <th>Sales Taxes</th>
                             <td>
@@ -553,6 +591,17 @@ function PurchaseOrdersTab({
                             <th>Grand Total</th>
                             <td>${totals.grandTotal.toFixed(2)}</td>
                           </tr>
+                          {poCategory(r) === 'not_to_exceed' && (
+                            <tr>
+                              <th>Spending Cap</th>
+                              <td style={isOverSpendingCap(r) ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
+                                {r.spending_cap ? `$${Number(r.spending_cap).toFixed(2)}` : '—'}
+                                {' · Invoiced $'}
+                                {computeInvoicedTotal(r).toFixed(2)}
+                                {isOverSpendingCap(r) ? ' (OVER CAP)' : ''}
+                              </td>
+                            </tr>
+                          )}
                           <tr>
                             <th>Currency</th>
                             <td>{r.currency || 'CAD'}</td>
@@ -902,15 +951,18 @@ function PurchaseOrdersTab({
 
           <div className="field-row" style={{ marginTop: 12 }}>
             <div>
-              <label htmlFor="po_draft_markup_rate">Markup %</label>
-              <input
-                id="po_draft_markup_rate"
-                type="number"
-                min="0"
-                step="0.1"
-                value={poDraftMarkupRate}
-                onChange={(e) => setPoDraftMarkupRate(e.target.value)}
-              />
+              <label htmlFor="po_draft_category">PO Category</label>
+              <select
+                id="po_draft_category"
+                value={poDraftCategory}
+                onChange={(e) => setPoDraftCategory(e.target.value)}
+              >
+                {PO_CATEGORY_OPTIONS.map((c) => (
+                  <option value={c.value} key={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label htmlFor="po_draft_tax_rate">Sales Tax %</label>
@@ -925,18 +977,50 @@ function PurchaseOrdersTab({
             </div>
           </div>
 
-          <div className="field-row" style={{ marginTop: 12 }}>
-            <div>
-              <label htmlFor="po_draft_shipping">Shipping/Handling</label>
-              <input
-                id="po_draft_shipping"
-                type="number"
-                min="0"
-                step="0.01"
-                value={poDraftShippingHandling}
-                onChange={(e) => setPoDraftShippingHandling(e.target.value)}
-              />
+          {poDraftCategory === 'purchase' && (
+            <div className="field-row" style={{ marginTop: 12 }}>
+              <div>
+                <label htmlFor="po_draft_markup_rate">Markup %</label>
+                <input
+                  id="po_draft_markup_rate"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={poDraftMarkupRate}
+                  onChange={(e) => setPoDraftMarkupRate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="po_draft_shipping">Shipping/Handling</label>
+                <input
+                  id="po_draft_shipping"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={poDraftShippingHandling}
+                  onChange={(e) => setPoDraftShippingHandling(e.target.value)}
+                />
+              </div>
             </div>
+          )}
+
+          {poDraftCategory === 'not_to_exceed' && (
+            <div className="field-row" style={{ marginTop: 12 }}>
+              <div>
+                <label htmlFor="po_draft_spending_cap">Spending Cap</label>
+                <input
+                  id="po_draft_spending_cap"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={poDraftSpendingCap}
+                  onChange={(e) => setPoDraftSpendingCap(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="field-row" style={{ marginTop: 12 }}>
             <div>
               <label htmlFor="po_draft_credit">Credit</label>
               <input

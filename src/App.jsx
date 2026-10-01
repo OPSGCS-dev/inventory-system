@@ -2714,7 +2714,11 @@ function App() {
     const enteringComplete = workStatus === fullyDoneValue && request.work_status !== fullyDoneValue
     setPoActionBusyId(request.id)
     try {
-      if (enteringComplete) {
+      // Belt-and-suspenders on top of the partLines check below: a Service
+      // (or Not to Exceed) PO never has part lines by construction, but
+      // gating on category too means a mislabeled/edited-after-the-fact row
+      // still can't roll stock in or write a journal entry it shouldn't.
+      if (enteringComplete && poCategory(request) === 'purchase') {
         const partLines = (request.purchase_request_lines || []).filter(
           (l) => l.line_type === 'part' && l.part_gcs_id
         )

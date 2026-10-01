@@ -14,7 +14,7 @@ import {
   computeWorkStatus,
   computePaymentStatus,
   canMarkPaymentPaid,
-  WORK_STATUS_LABELS,
+  workStatusOptionsForCategory,
   PAYMENT_STATUS_LABELS,
   PO_PROGRESS_STAGES,
   PO_PROGRESS_STAGE_LABELS,
@@ -378,7 +378,7 @@ function PurchaseOrdersTab({
                 </td>
               </tr>
               <tr>
-                <th>Work Status</th>
+                <th>PO Status</th>
                 <td>
                   {r.status === 'issued' && canConfirmReceipt(loggedInUser, r) ? (
                     <select
@@ -386,7 +386,7 @@ function PurchaseOrdersTab({
                       disabled={busy}
                       onChange={(e) => handleSetWorkStatus(r, e.target.value)}
                     >
-                      {Object.entries(WORK_STATUS_LABELS).map(([value, label]) => (
+                      {workStatusOptionsForCategory(poCategory(r)).map(({ value, label }) => (
                         <option value={value} key={value}>
                           {label}
                         </option>

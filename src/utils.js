@@ -71,6 +71,27 @@ export const WORK_STATUS_LABELS = {
   not_started: 'Not Started',
   partial: 'Partially Complete',
   complete: 'Complete',
+  not_ordered: 'Not Ordered',
+  ordered: 'Ordered',
+  partially_received: 'Partially Received',
+  received: 'Received',
+}
+
+// Purchase POs track ordering/receiving a physical part; Service (and Not to
+// Exceed) POs track doing the work -- different vocabulary, same column and
+// same "PO Status" label, so a Purchase PO never offers "Complete" and a
+// Service PO never offers "Ordered".
+export const WORK_STATUS_OPTIONS_BY_CATEGORY = {
+  purchase: ['not_ordered', 'ordered', 'partially_received', 'received'],
+  service: ['not_started', 'partial', 'complete'],
+}
+
+export function workStatusOptionsForCategory(category) {
+  const key = category === 'purchase' ? 'purchase' : 'service'
+  return WORK_STATUS_OPTIONS_BY_CATEGORY[key].map((value) => ({
+    value,
+    label: WORK_STATUS_LABELS[value],
+  }))
 }
 
 export function workStatusLabel(workStatus) {
@@ -88,7 +109,17 @@ export function paymentStatusLabel(paymentStatus) {
 }
 
 export function computeWorkStatus(request) {
-  return request?.work_status || 'not_started'
+  if (request?.work_status) return request.work_status
+  return poCategory(request) === 'purchase' ? 'not_ordered' : 'not_started'
+}
+
+// The "fully done" end of whichever vocabulary applies -- 'complete' for a
+// Service PO, 'received' for a Purchase PO. Everything that used to compare
+// work_status straight against 'complete' (closing a PO, the progress
+// stepper, "what's next") goes through this instead.
+export function isWorkFullyDone(request) {
+  const status = computeWorkStatus(request)
+  return poCategory(request) === 'purchase' ? status === 'received' : status === 'complete'
 }
 
 export function computePaymentStatus(request) {
@@ -128,7 +159,7 @@ export function canClosePo(user, request) {
   return (
     canConfirmReceipt(user, request) &&
     request?.status === 'issued' &&
-    computeWorkStatus(request) === 'complete' &&
+    isWorkFullyDone(request) &&
     computePaymentStatus(request) === 'paid' &&
     allInvoicesFullyResolved(request)
   )
@@ -152,7 +183,7 @@ export const PO_PROGRESS_STAGE_LABELS = {
 
 export function computePoProgressStage(request) {
   if (request?.status !== 'issued') return request?.status
-  const workDone = computeWorkStatus(request) === 'complete'
+  const workDone = isWorkFullyDone(request)
   const paid = computePaymentStatus(request) === 'paid'
   return workDone && paid ? 'paid' : 'in_progress'
 }
@@ -402,12 +433,12 @@ export function nextStepInfo(request, users) {
       return { step: 'Issue PO', who: names.length ? names.join(', ') : '—' }
     }
     case 'issued': {
-      const workStatus = computeWorkStatus(request)
+      const workDone = isWorkFullyDone(request)
       const paymentStatus = computePaymentStatus(request)
-      if (workStatus === 'complete' && paymentStatus === 'paid') {
+      if (workDone && paymentStatus === 'paid') {
         return { step: 'Close PO', who: findUserName(users, request.requested_by) }
       }
-      if (workStatus !== 'complete') {
+      if (!workDone) {
         return { step: 'Receive/Complete', who: findUserName(users, request.requested_by) }
       }
       return { step: 'Invoicing', who: usersWithRole(users, 'invoice_matching').join(', ') || '—' }

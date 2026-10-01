@@ -23,6 +23,7 @@ import {
   linesAreMixedType,
   poLineType,
   categoryLineType,
+  poCategory,
   canMarkPaymentPaid,
   TICKETING_URL,
 } from './utils'
@@ -2699,17 +2700,18 @@ function App() {
   }
 
   // A plain dropdown -- no evidence file required for any transition. Moving
-  // into 'complete' for the first time also rolls the PO's part quantities
+  // into the fully-done state for the first time ('received' for a Purchase
+  // PO, 'complete' for a Service PO) also rolls the PO's part quantities
   // into stock (same effect the old photo-upload confirmation had, just
-  // without requiring a file); re-selecting 'complete' after moving away
-  // from it would roll stock in again, so this only fires on the actual
-  // not-complete -> complete transition.
+  // without requiring a file); re-selecting it after moving away would roll
+  // stock in again, so this only fires on the actual transition into it.
   async function handleSetWorkStatus(request, workStatus) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
     }
-    const enteringComplete = workStatus === 'complete' && request.work_status !== 'complete'
+    const fullyDoneValue = poCategory(request) === 'purchase' ? 'received' : 'complete'
+    const enteringComplete = workStatus === fullyDoneValue && request.work_status !== fullyDoneValue
     setPoActionBusyId(request.id)
     try {
       if (enteringComplete) {

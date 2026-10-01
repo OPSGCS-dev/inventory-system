@@ -2,6 +2,22 @@ export const WHERE_USED_SEED = ['SMA 500 CP', 'SMA 500 XP', 'SATCON 500', 'Subst
 
 export const TICKETING_URL = 'https://ticket-system-gcs14.vercel.app'
 
+// Inventory journal History tab -- one label per distinct action that can
+// write a journal entry, so the Type column actually reflects what happened
+// instead of collapsing everything down to "Adjustment".
+export const JOURNAL_ENTRY_TYPE_LABELS = {
+  adjustment: 'Adjustment',
+  location_adjustment: 'Location Adjustment',
+  use: 'Part Use',
+  transfer: 'Transfer',
+  count: 'Inventory Count',
+  po_received: 'PO Received',
+}
+
+export function journalEntryTypeLabel(entryType) {
+  return JOURNAL_ENTRY_TYPE_LABELS[entryType] || 'Adjustment'
+}
+
 export const emptyFilters = {
   gcs_id: '',
   gcs_part_id: '',

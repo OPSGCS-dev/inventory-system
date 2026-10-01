@@ -1622,7 +1622,7 @@ function App() {
 
         const { data: journalRow, error: journalError } = await supabase
           .from('inventory_journal')
-          .insert({ entry_type: 'adjustment', note: locationNote.trim() })
+          .insert({ entry_type: 'location_adjustment', note: locationNote.trim() })
           .select()
           .single()
         if (journalError) throw journalError
@@ -1718,7 +1718,7 @@ function App() {
     try {
       const { data: journalRow, error: journalError } = await supabase
         .from('inventory_journal')
-        .insert({ entry_type: 'adjustment', note: `Part use: ${useNote.trim()}` })
+        .insert({ entry_type: 'use', note: useNote.trim() })
         .select()
         .single()
       if (journalError) throw journalError
@@ -1825,8 +1825,8 @@ function App() {
       const { data: journalRow, error: journalError } = await supabase
         .from('inventory_journal')
         .insert({
-          entry_type: 'adjustment',
-          note: `Stock transfer: ${transferNote.trim()} (${fromProjectName} → ${toProjectName})`,
+          entry_type: 'transfer',
+          note: `${transferNote.trim()} (${fromProjectName} → ${toProjectName})`,
         })
         .select()
         .single()
@@ -2754,7 +2754,7 @@ function App() {
           const { data: journalRow, error: journalError } = await supabase
             .from('inventory_journal')
             .insert({
-              entry_type: 'adjustment',
+              entry_type: 'po_received',
               note: `PO ${request.po_number || '#' + request.id} received from ${vendorName}`,
             })
             .select()

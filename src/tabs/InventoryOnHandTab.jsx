@@ -1,5 +1,5 @@
 import { Fragment } from 'react'
-import { computeTargetSum, shortProjectName } from '../utils'
+import { computeTargetSum, shortProjectName, journalEntryTypeLabel } from '../utils'
 
 function InventoryOnHandTab({
   canEditInventory,
@@ -417,7 +417,7 @@ function InventoryOnHandTab({
                       <Fragment key={j.id}>
                         <tr>
                           <td className="row-head">{new Date(j.created_at).toLocaleString()}</td>
-                          <td>{j.entry_type === 'count' ? 'Inventory Count' : 'Adjustment'}</td>
+                          <td>{journalEntryTypeLabel(j.entry_type)}</td>
                           <td>{j.note || '—'}</td>
                           <td className="center-cell">{lineCount}</td>
                           <td className="center-cell">

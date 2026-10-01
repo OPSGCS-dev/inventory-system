@@ -89,8 +89,11 @@ function PurchaseOrdersTab({
   poLoading,
   visiblePurchaseRequests,
   invoicesPendingApproval,
+  poAttentionCounts,
   expandedPoId,
   toggleExpandedPo,
+  poActivity,
+  poActivityLoading,
   poFormOpen,
   openPoDraftForm,
   closePoDraftForm,
@@ -185,6 +188,10 @@ function PurchaseOrdersTab({
   // printable layout used by Print PO, just inline on screen instead of
   // off-screen-until-printed.
   const [showPoPreview, setShowPoPreview] = useState(false)
+
+  // Collapsed by default -- the activity log is a secondary, rarely-needed
+  // view, not something that should add height to every PO's detail page.
+  const [showActivity, setShowActivity] = useState(false)
 
   // The Status heading + flow legend live above the table (so they can run
   // wider than the narrow Status column itself), but still need to sit
@@ -674,6 +681,34 @@ function PurchaseOrdersTab({
               </div>
             </div>
           )}
+
+          <div style={{ marginTop: 12 }}>
+            <button className="btn-secondary" onClick={() => setShowActivity((v) => !v)}>
+              {showActivity ? 'Hide Activity' : `View Activity${poActivity.length ? ` (${poActivity.length})` : ''}`}
+            </button>
+            {showActivity && (
+              <div className="po-activity-list">
+                {poActivityLoading ? (
+                  <p className="sub" style={{ margin: '8px 0 0' }}>
+                    Loading…
+                  </p>
+                ) : poActivity.length === 0 ? (
+                  <p className="sub" style={{ margin: '8px 0 0' }}>
+                    No activity logged yet.
+                  </p>
+                ) : (
+                  poActivity.map((a) => (
+                    <div key={a.id} className="po-activity-item">
+                      <div className="po-activity-meta">
+                        {findUserName(users, a.user_id)} — {new Date(a.created_at).toLocaleString()}
+                      </div>
+                      <div className="po-activity-note">{a.note}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="edit-toolbar">
             {r.status === 'draft' && (
@@ -1306,6 +1341,7 @@ function PurchaseOrdersTab({
               onClick={() => setPoView('my-approvals')}
             >
               My POs for Approval
+              {poAttentionCounts.approvals > 0 && <span className="nav-badge">{poAttentionCounts.approvals}</span>}
             </button>
           )}
           {canSeeIssueView && (
@@ -1314,6 +1350,7 @@ function PurchaseOrdersTab({
               onClick={() => setPoView('my-issue')}
             >
               My POs to Issue
+              {poAttentionCounts.toIssue > 0 && <span className="nav-badge">{poAttentionCounts.toIssue}</span>}
             </button>
           )}
           {canSeeInvoicesView && (
@@ -1322,6 +1359,9 @@ function PurchaseOrdersTab({
               onClick={() => setPoView('my-invoices')}
             >
               My Invoices for Approval
+              {poAttentionCounts.invoicesToApprove > 0 && (
+                <span className="nav-badge">{poAttentionCounts.invoicesToApprove}</span>
+              )}
             </button>
           )}
         </div>

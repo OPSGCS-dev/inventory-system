@@ -25,6 +25,12 @@ import {
   categoryLineType,
   poCategory,
   canMarkPaymentPaid,
+  userHasRole,
+  PO_CATEGORY_LABELS,
+  workStatusLabel,
+  paymentStatusLabel,
+  computeWorkStatus,
+  computePaymentStatus,
   TICKETING_URL,
 } from './utils'
 import MasterListTab from './tabs/MasterListTab'
@@ -32,6 +38,7 @@ import RequiredInventoryTab from './tabs/RequiredInventoryTab'
 import InventoryOnHandTab from './tabs/InventoryOnHandTab'
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import UsersTab from './tabs/UsersTab'
+import GlobalSearch from './tabs/GlobalSearch'
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true)
@@ -148,6 +155,8 @@ function App() {
   // Purchase Orders tab, same pattern as InventoryOnHandTab's stockPanel.
   const [poView, setPoView] = useState('all')
   const [expandedPoId, setExpandedPoId] = useState(null)
+  const [poActivity, setPoActivity] = useState([])
+  const [poActivityLoading, setPoActivityLoading] = useState(false)
   const [poActionBusyId, setPoActionBusyId] = useState(null)
 
   const [poFormOpen, setPoFormOpen] = useState(false)
@@ -485,13 +494,14 @@ function App() {
     setDraftSubProjects(subProjects.map((sp) => ({ ...sp, _existing: true })))
   }, [subProjects])
 
+  const PURCHASE_REQUEST_SELECT =
+    '*, purchase_request_lines(*, parts(*)), projects(*), sub_projects(*), vendors(*), budget_categories(*), budget_subcategories(*), invoices(*), receipts(*)'
+
   async function loadPurchaseRequests() {
     setPoLoading(true)
     const { data, error } = await supabase
       .from('purchase_requests')
-      .select(
-        '*, purchase_request_lines(*, parts(*)), projects(*), sub_projects(*), vendors(*), budget_categories(*), budget_subcategories(*), invoices(*), receipts(*)'
-      )
+      .select(PURCHASE_REQUEST_SELECT)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -502,6 +512,66 @@ function App() {
     }
     setPurchaseRequests(data ?? [])
     setPoLoading(false)
+  }
+
+  // Re-fetches just the one request an action touched (with the same deep
+  // joins the full list uses) and splices it back into local state, instead
+  // of reloading every purchase request's whole join tree after every
+  // single action -- that full reload is what loadPurchaseRequests above
+  // is for (initial load only now). Upserts by id so it also works right
+  // after inserting a brand-new draft, which isn't in state yet.
+  async function refreshPurchaseRequest(requestId) {
+    const { data, error } = await supabase
+      .from('purchase_requests')
+      .select(PURCHASE_REQUEST_SELECT)
+      .eq('id', requestId)
+      .single()
+    if (error) {
+      console.error(error)
+      flashPoStatus('Saved, but could not refresh this request — check the console for details.', false)
+      return
+    }
+    setPurchaseRequests((prev) =>
+      prev.some((r) => r.id === requestId) ? prev.map((r) => (r.id === requestId ? data : r)) : [data, ...prev]
+    )
+  }
+
+  // Compact, append-only activity log for a PO -- loaded lazily (only when
+  // its detail view is actually opened) rather than joined into the main
+  // list query, so it doesn't add weight to every single PO action.
+  async function loadPoActivity(requestId) {
+    setPoActivityLoading(true)
+    const { data, error } = await supabase
+      .from('purchase_request_activity')
+      .select('id, note, created_at, user_id')
+      .eq('purchase_request_id', requestId)
+      .order('created_at', { ascending: false })
+    if (error) {
+      console.error(error)
+      setPoActivity([])
+      setPoActivityLoading(false)
+      return
+    }
+    setPoActivity(data ?? [])
+    setPoActivityLoading(false)
+  }
+
+  // A logging failure should never block or surface an error for the
+  // actual action the user asked for -- swallowed and console-logged only.
+  // Also refreshes the loaded activity list, so an already-open detail
+  // view reflects the new entry immediately.
+  async function logPoActivity(requestId, note) {
+    if (!loggedInUser) return
+    try {
+      await supabase.from('purchase_request_activity').insert({
+        purchase_request_id: requestId,
+        user_id: loggedInUser.id,
+        note,
+      })
+      await loadPoActivity(requestId)
+    } catch (error) {
+      console.error('Could not log PO activity:', error)
+    }
   }
 
   useEffect(() => {
@@ -2135,8 +2205,28 @@ function App() {
     return pairs
   }, [purchaseRequests])
 
+  // Counts for the small nav badges -- independent of whichever poView is
+  // currently selected, so "3 POs waiting on you" is visible from any tab,
+  // not just after already clicking into Purchase Orders.
+  const poAttentionCounts = useMemo(() => {
+    const approvals = purchaseRequests.filter(
+      (r) => r.status === 'submitted' && canApproveRequests(loggedInUserWithScopes, r)
+    ).length
+    const toIssue = purchaseRequests.filter(
+      (r) => r.status === 'approved' && canIssuePurchaseOrder(loggedInUserWithScopes, r)
+    ).length
+    const invoicesToApprove = userHasRole(loggedInUserWithScopes, 'invoice_approval')
+      ? invoicesPendingApproval.length
+      : 0
+    return { approvals, toIssue, invoicesToApprove, total: approvals + toIssue + invoicesToApprove }
+  }, [purchaseRequests, loggedInUserWithScopes, invoicesPendingApproval])
+
   function toggleExpandedPo(id) {
-    setExpandedPoId((prev) => (prev === id ? null : id))
+    setExpandedPoId((prev) => {
+      const next = prev === id ? null : id
+      if (next) loadPoActivity(next)
+      return next
+    })
   }
 
   const poEligibleParts = useMemo(
@@ -2398,31 +2488,85 @@ function App() {
 
       let requestId = poDraftId
       if (requestId) {
+        const newValues = {
+          project_id: poDraftProjectId,
+          vendor_id: poDraftVendorId,
+          description: poDraftDescription.trim() || null,
+          vendor_quote_number: poDraftVendorQuoteNumber.trim() || null,
+          po_category: poDraftCategory,
+          markup_rate: markupRateToSave,
+          tax_rate: poDraftTaxRate === '' ? 13 : Number(poDraftTaxRate),
+          shipping_handling: shippingToSave,
+          credit: poDraftCredit === '' ? 0 : Number(poDraftCredit),
+          not_to_exceed: notToExceedToSave,
+          spending_cap: spendingCapToSave,
+        }
+
         const { error } = await supabase
           .from('purchase_requests')
           .update({
-            project_id: poDraftProjectId,
+            ...newValues,
             sub_project_id: poDraftSubProjectId,
-            vendor_id: poDraftVendorId,
             notes: poDraftNotes.trim() || null,
-            description: poDraftDescription.trim() || null,
             budget_category_id: poDraftBudgetCategoryId,
             budget_subcategory_id: poDraftBudgetSubcategoryId,
             chargeable_expense: poDraftChargeableExpense,
-            vendor_quote_number: poDraftVendorQuoteNumber.trim() || null,
             quote_file_url: quoteFileUrl,
             quote_file_name: quoteFileName,
-            po_category: poDraftCategory,
-            markup_rate: markupRateToSave,
-            tax_rate: poDraftTaxRate === '' ? 13 : Number(poDraftTaxRate),
-            shipping_handling: shippingToSave,
-            credit: poDraftCredit === '' ? 0 : Number(poDraftCredit),
-            not_to_exceed: notToExceedToSave,
-            spending_cap: spendingCapToSave,
             currency: poDraftCurrency.trim() || 'CAD',
           })
           .eq('id', requestId)
         if (error) throw error
+
+        // One compact activity-log entry per save, covering just the
+        // fields most worth tracking (not every column) -- same "bullet
+        // list of what changed" shape ticket-system uses for its own log.
+        const existing = purchaseRequests.find((r) => r.id === requestId)
+        if (existing) {
+          const projectName = (id) => projects.find((p) => p.id === id)?.name || '—'
+          const vendorName = (id) => vendors.find((v) => v.id === id)?.name || '—'
+          const changeLines = []
+          if (existing.project_id !== newValues.project_id) {
+            changeLines.push(`Entity: ${projectName(existing.project_id)} → ${projectName(newValues.project_id)}`)
+          }
+          if (existing.vendor_id !== newValues.vendor_id) {
+            changeLines.push(`Vendor: ${vendorName(existing.vendor_id)} → ${vendorName(newValues.vendor_id)}`)
+          }
+          if ((existing.description || '') !== (newValues.description || '')) {
+            changeLines.push(`Description: ${newValues.description || '(cleared)'}`)
+          }
+          if (existing.po_category !== newValues.po_category) {
+            changeLines.push(
+              `Category: ${PO_CATEGORY_LABELS[existing.po_category] || existing.po_category} → ${
+                PO_CATEGORY_LABELS[newValues.po_category] || newValues.po_category
+              }`
+            )
+          }
+          if (Number(existing.markup_rate) !== newValues.markup_rate) {
+            changeLines.push(`Markup: ${existing.markup_rate}% → ${newValues.markup_rate}%`)
+          }
+          if (Number(existing.tax_rate) !== newValues.tax_rate) {
+            changeLines.push(`Sales Tax: ${existing.tax_rate}% → ${newValues.tax_rate}%`)
+          }
+          if (Number(existing.shipping_handling) !== newValues.shipping_handling) {
+            changeLines.push(`Shipping/Handling: $${existing.shipping_handling} → $${newValues.shipping_handling}`)
+          }
+          if (Number(existing.credit) !== newValues.credit) {
+            changeLines.push(`Credit: $${existing.credit} → $${newValues.credit}`)
+          }
+          if (Boolean(existing.not_to_exceed) !== newValues.not_to_exceed) {
+            changeLines.push(`Not to Exceed: ${existing.not_to_exceed ? 'Yes' : 'No'} → ${newValues.not_to_exceed ? 'Yes' : 'No'}`)
+          }
+          if ((existing.spending_cap ?? null) !== (newValues.spending_cap ?? null)) {
+            changeLines.push(`Spending Cap: ${existing.spending_cap ?? '—'} → ${newValues.spending_cap ?? '—'}`)
+          }
+          if ((existing.vendor_quote_number || '') !== (newValues.vendor_quote_number || '')) {
+            changeLines.push(`Vendor Quote #: ${newValues.vendor_quote_number || '(cleared)'}`)
+          }
+          if (changeLines.length > 0) {
+            await logPoActivity(requestId, changeLines.map((l) => `• ${l}`).join('\n'))
+          }
+        }
 
         const { error: delError } = await supabase
           .from('purchase_request_lines')
@@ -2476,7 +2620,7 @@ function App() {
 
       closePoDraftForm()
       flashPoStatus('Draft saved.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(requestId)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not save draft — check the console for details.', false)
@@ -2509,7 +2653,7 @@ function App() {
       ])
       if (expandedPoId === request.id) setExpandedPoId(null)
       flashPoStatus('Purchase request deleted.', true)
-      await loadPurchaseRequests()
+      setPurchaseRequests((prev) => prev.filter((r) => r.id !== request.id))
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not delete — check the console for details.', false)
@@ -2534,8 +2678,9 @@ function App() {
         })
         .eq('id', request.id)
       if (error) throw error
+      await logPoActivity(request.id, 'Submitted for approval')
       flashPoStatus('Request submitted.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not submit — check the console for details.', false)
@@ -2560,8 +2705,9 @@ function App() {
         })
         .eq('id', request.id)
       if (error) throw error
+      await logPoActivity(request.id, 'Approved')
       flashPoStatus('Request approved.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not approve — check the console for details.', false)
@@ -2592,8 +2738,9 @@ function App() {
         })
         .eq('id', request.id)
       if (error) throw error
+      await logPoActivity(request.id, reason.trim() ? `Put on hold: ${reason.trim()}` : 'Put on hold')
       flashPoStatus('Request put on hold.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not put the request on hold — check the console for details.', false)
@@ -2610,8 +2757,9 @@ function App() {
         .update({ on_hold: false, hold_reason: null, held_by: null, held_at: null })
         .eq('id', request.id)
       if (error) throw error
+      await logPoActivity(request.id, 'Resumed from hold')
       flashPoStatus('Hold removed — back to pending approval.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not resume the request — check the console for details.', false)
@@ -2621,20 +2769,29 @@ function App() {
   }
 
   // PO numbers auto-generate as PO-{project_code}-{2-digit year}-{3-digit
-  // seq}, e.g. "PO-06-26-001" — the sequence is derived from existing PO
-  // numbers for that project+prefix (not a separate counter), so it
-  // naturally restarts at 001 each new year and counts independently per
-  // project. Ticket-system tickets follow the same convention (TK- instead
-  // of PO-) using its own per-project code -- see its lib/ticketNumber.ts.
-  async function computeNextPoNumber(request) {
-    const project = projects.find((p) => p.id === request.project_id)
-    const code = (project?.project_code || String(request.project_id)).trim().padStart(2, '0')
-    const yy = String(new Date().getFullYear()).slice(-2)
-    const prefix = `${code}-${yy}-`
+  // seq}, e.g. "PO-06-26-001", independently per project and restarting at
+  // 001 each new year. The sequence lives in its own append-only counter
+  // (po_number_sequences) rather than being derived from existing PO
+  // numbers, so deleting a PO never frees up its number for reuse. Falls
+  // back to scanning existing po_number values only the first time a
+  // project+year combination is seen (e.g. before the counter table has a
+  // row for it), so already-issued numbers stay continuous. Ticket-system
+  // tickets follow the same convention (TK- instead of PO-) using its own
+  // per-project code -- see its lib/ticketNumber.ts.
+  async function peekNextPoSeq(projectId, yearCode, prefix) {
+    const { data: seqRow, error: seqError } = await supabase
+      .from('po_number_sequences')
+      .select('last_seq')
+      .eq('project_id', projectId)
+      .eq('year_code', yearCode)
+      .maybeSingle()
+    if (seqError) throw seqError
+    if (seqRow) return seqRow.last_seq + 1
+
     const { data, error } = await supabase
       .from('purchase_requests')
       .select('po_number')
-      .eq('project_id', request.project_id)
+      .eq('project_id', projectId)
       .like('po_number', `%${prefix}%`)
     if (error) throw error
     let maxSeq = 0
@@ -2642,7 +2799,16 @@ function App() {
       const match = row.po_number?.match(/-(\d{3})$/)
       if (match) maxSeq = Math.max(maxSeq, Number(match[1]))
     }
-    return `PO-${prefix}${String(maxSeq + 1).padStart(3, '0')}`
+    return maxSeq + 1
+  }
+
+  async function computeNextPoNumber(request) {
+    const project = projects.find((p) => p.id === request.project_id)
+    const code = (project?.project_code || String(request.project_id)).trim().padStart(2, '0')
+    const yy = String(new Date().getFullYear()).slice(-2)
+    const prefix = `${code}-${yy}-`
+    const seq = await peekNextPoSeq(request.project_id, yy, prefix)
+    return `PO-${prefix}${String(seq).padStart(3, '0')}`
   }
 
   async function startIssuePurchaseOrder(request) {
@@ -2676,6 +2842,32 @@ function App() {
     }
     setPoActionBusyId(request.id)
     try {
+      const yy = String(new Date().getFullYear()).slice(-2)
+      const seqMatch = pendingPoNumber.match(/-(\d{3})$/)
+      const seq = seqMatch ? Number(seqMatch[1]) : 1
+
+      // Reserve the number for real now (read-then-write, same as the rest
+      // of this app tolerates elsewhere) -- takes the higher of what's
+      // already reserved and this preview's number, so it can only ever
+      // move forward.
+      const { data: existingSeqRow, error: seqReadError } = await supabase
+        .from('po_number_sequences')
+        .select('last_seq')
+        .eq('project_id', request.project_id)
+        .eq('year_code', yy)
+        .maybeSingle()
+      if (seqReadError) throw seqReadError
+
+      const { error: seqWriteError } = await supabase.from('po_number_sequences').upsert(
+        {
+          project_id: request.project_id,
+          year_code: yy,
+          last_seq: Math.max(existingSeqRow?.last_seq ?? 0, seq),
+        },
+        { onConflict: 'project_id,year_code' }
+      )
+      if (seqWriteError) throw seqWriteError
+
       const { error } = await supabase
         .from('purchase_requests')
         .update({
@@ -2689,8 +2881,9 @@ function App() {
       setIssuingRequestId(null)
       const issuedNumber = pendingPoNumber
       setPendingPoNumber(null)
+      await logPoActivity(request.id, `Issued as PO ${issuedNumber}`)
       flashPoStatus(`PO ${issuedNumber} issued.`, true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not issue PO — check the console for details.', false)
@@ -2785,8 +2978,12 @@ function App() {
       }
       const { error } = await supabase.from('purchase_requests').update(payload).eq('id', request.id)
       if (error) throw error
+      await logPoActivity(
+        request.id,
+        `PO Status: ${workStatusLabel(computeWorkStatus(request))} → ${workStatusLabel(workStatus)}`
+      )
       flashPoStatus('Work status updated.', true)
-      await Promise.all([loadPurchaseRequests(), loadStock()])
+      await Promise.all([refreshPurchaseRequest(request.id), loadStock()])
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not update work status — check the console for details.', false)
@@ -2811,8 +3008,12 @@ function App() {
         .update({ payment_status: paymentStatus })
         .eq('id', request.id)
       if (error) throw error
+      await logPoActivity(
+        request.id,
+        `Payment Status: ${paymentStatusLabel(computePaymentStatus(request))} → ${paymentStatusLabel(paymentStatus)}`
+      )
       flashPoStatus('Payment status updated.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not update payment status — check the console for details.', false)
@@ -2883,8 +3084,12 @@ function App() {
         matched_receipt_id: matchToReceiptId || null,
       })
       if (error) throw error
+      await logPoActivity(
+        request.id,
+        `Invoice added${invoiceNumber ? ` (#${invoiceNumber})` : ''}: $${numericAmount.toFixed(2)}`
+      )
       flashPoStatus(matchToReceiptId ? 'Invoice added and matched.' : 'Invoice added.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not add the invoice — check the console for details.', false)
@@ -2905,8 +3110,12 @@ function App() {
         : { approved: false, approved_by: null, approved_at: null }
       const { error } = await supabase.from('invoices').update(payload).eq('id', invoice.id)
       if (error) throw error
+      await logPoActivity(
+        invoice.purchase_request_id,
+        checked ? `Invoice approved${invoice.invoice_number ? ` (#${invoice.invoice_number})` : ''}` : 'Invoice approval cleared'
+      )
       flashPoStatus(checked ? 'Invoice marked approved.' : 'Invoice approval cleared.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(invoice.purchase_request_id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not update invoice approval — check the console for details.', false)
@@ -2927,8 +3136,12 @@ function App() {
         : { paid: false, paid_by: null, paid_at: null }
       const { error } = await supabase.from('invoices').update(payload).eq('id', invoice.id)
       if (error) throw error
+      await logPoActivity(
+        invoice.purchase_request_id,
+        checked ? `Invoice marked paid${invoice.invoice_number ? ` (#${invoice.invoice_number})` : ''}` : 'Invoice paid status cleared'
+      )
       flashPoStatus(checked ? 'Marked paid.' : 'Paid status cleared.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(invoice.purchase_request_id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not update paid status — check the console for details.', false)
@@ -2944,8 +3157,12 @@ function App() {
       const { error } = await supabase.from('invoices').delete().eq('id', invoice.id)
       if (error) throw error
       await removeStorageFile('invoices', invoice.file_url)
+      await logPoActivity(
+        invoice.purchase_request_id,
+        `Invoice deleted${invoice.invoice_number ? ` (#${invoice.invoice_number})` : ''}`
+      )
       flashPoStatus('Invoice deleted.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(invoice.purchase_request_id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not delete the invoice — check the console for details.', false)
@@ -2991,8 +3208,9 @@ function App() {
           .eq('id', matchToInvoiceId)
         if (matchError) throw matchError
       }
+      await logPoActivity(request.id, matchToInvoiceId ? 'Receipt added and matched' : 'Receipt added')
       flashPoStatus(matchToInvoiceId ? 'Receipt added and matched.' : 'Receipt added.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not add the receipt — check the console for details.', false)
@@ -3008,8 +3226,9 @@ function App() {
       const { error } = await supabase.from('receipts').delete().eq('id', receipt.id)
       if (error) throw error
       await removeStorageFile('receipts', receipt.file_url)
+      await logPoActivity(receipt.purchase_request_id, 'Receipt deleted')
       flashPoStatus('Receipt deleted.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(receipt.purchase_request_id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not delete the receipt — check the console for details.', false)
@@ -3035,7 +3254,7 @@ function App() {
         .eq('id', invoice.id)
       if (error) throw error
       flashPoStatus(receiptId ? 'Invoice matched to receipt.' : 'Match cleared.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(invoice.purchase_request_id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not update the match — check the console for details.', false)
@@ -3059,8 +3278,9 @@ function App() {
         .update({ status: 'closed', closed_by: loggedInUser.id, closed_at: new Date().toISOString() })
         .eq('id', request.id)
       if (error) throw error
+      await logPoActivity(request.id, 'Closed')
       flashPoStatus('PO closed.', true)
-      await loadPurchaseRequests()
+      await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not close the PO — check the console for details.', false)
@@ -3711,6 +3931,7 @@ function App() {
           onClick={() => setActiveTab('po')}
         >
           Purchase Orders
+          {poAttentionCounts.total > 0 && <span className="nav-badge">{poAttentionCounts.total}</span>}
         </button>
         {isAdmin(loggedInUser) && (
           <button
@@ -3721,6 +3942,19 @@ function App() {
           </button>
         )}
         <span style={{ flex: 1 }} />
+        <GlobalSearch
+          purchaseRequests={purchaseRequests}
+          parts={parts}
+          onSelectPo={(id) => {
+            setActiveTab('po')
+            setExpandedPoId(id)
+            loadPoActivity(id)
+          }}
+          onSelectPart={(part) => {
+            setActiveTab('master')
+            setFilters((f) => ({ ...f, gcs_part_id: part.gcs_part_id || '' }))
+          }}
+        />
         <span className="sub" style={{ margin: 0, alignSelf: 'center' }}>
           {loggedInUser.name}
         </span>
@@ -3940,8 +4174,11 @@ function App() {
           poLoading={poLoading}
           visiblePurchaseRequests={visiblePurchaseRequests}
           invoicesPendingApproval={invoicesPendingApproval}
+          poAttentionCounts={poAttentionCounts}
           expandedPoId={expandedPoId}
           toggleExpandedPo={toggleExpandedPo}
+          poActivity={poActivity}
+          poActivityLoading={poActivityLoading}
           poFormOpen={poFormOpen}
           openPoDraftForm={openPoDraftForm}
           closePoDraftForm={closePoDraftForm}

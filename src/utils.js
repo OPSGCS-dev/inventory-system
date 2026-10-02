@@ -279,6 +279,7 @@ export const PO_ROLE_OPTIONS = [
   { value: 'invoice_matching', label: 'Invoice Matching' },
   { value: 'invoice_approval', label: 'Invoice Approval' },
   { value: 'payment', label: 'Payment' },
+  { value: 'vendor_approval', label: 'Vendor Approval' },
 ]
 
 // Roles whose access can be narrowed to specific entities via the Users
@@ -437,6 +438,29 @@ export function canConfirmReceipt(user, request) {
     return true
   }
   return false
+}
+
+// Approving or rejecting a vendor someone asked for -- its own company-wide
+// role (a vendor isn't tied to one entity). Admin doesn't imply it, same as
+// every other role here.
+export function canApproveVendors(user) {
+  return userHasRole(user, 'vendor_approval')
+}
+
+// Vendors that existed before approval did, and ones an admin adds directly,
+// have no approval_status of their own to speak of -- they count as approved.
+export function vendorApprovalStatus(vendor) {
+  return vendor?.approval_status || 'approved'
+}
+
+// Why a request can't go forward on this vendor yet, or null if it can.
+export function vendorBlockReason(vendor) {
+  const status = vendorApprovalStatus(vendor)
+  if (status === 'pending') return `${vendor.name} is still pending approval as a vendor.`
+  if (status === 'rejected') {
+    return `${vendor.name} was rejected as a vendor${vendor.rejection_reason ? ` (${vendor.rejection_reason})` : ''} — choose another vendor.`
+  }
+  return null
 }
 
 // Adding an invoice and matching it to a receipt -- its own role, separate

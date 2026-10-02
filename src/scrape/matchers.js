@@ -122,6 +122,22 @@ export function guessLetterhead(pages) {
   return null
 }
 
+// Existing records whose name looks like `name` -- one's words contain the
+// other's ("RK Solar" / "RK Solar & Automation Services Inc."), or they're the
+// same words in another form ("Hwy 2S" / "Highway 2 South"). Used to warn
+// before a near-duplicate vendor gets requested.
+export function similarNames(name, records) {
+  const mine = nameTokens(name)
+  if (mine.length === 0) return []
+  const set = new Set(mine)
+  return records.filter((rec) => {
+    const theirs = nameTokens(rec.name)
+    if (theirs.length === 0) return false
+    const theirSet = new Set(theirs)
+    return mine.every((t) => theirSet.has(t)) || theirs.every((t) => set.has(t))
+  })
+}
+
 const normPart = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
 
 // A vendor part number against the master list's manufacturer P/N or GCS part

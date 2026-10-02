@@ -42,9 +42,14 @@ import {
   isNotToExceed,
   computeInvoicedTotal,
   isOverSpendingCap,
+  canApproveVendors,
+  vendorApprovalStatus,
+  vendorBlockReason,
 } from '../utils'
 import InvoicesPanel from './InvoicesPanel'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
+import VendorRequestPanel from './VendorRequestPanel'
+import VendorsToApproveTable from './VendorsToApproveTable'
 
 function formatTicketNumber(n) {
   return `TK-${String(n).padStart(5, '0')}`
@@ -129,6 +134,9 @@ function PurchaseOrdersTab({
   clearPoDraftQuoteFile,
   allParts,
   applyPdfReadToDraft,
+  handleRequestVendor,
+  handleApproveVendor,
+  handleRejectVendor,
   poDraftInvoiceNumber,
   setPoDraftInvoiceNumber,
   poDraftInvoiceAmount,
@@ -221,6 +229,9 @@ function PurchaseOrdersTab({
   //    form is silently overwritten.
   // The ref holds the latest form values for after the async read, and the
   // token drops a result whose file was replaced while it was being read.
+  // Which "Request a new vendor" panel is open: from the toolbar button
+  // beside New Request, or from the form's Vendor field (null = neither).
+  const [vendorPanel, setVendorPanel] = useState(null)
   const [pdfScan, setPdfScan] = useState(null)
   const [pdfRead, setPdfRead] = useState(null)
   const pdfScanToken = useRef(0)
@@ -1078,6 +1089,31 @@ function PurchaseOrdersTab({
               </button>
             )}
 
+            {(() => {
+              // A request can't be approved, nor its PO issued, until its vendor
+              // is. A vendor approver can settle that right here.
+              if (!['draft', 'submitted', 'approved'].includes(r.status)) return null
+              const block = vendorBlockReason(r.vendors)
+              if (!block) return null
+              const pendingVendor = vendorApprovalStatus(r.vendors) === 'pending'
+              return (
+                <div style={{ flexBasis: '100%', color: 'var(--danger)' }}>
+                  ⚠ {block}
+                  {pendingVendor && canApproveVendors(loggedInUser) && (
+                    <>
+                      {' '}
+                      <button className="btn-primary po-action-btn" onClick={() => handleApproveVendor(r.vendors)}>
+                        Approve vendor
+                      </button>{' '}
+                      <button className="btn-secondary po-action-btn" onClick={() => handleRejectVendor(r.vendors)}>
+                        Reject vendor
+                      </button>
+                    </>
+                  )}
+                </div>
+              )
+            })()}
+
             {r.status === 'submitted' &&
               (canApproveRequests(loggedInUser, r) ? (
                 r.on_hold ? (
@@ -1216,7 +1252,16 @@ function PurchaseOrdersTab({
               + New Request
             </button>
           )}
+          {canCreate && !poFormOpen && vendorPanel !== 'toolbar' && (
+            <button className="btn-secondary" onClick={() => setVendorPanel('toolbar')}>
+              + Request Vendor
+            </button>
+          )}
         </div>
+
+        {vendorPanel === 'toolbar' && !poFormOpen && (
+          <VendorRequestPanel vendors={vendors} onSubmit={handleRequestVendor} onClose={() => setVendorPanel(null)} />
+        )}
 
         {poStatus && <div className={'status ' + (poStatus.ok ? 'ok' : 'err')}>{poStatus.msg}</div>}
       </div>
@@ -1266,14 +1311,46 @@ function PurchaseOrdersTab({
                 onChange={(e) => setPoDraftVendorId(e.target.value ? Number(e.target.value) : null)}
               >
                 <option value="">Select a vendor…</option>
-                {vendors.map((v) => (
-                  <option value={v.id} key={v.id}>
-                    {v.name}
-                  </option>
-                ))}
+                {vendors
+                  // Rejected vendors can't be chosen (unless one is already on
+                  // this request, so it doesn't silently vanish from the field).
+                  .filter((v) => vendorApprovalStatus(v) !== 'rejected' || v.id === poDraftVendorId)
+                  .map((v) => (
+                    <option value={v.id} key={v.id}>
+                      {v.name}
+                      {vendorApprovalStatus(v) === 'pending' ? ' (pending approval)' : ''}
+                      {vendorApprovalStatus(v) === 'rejected' ? ' (rejected)' : ''}
+                    </option>
+                  ))}
               </select>
+              {vendorPanel !== 'form' && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ marginTop: 6 }}
+                  onClick={() => setVendorPanel('form')}
+                >
+                  + New vendor
+                </button>
+              )}
             </div>
           </div>
+
+          {vendorPanel === 'form' && (
+            <VendorRequestPanel
+              vendors={vendors}
+              onSubmit={handleRequestVendor}
+              onUseExisting={(v) => {
+                setPoDraftVendorId(v.id)
+                setVendorPanel(null)
+              }}
+              onClose={(vendor) => {
+                // A vendor just requested is picked on this request straight away.
+                if (vendor) setPoDraftVendorId(vendor.id)
+                setVendorPanel(null)
+              }}
+            />
+          )}
 
           {availableSubProjects.length > 0 && (
             <div className="field-row" style={{ marginTop: 12 }}>
@@ -1865,6 +1942,17 @@ function PurchaseOrdersTab({
               {poAttentionCounts.toIssue > 0 && <span className="nav-badge">{poAttentionCounts.toIssue}</span>}
             </button>
           )}
+          {canApproveVendors(loggedInUser) && (
+            <button
+              className={poView === 'vendors' ? 'btn-primary' : 'btn-secondary'}
+              onClick={() => setPoView('vendors')}
+            >
+              Vendors to Approve
+              {poAttentionCounts.vendorsToApprove > 0 && (
+                <span className="nav-badge">{poAttentionCounts.vendorsToApprove}</span>
+              )}
+            </button>
+          )}
           {canSeeInvoicesView && (
             <button
               className={poView === 'my-invoices' ? 'btn-primary' : 'btn-secondary'}
@@ -1879,7 +1967,14 @@ function PurchaseOrdersTab({
         </div>
       </div>
 
-      {poView === 'my-invoices' ? (
+      {poView === 'vendors' ? (
+        <VendorsToApproveTable
+          vendors={vendors}
+          users={users}
+          onApprove={handleApproveVendor}
+          onReject={handleRejectVendor}
+        />
+      ) : poView === 'my-invoices' ? (
         <MyInvoicesForApprovalTable
           invoicesPendingApproval={invoicesPendingApproval}
           toggleExpandedPo={toggleExpandedPo}

@@ -20,6 +20,9 @@ import {
   canAccessTicketing,
   canCreatePurchaseRequests,
   canApproveRequests,
+  canApproveVendors,
+  vendorApprovalStatus,
+  vendorBlockReason,
   canIssuePurchaseOrder,
   ENTITY_SCOPED_ROLES,
   linesAreMixedType,
@@ -986,6 +989,7 @@ function App() {
       'Invoice Matching': u.roles?.includes('invoice_matching') ? 'Yes' : '',
       'Invoice Approval': u.roles?.includes('invoice_approval') ? 'Yes' : '',
       Payment: u.roles?.includes('payment') ? 'Yes' : '',
+      'Vendor Approval': u.roles?.includes('vendor_approval') ? 'Yes' : '',
       Active: u.active ? 'Yes' : 'No',
     }))
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(userRows), 'Users')
@@ -1079,6 +1083,7 @@ function App() {
       if (truthyCsvFlag(getCell(row, 'Invoice Matching'))) roles.push('invoice_matching')
       if (truthyCsvFlag(getCell(row, 'Invoice Approval'))) roles.push('invoice_approval')
       if (truthyCsvFlag(getCell(row, 'Payment'))) roles.push('payment')
+      if (truthyCsvFlag(getCell(row, 'Vendor Approval'))) roles.push('vendor_approval')
       const activeCell = getCell(row, 'Active')
       const active = activeCell !== undefined ? truthyCsvFlag(activeCell) : true
       rows.push({
@@ -2228,8 +2233,17 @@ function App() {
     const invoicesToApprove = userHasRole(loggedInUserWithScopes, 'invoice_approval')
       ? invoicesPendingApproval.length
       : 0
-    return { approvals, toIssue, invoicesToApprove, total: approvals + toIssue + invoicesToApprove }
-  }, [purchaseRequests, loggedInUserWithScopes, invoicesPendingApproval])
+    const vendorsToApprove = canApproveVendors(loggedInUserWithScopes)
+      ? vendors.filter((v) => vendorApprovalStatus(v) === 'pending').length
+      : 0
+    return {
+      approvals,
+      toIssue,
+      invoicesToApprove,
+      vendorsToApprove,
+      total: approvals + toIssue + invoicesToApprove + vendorsToApprove,
+    }
+  }, [purchaseRequests, loggedInUserWithScopes, invoicesPendingApproval, vendors])
 
   function toggleExpandedPo(id) {
     setExpandedPoId((prev) => {
@@ -2860,9 +2874,20 @@ function App() {
     }
   }
 
+  // A request can be drafted and submitted with a vendor that's still pending,
+  // but not approved, and its PO not issued, until that vendor is approved.
+  function vendorBlockFor(request) {
+    return vendorBlockReason(request.vendors || vendors.find((v) => v.id === request.vendor_id))
+  }
+
   async function handleApprovePurchaseRequest(request) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
+      return
+    }
+    const vendorBlock = vendorBlockFor(request)
+    if (vendorBlock) {
+      flashPoStatus(`${vendorBlock} The vendor has to be approved before this request can be.`, false)
       return
     }
     // Lines that go beyond "a part already on the entity's list" change
@@ -3052,6 +3077,11 @@ function App() {
   }
 
   async function startIssuePurchaseOrder(request) {
+    const vendorBlock = vendorBlockFor(request)
+    if (vendorBlock) {
+      flashPoStatus(`${vendorBlock} A PO can't be issued to it until it is approved.`, false)
+      return
+    }
     setIssuingRequestId(request.id)
     setPendingPoNumber(null)
     setComputingPoNumber(true)
@@ -3078,6 +3108,11 @@ function App() {
     }
     if (!pendingPoNumber) {
       flashPoStatus('PO number is not ready yet.', false)
+      return
+    }
+    const vendorBlock = vendorBlockFor(request)
+    if (vendorBlock) {
+      flashPoStatus(`${vendorBlock} A PO can't be issued to it until it is approved.`, false)
       return
     }
     setPoActionBusyId(request.id)
@@ -3931,6 +3966,80 @@ function App() {
     }
   }
 
+  // Anyone who can create purchase requests may ask for a new vendor. It
+  // starts 'pending' until someone with the Vendor Approval role signs it off
+  // (a person who holds that role is already trusted to, so theirs go straight
+  // in as approved). Returns { vendor } on success or { error } for the form.
+  async function handleRequestVendor(form) {
+    if (!loggedInUser) return { error: 'You must be logged in.' }
+    const name = (form.name || '').trim()
+    if (!name) return { error: 'Vendor name is required.' }
+    const approver = canApproveVendors(loggedInUser)
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('vendors')
+      .insert({
+        name,
+        contact_name: (form.contact || '').trim() || null,
+        phone: (form.phone || '').trim() || null,
+        email: (form.email || '').trim() || null,
+        address: (form.address || '').trim() || null,
+        notes: (form.notes || '').trim() || null,
+        approval_status: approver ? 'approved' : 'pending',
+        requested_by: loggedInUser.id,
+        requested_at: now,
+        ...(approver ? { reviewed_by: loggedInUser.id, reviewed_at: now } : {}),
+      })
+      .select()
+      .single()
+    if (error) {
+      if (error.code === '23505') return { error: 'A vendor with that name already exists.' }
+      console.error(error)
+      return { error: 'Could not request the vendor — check the console for details.' }
+    }
+    await loadVendors()
+    flashPoStatus(
+      approver ? 'Vendor added.' : 'Vendor requested — it needs approval before a request using it can be approved or its PO issued.',
+      true
+    )
+    return { vendor: data }
+  }
+
+  // Approve or reject a requested vendor. Requests and POs carry a copy of the
+  // vendor row (for the status shown beside them), so those reload too.
+  async function reviewVendor(vendor, changes, doneMessage) {
+    if (!canApproveVendors(loggedInUser)) {
+      flashPoStatus('You need the Vendor Approval role to do that.', false)
+      return
+    }
+    try {
+      const { error } = await supabase
+        .from('vendors')
+        .update({ ...changes, reviewed_by: loggedInUser.id, reviewed_at: new Date().toISOString() })
+        .eq('id', vendor.id)
+      if (error) throw error
+      flashPoStatus(doneMessage, true)
+      await Promise.all([loadVendors(), loadPurchaseRequests()])
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not update the vendor — check the console for details.', false)
+    }
+  }
+
+  function handleApproveVendor(vendor) {
+    return reviewVendor(vendor, { approval_status: 'approved', rejection_reason: null }, `${vendor.name} approved as a vendor.`)
+  }
+
+  function handleRejectVendor(vendor) {
+    const reason = window.prompt(`Why is ${vendor.name} being rejected as a vendor? (required)`)
+    if (reason === null) return
+    if (!reason.trim()) {
+      flashPoStatus('A reason is required to reject a vendor.', false)
+      return
+    }
+    return reviewVendor(vendor, { approval_status: 'rejected', rejection_reason: reason.trim() }, `${vendor.name} rejected.`)
+  }
+
   // Checking "Logon" for a vendor auto-manages a matching row in `users`
   // behind the scenes — name = the vendor's email, role 'vendor', linked via
   // vendor_id — reusing the exact same login/session/permission machinery as
@@ -3940,6 +4049,10 @@ function App() {
   // /api/invite-user) instead of setting a password by hand.
   async function handleUpdateVendorLogon(vendor, changes) {
     const logonEnabled = changes.logon_enabled ?? vendor.logon_enabled
+    if (logonEnabled && vendorApprovalStatus(vendor) !== 'approved') {
+      flashUsersStatus('A vendor has to be approved before it can have a logon.', false)
+      return
+    }
     if (logonEnabled && !vendor.email) {
       flashUsersStatus('Vendor needs an email before enabling logon.', false)
       return
@@ -4469,6 +4582,9 @@ function App() {
             setPoDraftNewQuoteFile(null)
           }}
           applyPdfReadToDraft={applyPdfReadToDraft}
+          handleRequestVendor={handleRequestVendor}
+          handleApproveVendor={handleApproveVendor}
+          handleRejectVendor={handleRejectVendor}
           poDraftInvoiceNumber={poDraftInvoiceNumber}
           setPoDraftInvoiceNumber={setPoDraftInvoiceNumber}
           poDraftInvoiceAmount={poDraftInvoiceAmount}

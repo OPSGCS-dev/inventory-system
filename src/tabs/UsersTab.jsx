@@ -688,7 +688,15 @@ function UsersTab({
               ) : (
                 vendors.map((v) => (
                   <tr key={v.id}>
-                    <td>{v.name}</td>
+                    <td>
+                      {v.name}
+                      {v.approval_status === 'pending' && <div className="sub">Pending approval</div>}
+                      {v.approval_status === 'rejected' && (
+                        <div className="sub" style={{ color: 'var(--danger)' }}>
+                          Rejected{v.rejection_reason ? ` — ${v.rejection_reason}` : ''}
+                        </div>
+                      )}
+                    </td>
                     <td>{v.contact_name || '—'}</td>
                     <td>{v.phone || '—'}</td>
                     <td>{v.email || '—'}</td>

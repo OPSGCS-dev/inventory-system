@@ -2656,7 +2656,7 @@ function App() {
           spending_cap: spendingCapToSave,
         }
 
-        const { error } = await supabase
+        const { data: savedRows, error } = await supabase
           .from('purchase_requests')
           .update({
             ...newValues,
@@ -2670,7 +2670,17 @@ function App() {
             currency: poDraftCurrency.trim() || 'CAD',
           })
           .eq('id', requestId)
+          .select('id, vendor_id')
         if (error) throw error
+        // An update the database refuses to apply (a permissions rule, say)
+        // comes back with no error and no rows -- which looks exactly like a
+        // save that worked. Check that the row really changed.
+        if (!savedRows || savedRows.length === 0) {
+          throw new Error('The database did not apply the change (no rows were updated) — this is usually a permissions rule on purchase requests.')
+        }
+        if (savedRows[0].vendor_id !== poDraftVendorId) {
+          throw new Error('The vendor change was not stored — the database kept the old vendor.')
+        }
 
         // One compact activity-log entry per save, covering just the
         // fields most worth tracking (not every column) -- same "bullet

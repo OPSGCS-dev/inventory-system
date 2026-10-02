@@ -1,4 +1,4 @@
-import { Fragment, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   poStatusLabel,
   workStatusLabel,
@@ -207,6 +207,64 @@ function PurchaseOrdersTab({
   const sheetWrapRef = useRef(null)
   const statusHeaderRef = useRef(null)
   const [statusCenter, setStatusCenter] = useState(null)
+
+  // Picking an invoice PDF reads its number and total in the browser and
+  // pre-fills the empty fields (never overwrites what someone already typed);
+  // `invoiceScan` is just the note shown under the file picker. The ref holds
+  // the latest field values for after the async read, and the token drops a
+  // result whose file was replaced while it was still being read.
+  const [invoiceScan, setInvoiceScan] = useState(null)
+  const invoiceScanToken = useRef(0)
+  const invoiceFieldsRef = useRef({})
+  useEffect(() => {
+    invoiceFieldsRef.current = { poDraftInvoiceNumber, poDraftInvoiceAmount, poDraftCurrency }
+  })
+
+  async function handleInvoiceFileChosen(file) {
+    setPoDraftNewInvoiceFile(file)
+    const token = ++invoiceScanToken.current
+    if (!file) {
+      setInvoiceScan(null)
+      return
+    }
+    setInvoiceScan({ busy: true })
+    try {
+      const [{ readPdfPages }, { extractInvoice }] = await Promise.all([
+        import('../scrape/readPdf.js'),
+        import('../scrape/extractInvoice.js'),
+      ])
+      const { pages } = await readPdfPages(file)
+      if (token !== invoiceScanToken.current) return
+      const result = extractInvoice(pages)
+      if (!result.hasText) {
+        setInvoiceScan({ note: 'No readable text in this PDF (a scan?) — enter the details by hand.' })
+        return
+      }
+      const current = invoiceFieldsRef.current
+      const notes = []
+      if (result.invoiceNumber) {
+        if (!current.poDraftInvoiceNumber.trim()) setPoDraftInvoiceNumber(result.invoiceNumber.value)
+        notes.push(`Invoice # ${result.invoiceNumber.value}`)
+      }
+      if (result.amount) {
+        if (current.poDraftInvoiceAmount === '') setPoDraftInvoiceAmount(String(result.amount.value))
+        notes.push(`${result.amount.value.toFixed(2)}${result.amount.currency ? ` ${result.amount.currency}` : ''}`)
+      }
+      const missing = [!result.invoiceNumber && 'invoice number', !result.amount && 'total'].filter(Boolean)
+      let note = notes.length ? `Read from the PDF: ${notes.join(', ')}. Check before saving.` : ''
+      if (missing.length) note += `${note ? ' ' : ''}Couldn't find the ${missing.join(' or ')} — enter it by hand.`
+      const requestCurrency = (current.poDraftCurrency || 'CAD').trim().toUpperCase()
+      if (result.amount?.currency && result.amount.currency !== requestCurrency) {
+        note += ` ⚠ This invoice is in ${result.amount.currency} but the request is in ${requestCurrency}.`
+      }
+      setInvoiceScan({ note })
+    } catch (error) {
+      console.error(error)
+      if (token === invoiceScanToken.current) {
+        setInvoiceScan({ note: "Couldn't read this PDF — enter the details by hand." })
+      }
+    }
+  }
 
   useLayoutEffect(() => {
     function recompute() {
@@ -1141,7 +1199,7 @@ function PurchaseOrdersTab({
                     <span className="sub" style={{ margin: 0 }}>
                       {poDraftNewInvoiceFile.name} (will upload on save)
                     </span>{' '}
-                    <button type="button" className="btn-secondary" onClick={() => setPoDraftNewInvoiceFile(null)}>
+                    <button type="button" className="btn-secondary" onClick={() => handleInvoiceFileChosen(null)}>
                       Cancel
                     </button>
                   </div>
@@ -1151,10 +1209,15 @@ function PurchaseOrdersTab({
                   key={poDraftNewInvoiceFile ? 'has-file' : 'no-file'}
                   type="file"
                   accept="application/pdf"
-                  onChange={(e) => setPoDraftNewInvoiceFile(e.target.files?.[0] || null)}
+                  onChange={(e) => handleInvoiceFileChosen(e.target.files?.[0] || null)}
                 />
               </div>
             </div>
+            {invoiceScan && poDraftNewInvoiceFile && (
+              <p className="sub" style={{ margin: '6px 0 0' }}>
+                {invoiceScan.busy ? 'Reading the PDF…' : invoiceScan.note}
+              </p>
+            )}
           </div>
 
           <div className="field-row" style={{ marginTop: 12 }}>

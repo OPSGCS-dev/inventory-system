@@ -109,6 +109,7 @@ function UsersTab({
   editingVendorId,
   openNewVendorForm,
   openEditVendorForm,
+  handleDeleteVendor,
   closeVendorForm,
   vendorFormName,
   setVendorFormName,
@@ -738,6 +739,9 @@ function UsersTab({
                     <td className="col-last">
                       <button className="btn-secondary" onClick={() => openEditVendorForm(v)}>
                         Edit
+                      </button>{' '}
+                      <button className="del-btn" onClick={() => handleDeleteVendor(v)}>
+                        Delete
                       </button>
                     </td>
                   </tr>

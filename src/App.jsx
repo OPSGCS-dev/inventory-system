@@ -4010,6 +4010,59 @@ function App() {
     }
   }
 
+  // Admin-only (the button is only shown to admins, and this checks again).
+  // A vendor that any purchase request points at can't be deleted -- that would
+  // orphan the PO's record of who it was for -- so say so up front instead of
+  // letting the database refuse. A vendor logon account is deactivated along
+  // with it, same as removing a user.
+  async function handleDeleteVendor(vendor) {
+    if (!isAdmin(loggedInUser)) {
+      flashUsersStatus('Only an admin can delete vendors.', false)
+      return
+    }
+    try {
+      const { count, error: countError } = await supabase
+        .from('purchase_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('vendor_id', vendor.id)
+      if (countError) throw countError
+      if (count > 0) {
+        flashUsersStatus(
+          `Can't delete ${vendor.name} — ${count} purchase request${count === 1 ? ' uses' : 's use'} it. Delete or reassign those first.`,
+          false
+        )
+        return
+      }
+      const { data: logons, error: logonError } = await supabase.from('users').select('id').eq('vendor_id', vendor.id)
+      if (logonError) throw logonError
+      const hasLogon = (logons || []).length > 0
+      if (
+        !window.confirm(
+          `Delete vendor "${vendor.name}"? This cannot be undone.${
+            hasLogon ? ' Their vendor logon will be deactivated too.' : ''
+          }`
+        )
+      ) {
+        return
+      }
+      if (hasLogon) {
+        const { error } = await supabase
+          .from('users')
+          .update({ active: false, roles: [], vendor_id: null })
+          .eq('vendor_id', vendor.id)
+        if (error) throw error
+      }
+      const { error } = await supabase.from('vendors').delete().eq('id', vendor.id)
+      if (error) throw error
+      if (editingVendorId === vendor.id) closeVendorForm()
+      flashUsersStatus(`Deleted ${vendor.name}.`, true)
+      await Promise.all([loadVendors(), loadUsers()])
+    } catch (error) {
+      console.error(error)
+      flashUsersStatus(`Could not delete vendor — ${error?.message || 'check the console for details.'}`, false)
+    }
+  }
+
   // Anyone who can create purchase requests may ask for a new vendor. It
   // starts 'pending' until someone with the Vendor Approval role signs it off
   // (a person who holds that role is already trusted to, so theirs go straight
@@ -4753,6 +4806,7 @@ function App() {
           editingVendorId={editingVendorId}
           openNewVendorForm={openNewVendorForm}
           openEditVendorForm={openEditVendorForm}
+          handleDeleteVendor={handleDeleteVendor}
           closeVendorForm={closeVendorForm}
           vendorFormName={vendorFormName}
           setVendorFormName={setVendorFormName}

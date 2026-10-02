@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PO_ROLE_OPTIONS, ENTITY_SCOPED_ROLES } from '../utils'
+import { PO_ROLE_OPTIONS, ENTITY_SCOPED_ROLES, userDisplayName } from '../utils'
 
 // Compact "add one at a time" control instead of a tall multi-select: a
 // one-line dropdown + Add button, with already-assigned entities shown as
@@ -85,6 +85,8 @@ function UsersTab({
   handleDeleteUser,
   inviteEmail,
   setInviteEmail,
+  inviteName,
+  setInviteName,
   inviteRoles,
   toggleInviteRole,
   inviting,
@@ -247,15 +249,17 @@ function UsersTab({
         <div className="sheet-wrap">
           <table className="sheet">
             <colgroup>
-              <col style={{ width: '22%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '16%' }} />
               {PO_ROLE_OPTIONS.map((r) => (
-                <col style={{ width: '8%' }} key={r.value} />
+                <col style={{ width: '7%' }} key={r.value} />
               ))}
-              <col style={{ width: '8%' }} />
-              <col style={{ width: '10%' }} />
+              <col style={{ width: '7%' }} />
+              <col style={{ width: '9%' }} />
             </colgroup>
             <thead>
               <tr className="header-row">
+                <th>Name</th>
                 <th>Email</th>
                 {PO_ROLE_OPTIONS.map((r) => (
                   <th className="center-cell" key={r.value}>
@@ -269,13 +273,22 @@ function UsersTab({
             <tbody>
               {draftUsers.length === 0 ? (
                 <tr>
-                  <td className="empty" colSpan={PO_ROLE_OPTIONS.length + 3}>
+                  <td className="empty" colSpan={PO_ROLE_OPTIONS.length + 4}>
                     No users yet.
                   </td>
                 </tr>
               ) : (
                 draftUsers.map((u, i) => (
                   <tr key={u.id}>
+                    <td>
+                      <input
+                        type="text"
+                        placeholder="Name…"
+                        value={u.display_name || ''}
+                        onChange={(e) => updateDraftUserField(i, 'display_name', e.target.value)}
+                        aria-label={`Name for ${u.name}`}
+                      />
+                    </td>
                     <td>
                       {u.name}
                       {!u.activated_at && (
@@ -333,6 +346,16 @@ function UsersTab({
             placeholder="name@greatcirclesolar.com"
             value={inviteEmail}
             onChange={(e) => setInviteEmail(e.target.value)}
+          />
+          <label htmlFor="invite_name" style={{ marginTop: 8 }}>
+            Name (optional — shown instead of the email wherever they appear)
+          </label>
+          <input
+            id="invite_name"
+            type="text"
+            placeholder="Jane Smith"
+            value={inviteName}
+            onChange={(e) => setInviteName(e.target.value)}
           />
           <div className="field-row" style={{ flexWrap: 'wrap', gap: '4px 16px' }}>
             {PO_ROLE_OPTIONS.map((r) => (
@@ -406,7 +429,7 @@ function UsersTab({
                     </colgroup>
                     <thead>
                       <tr className="header-row">
-                        <th>Email</th>
+                        <th>Person</th>
                         <th>Entities (none selected = all)</th>
                       </tr>
                     </thead>
@@ -415,7 +438,10 @@ function UsersTab({
                         const assignedIds = u.entityAssignments?.[role] || []
                         return (
                           <tr key={u.id}>
-                            <td>{u.name}</td>
+                            <td>
+                              {userDisplayName(u)}
+                              {u.display_name ? <div className="sub">{u.name}</div> : null}
+                            </td>
                             <td>
                               <EntityAssignmentCell
                                 projects={projects}

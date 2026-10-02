@@ -35,7 +35,10 @@ export default async function handler(req, res) {
     return
   }
 
-  const { email, roles, vendor_id } = req.body || {}
+  const { email, roles, vendor_id, display_name } = req.body || {}
+  // Optional friendly name; only written when one is given, so inviting
+  // someone without it never depends on the display_name column existing.
+  const displayName = typeof display_name === 'string' && display_name.trim() ? display_name.trim() : null
   if (!email || typeof email !== 'string') {
     res.status(400).json({ error: 'A valid email is required.' })
     return
@@ -106,6 +109,7 @@ export default async function handler(req, res) {
         roles: roles || [],
         active: true,
         vendor_id: vendor_id ?? null,
+        ...(displayName ? { display_name: displayName } : {}),
       })
       if (insertError) throw insertError
     } else {
@@ -115,7 +119,7 @@ export default async function handler(req, res) {
       // that's what resetting it just made true again.
       const { error: resetError } = await admin
         .from('users')
-        .update({ activated_at: null })
+        .update({ activated_at: null, ...(displayName ? { display_name: displayName } : {}) })
         .eq('auth_user_id', authUserId)
       if (resetError) throw resetError
     }

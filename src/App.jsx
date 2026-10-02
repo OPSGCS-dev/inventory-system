@@ -23,6 +23,7 @@ import {
   canApproveVendors,
   vendorApprovalStatus,
   vendorBlockReason,
+  userDisplayName,
   canIssuePurchaseOrder,
   ENTITY_SCOPED_ROLES,
   linesAreMixedType,
@@ -232,6 +233,7 @@ function App() {
   const [draftUsers, setDraftUsers] = useState([])
   const [savingUsers, setSavingUsers] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteName, setInviteName] = useState('')
   const [inviteRoles, setInviteRoles] = useState([])
   const [inviting, setInviting] = useState(false)
   const [invitePassword, setInvitePassword] = useState(null)
@@ -980,6 +982,7 @@ function App() {
     // from this file will need a Password filled in by hand before import.
     const userRows = users.map((u) => ({
       Name: u.name,
+      'Display Name': u.display_name || '',
       Admin: u.roles?.includes('admin') ? 'Yes' : '',
       Inventory: u.roles?.includes('inventory') ? 'Yes' : '',
       Ticketing: u.roles?.includes('ticketing') ? 'Yes' : '',
@@ -3628,7 +3631,7 @@ function App() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session?.access_token}`,
         },
-        body: JSON.stringify({ email, roles: inviteRoles }),
+        body: JSON.stringify({ email, roles: inviteRoles, display_name: inviteName.trim() || undefined }),
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || 'Could not invite user.')
@@ -3641,6 +3644,7 @@ function App() {
       )
       setInvitePassword(body.password || null)
       setInviteEmail('')
+      setInviteName('')
       setInviteRoles([])
       await loadUsers()
     } catch (error) {
@@ -3658,10 +3662,13 @@ function App() {
     setSavingUsers(true)
     try {
       for (const row of draftUsers) {
-        const { error } = await supabase
-          .from('users')
-          .update({ roles: row.roles || [], active: row.active })
-          .eq('id', row.id)
+        const update = { roles: row.roles || [], active: row.active }
+        // The name only goes in the update when it was actually changed, so a
+        // save that doesn't touch names never depends on the display_name column.
+        const newName = (row.display_name || '').trim() || null
+        const oldName = (users.find((u) => u.id === row.id)?.display_name || '').trim() || null
+        if (newName !== oldName) update.display_name = newName
+        const { error } = await supabase.from('users').update(update).eq('id', row.id)
         if (error) throw error
 
         // Full-replace the entity assignments for each entity-scoped role,
@@ -3705,7 +3712,7 @@ function App() {
       flashUsersStatus("You can't remove your own account.", false)
       return
     }
-    if (!window.confirm(`Remove ${user.name} from Inventory? They'll lose access immediately.`)) {
+    if (!window.confirm(`Remove ${userDisplayName(user)} (${user.name}) from Inventory? They'll lose access immediately.`)) {
       return
     }
     try {
@@ -3714,7 +3721,7 @@ function App() {
         .update({ roles: [], active: false })
         .eq('id', user.id)
       if (error) throw error
-      flashUsersStatus(`Removed ${user.name}.`, true)
+      flashUsersStatus(`Removed ${userDisplayName(user)}.`, true)
       await loadUsers()
     } catch (error) {
       console.error(error)
@@ -4322,7 +4329,7 @@ function App() {
           }}
         />
         <span className="sub" style={{ margin: 0, alignSelf: 'center' }}>
-          {loggedInUser.name}
+          {userDisplayName(loggedInUser)}
         </span>
         {canAccessTicketing(loggedInUser) && (
           <a
@@ -4653,6 +4660,8 @@ function App() {
           handleSaveUsers={handleSaveUsers}
           handleDeleteUser={handleDeleteUser}
           inviteEmail={inviteEmail}
+          inviteName={inviteName}
+          setInviteName={setInviteName}
           setInviteEmail={setInviteEmail}
           inviteRoles={inviteRoles}
           toggleInviteRole={toggleInviteRole}

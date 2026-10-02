@@ -347,9 +347,18 @@ export function describeLineInventory(line, entityName, approved) {
   return null
 }
 
+// A user's `name` is their login email (it's what sign-in and the ticket
+// system match on), so it can't be reworded. `display_name` is the friendly
+// name an admin gives them, shown anywhere a person is named; people without
+// one still show their email.
+export function userDisplayName(user) {
+  return (user?.display_name || '').trim() || user?.name || ''
+}
+
 export function findUserName(users, id) {
   if (!id) return '—'
-  return users.find((u) => u.id === id)?.name || '—'
+  const user = users.find((u) => u.id === id)
+  return (user && userDisplayName(user)) || '—'
 }
 
 // Roles are strictly additive and independent — admin included. Admin only
@@ -499,7 +508,7 @@ export function canPreviewPo(status) {
 // additive now (admin included), there's no fallback: if nobody has ticked
 // the role, nobody can act on it yet.
 export function usersWithRole(users, role) {
-  return (users || []).filter((u) => u.active && u.roles?.includes(role)).map((u) => u.name)
+  return (users || []).filter((u) => u.active && u.roles?.includes(role)).map((u) => userDisplayName(u))
 }
 
 // Describes what has to happen next for a purchase request, and names

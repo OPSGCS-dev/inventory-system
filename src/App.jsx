@@ -4,7 +4,6 @@ import * as XLSX from 'xlsx'
 import { supabase } from './supabaseClient'
 import './App.css'
 import {
-  WHERE_USED_SEED,
   emptyFilters,
   blankDraftRow,
   uniqueSorted,
@@ -765,15 +764,22 @@ function App() {
     () => uniqueSorted([...parts.map((p) => p.spare_category), ...draftParts.map((r) => r.spare_category)]),
     [parts, draftParts]
   )
-  const whereUsedOptions = useMemo(
-    () =>
-      uniqueSorted([
-        ...WHERE_USED_SEED,
-        ...parts.map((p) => p.where_used),
-        ...draftParts.map((r) => r.where_used),
-      ]),
-    [parts, draftParts]
-  )
+  // "Used By" on the Master List: every entity whose Required Inventory
+  // includes the part. Worked out from the same project_parts rows the rest
+  // of the app already loads (stockItems), so it can't drift out of date and
+  // there is nothing to keep by hand.
+  const usedByByPart = useMemo(() => {
+    const byId = new Map(projects.map((p) => [p.id, p]))
+    const map = new Map()
+    for (const item of stockItems) {
+      const entities = Object.keys(item.perProject)
+        .map((id) => byId.get(Number(id)))
+        .filter(Boolean)
+        .sort((a, b) => a.name.localeCompare(b.name))
+      map.set(item.gcs_id, entities)
+    }
+    return map
+  }, [stockItems, projects])
 
   function runAction(action) {
     if (action.type === 'edit') {
@@ -878,7 +884,7 @@ function App() {
       const draftExistingIds = draftParts.filter((r) => r._existing).map((r) => r.gcs_id)
       const deletedIds = originalIds.filter((id) => !draftExistingIds.includes(id))
 
-      const editableFields = ['description', 'manufacturer', 'spare_category', 'where_used']
+      const editableFields = ['description', 'manufacturer', 'spare_category']
       const changedRows = draftParts.filter((r) => {
         if (!r._existing) return false
         const orig = parts.find((p) => p.gcs_id === r.gcs_id)
@@ -899,7 +905,6 @@ function App() {
             description: (row.description || '').trim() || null,
             manufacturer: (row.manufacturer || '').trim() || null,
             spare_category: (row.spare_category || '').trim() || null,
-            where_used: (row.where_used || '').trim() || null,
             last_cost: row.last_cost === '' ? null : Number(row.last_cost),
             updated_at: new Date().toISOString(),
           })
@@ -914,7 +919,6 @@ function App() {
             manufacturer_part_number: (r.manufacturer_part_number || '').trim() || null,
             manufacturer: (r.manufacturer || '').trim() || null,
             spare_category: (r.spare_category || '').trim() || null,
-            where_used: (r.where_used || '').trim() || null,
             description: (r.description || '').trim() || null,
             last_cost: r.last_cost === '' ? null : Number(r.last_cost),
             updated_at: new Date().toISOString(),
@@ -942,7 +946,7 @@ function App() {
       'Mfr Part #': p.manufacturer_part_number || '',
       Manufacturer: p.manufacturer || '',
       Category: p.spare_category || '',
-      'Where Used': p.where_used || '',
+      'Used By': (usedByByPart.get(p.gcs_id) || []).map((e) => e.name).join('; '),
       Description: p.description || '',
     }))
     const csv = Papa.unparse(rows)
@@ -1337,7 +1341,6 @@ function App() {
     const mfrPartKey = fieldMap['mfrpart'] || fieldMap['mfrpartno'] || fieldMap['manufacturerpartnumber']
     const mfrKey = fieldMap['manufacturer']
     const categoryKey = fieldMap['category'] || fieldMap['sparecategory']
-    const whereUsedKey = fieldMap['whereused']
     const descKey = fieldMap['description']
 
     if (!partIdKey) {
@@ -1371,7 +1374,6 @@ function App() {
         manufacturer_part_number: mfrPartKey ? (row[mfrPartKey] || '').trim() : '',
         manufacturer: mfrKey ? (row[mfrKey] || '').trim() : '',
         spare_category: categoryKey ? (row[categoryKey] || '').trim() : '',
-        where_used: whereUsedKey ? (row[whereUsedKey] || '').trim() : '',
         description: descKey ? (row[descKey] || '').trim() : '',
       })
     })
@@ -1396,7 +1398,6 @@ function App() {
             manufacturer_part_number: row.manufacturer_part_number || null,
             manufacturer: row.manufacturer || null,
             spare_category: row.spare_category || null,
-            where_used: row.where_used || null,
             description: row.description || null,
             updated_at: nowIso,
           })
@@ -1411,7 +1412,6 @@ function App() {
             manufacturer_part_number: r.manufacturer_part_number || null,
             manufacturer: r.manufacturer || null,
             spare_category: r.spare_category || null,
-            where_used: r.where_used || null,
             description: r.description || null,
             updated_at: nowIso,
           }))
@@ -4043,10 +4043,11 @@ function App() {
     return parts.filter((p) =>
       active.every(([field, v]) => {
         if (field === 'gcs_id') return String(p.gcs_id) === v.trim()
+        if (field === 'used_by') return (usedByByPart.get(p.gcs_id) || []).some((e) => String(e.id) === v.trim())
         return String(p[field] ?? '').toLowerCase().includes(v.trim().toLowerCase())
       })
     )
-  }, [parts, filters])
+  }, [parts, filters, usedByByPart])
 
   const gcsIdOptions = useMemo(
     () => [...parts].map((p) => p.gcs_id).sort((a, b) => a - b),
@@ -4275,7 +4276,8 @@ function App() {
           canEditInventory={canEditInventory(loggedInUser)}
           manufacturerOptions={manufacturerOptions}
           categoryOptions={categoryOptions}
-          whereUsedOptions={whereUsedOptions}
+          usedByByPart={usedByByPart}
+          entities={projects}
           masterPanel={masterPanel}
           resetMasterPanel={resetMasterPanel}
           editMode={editMode}

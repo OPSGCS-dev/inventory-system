@@ -1,10 +1,11 @@
-import { emptyFilters } from '../utils'
+import { emptyFilters, shortProjectName } from '../utils'
 
 function MasterListTab({
   canEditInventory,
   manufacturerOptions,
   categoryOptions,
-  whereUsedOptions,
+  usedByByPart,
+  entities,
   masterPanel,
   resetMasterPanel,
   editMode,
@@ -32,6 +33,15 @@ function MasterListTab({
   updateDraftField,
   removeDraftRow,
 }) {
+  // Every entity that requires the part, by its short name (full names on hover).
+  const usedByCell = (p) => {
+    const used = usedByByPart.get(p.gcs_id) || []
+    if (used.length === 0) return '—'
+    return (
+      <span title={used.map((e) => e.name).join(', ')}>{used.map((e) => shortProjectName(e.name)).join(', ')}</span>
+    )
+  }
+
   return (
     <>
       <datalist id="manufacturer-options">
@@ -41,11 +51,6 @@ function MasterListTab({
       </datalist>
       <datalist id="category-options">
         {categoryOptions.map((v) => (
-          <option value={v} key={v} />
-        ))}
-      </datalist>
-      <datalist id="where-used-options">
-        {whereUsedOptions.map((v) => (
           <option value={v} key={v} />
         ))}
       </datalist>
@@ -92,7 +97,7 @@ function MasterListTab({
           <div className="card-header">
             <h2>Import List</h2>
             <p className="sub" style={{ margin: 0 }}>
-              CSV with columns: GCS P/N, Part ID, Mfr Part #, Manufacturer, Category, Where Used,
+              CSV with columns: GCS P/N, Part ID, Mfr Part #, Manufacturer, Category,
               Description. Rows with a matching GCS P/N update that part; rows with GCS P/N left
               blank add a new part.
             </p>
@@ -200,7 +205,7 @@ function MasterListTab({
                   <th>Mfr Part #</th>
                   <th>Manufacturer</th>
                   <th>Category</th>
-                  <th>Where Used</th>
+                  <th>Used By</th>
                   <th>Description</th>
                   <th>Last Cost</th>
                   {editMode && <th></th>}
@@ -264,13 +269,13 @@ function MasterListTab({
                     </th>
                     <th>
                       <select
-                        value={filters.where_used}
-                        onChange={(e) => updateFilter('where_used', e.target.value)}
+                        value={filters.used_by}
+                        onChange={(e) => updateFilter('used_by', e.target.value)}
                       >
                         <option value="">All</option>
-                        {whereUsedOptions.map((v) => (
-                          <option value={v} key={v}>
-                            {v}
+                        {entities.map((e) => (
+                          <option value={e.id} key={e.id}>
+                            {shortProjectName(e.name)}
                           </option>
                         ))}
                       </select>
@@ -339,14 +344,7 @@ function MasterListTab({
                               onChange={(e) => updateDraftField(i, 'spare_category', e.target.value)}
                             />
                           </td>
-                          <td>
-                            <input
-                              type="text"
-                              list="where-used-options"
-                              value={p.where_used || ''}
-                              onChange={(e) => updateDraftField(i, 'where_used', e.target.value)}
-                            />
-                          </td>
+                          <td title="Set by each entity's Required Inventory list">{usedByCell(p)}</td>
                           <td>
                             <input
                               type="text"
@@ -368,7 +366,7 @@ function MasterListTab({
                         <>
                           <td>{p.manufacturer || '—'}</td>
                           <td>{p.spare_category || '—'}</td>
-                          <td>{p.where_used || '—'}</td>
+                          <td>{usedByCell(p)}</td>
                           <td>{p.description || '—'}</td>
                           <td>{p.last_cost != null ? `$${Number(p.last_cost).toFixed(2)}` : '—'}</td>
                         </>

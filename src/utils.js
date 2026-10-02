@@ -1,5 +1,3 @@
-export const WHERE_USED_SEED = ['SMA 500 CP', 'SMA 500 XP', 'SATCON 500', 'Substation', 'Array']
-
 export const TICKETING_URL = 'https://ticket-system-gcs14.vercel.app'
 
 // Inventory journal History tab -- one label per distinct action that can
@@ -24,7 +22,7 @@ export const emptyFilters = {
   manufacturer_part_number: '',
   manufacturer: '',
   spare_category: '',
-  where_used: '',
+  used_by: '',
   description: '',
 }
 
@@ -35,7 +33,6 @@ export const blankDraftRow = () => ({
   manufacturer_part_number: '',
   manufacturer: '',
   spare_category: '',
-  where_used: '',
   description: '',
   last_cost: '250',
 })

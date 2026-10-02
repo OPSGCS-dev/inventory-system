@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import PdfReadPanel from './PdfReadPanel.jsx'
 import {
   poStatusLabel,
   workStatusLabel,
@@ -125,6 +126,7 @@ function PurchaseOrdersTab({
   poDraftNewQuoteFile,
   setPoDraftNewQuoteFile,
   clearPoDraftQuoteFile,
+  applyPdfReadToDraft,
   poDraftInvoiceNumber,
   setPoDraftInvoiceNumber,
   poDraftInvoiceAmount,
@@ -208,62 +210,200 @@ function PurchaseOrdersTab({
   const statusHeaderRef = useRef(null)
   const [statusCenter, setStatusCenter] = useState(null)
 
-  // Picking an invoice PDF reads its number and total in the browser and
-  // pre-fills the empty fields (never overwrites what someone already typed);
-  // `invoiceScan` is just the note shown under the file picker. The ref holds
-  // the latest field values for after the async read, and the token drops a
-  // result whose file was replaced while it was still being read.
-  const [invoiceScan, setInvoiceScan] = useState(null)
-  const invoiceScanToken = useRef(0)
-  const invoiceFieldsRef = useRef({})
+  // Attaching a quote or invoice PDF reads it in the browser (see ../scrape):
+  //  - on the invoice picker, the invoice # and total pre-fill the empty
+  //    invoice fields;
+  //  - on either picker, everything else it finds (entity, site, vendor, tax,
+  //    shipping, markup, line items...) goes into a review box (`pdfRead`)
+  //    where each item is applied only if checked, so nothing already on the
+  //    form is silently overwritten.
+  // The ref holds the latest form values for after the async read, and the
+  // token drops a result whose file was replaced while it was being read.
+  const [pdfScan, setPdfScan] = useState(null)
+  const [pdfRead, setPdfRead] = useState(null)
+  const pdfScanToken = useRef(0)
+  const formRef = useRef({})
   useEffect(() => {
-    invoiceFieldsRef.current = { poDraftInvoiceNumber, poDraftInvoiceAmount, poDraftCurrency }
+    formRef.current = {
+      poDraftInvoiceNumber,
+      poDraftInvoiceAmount,
+      poDraftCurrency,
+      poDraftProjectId,
+      poDraftSubProjectId,
+      poDraftVendorId,
+      poDraftTaxRate,
+      poDraftShippingHandling,
+      poDraftMarkupRate,
+      poDraftVendorQuoteNumber,
+      poDraftCategory,
+      projects,
+      subProjects,
+      vendors,
+    }
   })
 
-  async function handleInvoiceFileChosen(file) {
-    setPoDraftNewInvoiceFile(file)
-    const token = ++invoiceScanToken.current
+  function buildPdfRead(fileName, result, pages, matchers) {
+    const cur = formRef.current
+    const items = []
+    const data = {}
+    const notes = []
+    const nameOf = (list, id) => list.find((r) => r.id === id)?.name || null
+    const add = (key, label, value, current, extra) => items.push({ key, label, value, current, checked: true, ...extra })
+
+    const entity = matchers.matchEntity(pages, cur.projects)
+    if (entity && entity.id !== cur.poDraftProjectId) {
+      data.entity = entity.id
+      add('entity', 'Entity', entity.name, nameOf(cur.projects, cur.poDraftProjectId))
+    }
+    const entityId = entity ? entity.id : cur.poDraftProjectId
+    const site = matchers.matchSubProject(pages, cur.subProjects.filter((sp) => sp.project_id === entityId))
+    // Switching entity clears the site, so a site is offered whenever it differs
+    // from what the form will hold after the entity is applied.
+    if (site && (entity ? true : site.id !== cur.poDraftSubProjectId)) {
+      data.site = site.id
+      add('site', 'Site', site.name, entity ? null : nameOf(cur.subProjects, cur.poDraftSubProjectId))
+    }
+    const vendor = matchers.matchVendor(pages, cur.vendors)
+    if (vendor && vendor.id !== cur.poDraftVendorId) {
+      data.vendor = vendor.id
+      add('vendor', 'Vendor', vendor.name, nameOf(cur.vendors, cur.poDraftVendorId))
+    }
+
+    const currency = result.amount?.currency
+    if (currency && currency !== (cur.poDraftCurrency || 'CAD').trim().toUpperCase()) {
+      data.currency = currency
+      add('currency', 'Currency', currency, cur.poDraftCurrency || 'CAD')
+    }
+    if (result.quoteNumber && result.quoteNumber.value !== cur.poDraftVendorQuoteNumber.trim()) {
+      data.quote = result.quoteNumber.value
+      add('quote', 'Vendor quote #', result.quoteNumber.value, cur.poDraftVendorQuoteNumber.trim() || null)
+    }
+    if (result.tax && result.tax.rate !== null && Number(cur.poDraftTaxRate) !== result.tax.rate) {
+      data.tax = result.tax.rate
+      add('tax', 'Sales tax', `${result.tax.rate}%`, `${cur.poDraftTaxRate}%`)
+    }
+
+    // Shipping and markup are only fields on a Purchase PO; on a Service PO
+    // they'd silently drop out of the totals, so they come in as lines instead.
+    const isPurchase = cur.poDraftCategory === 'purchase'
+    const lineItems = result.lines ? [...result.lines.items] : []
+    if (isPurchase) {
+      if (result.shipping > 0 && Number(cur.poDraftShippingHandling) !== result.shipping) {
+        data.shipping = result.shipping
+        add('shipping', 'Shipping / handling', result.shipping.toFixed(2), Number(cur.poDraftShippingHandling).toFixed(2))
+      }
+      if (result.markup && result.markup.rate !== null && Number(cur.poDraftMarkupRate) !== result.markup.rate) {
+        data.markup = result.markup.rate
+        add('markup', 'Markup', `${result.markup.rate}%`, `${cur.poDraftMarkupRate}%`)
+      }
+    } else if (result.lines) {
+      if (result.shipping > 0) {
+        lineItems.push({ description: 'Shipping', partNumber: '', quantity: 1, unitPrice: result.shipping, amount: result.shipping })
+      }
+      if (result.markup) {
+        const label = result.markup.rate !== null ? `Markup @ ${result.markup.rate}%` : 'Markup'
+        lineItems.push({ description: label, partNumber: '', quantity: 1, unitPrice: result.markup.amount, amount: result.markup.amount })
+      }
+    }
+
+    if (lineItems.length > 0) {
+      const sum = lineItems.reduce((s, l) => s + l.amount, 0)
+      data.lines = lineItems
+      add(
+        'lines',
+        'Line items',
+        `${lineItems.length} line${lineItems.length === 1 ? '' : 's'}, ${sum.toFixed(2)} in total`,
+        null,
+        {
+          lines: lineItems,
+          warn: result.lines.reconciled ? null : "These don't add up to the PDF's own subtotal/total — check every line.",
+        }
+      )
+      if (result.lines.reconciled) notes.push("The lines add up to the PDF's subtotal/total ✓")
+      if (isPurchase && lineItems.every((l) => !l.partNumber)) {
+        notes.push(
+          'No part numbers found — if this is a service rather than parts, set PO Category to Service before applying.'
+        )
+      }
+    }
+
+    return {
+      fileName,
+      items,
+      data,
+      notes,
+      emptyNote: 'Nothing new to fill in from this PDF.',
+    }
+  }
+
+  async function readPdfFile(file, source) {
+    if (source === 'invoice') setPoDraftNewInvoiceFile(file)
+    else setPoDraftNewQuoteFile(file)
+    const token = ++pdfScanToken.current
+    setPdfRead(null)
     if (!file) {
-      setInvoiceScan(null)
+      setPdfScan(null)
       return
     }
-    setInvoiceScan({ busy: true })
+    setPdfScan({ source, busy: true })
     try {
-      const [{ readPdfPages }, { extractInvoice }] = await Promise.all([
+      const [{ readPdfPages }, { extractDocument }, matchers] = await Promise.all([
         import('../scrape/readPdf.js'),
-        import('../scrape/extractInvoice.js'),
+        import('../scrape/extractDocument.js'),
+        import('../scrape/matchers.js'),
       ])
       const { pages } = await readPdfPages(file)
-      if (token !== invoiceScanToken.current) return
-      const result = extractInvoice(pages)
+      if (token !== pdfScanToken.current) return
+      const result = extractDocument(pages)
       if (!result.hasText) {
-        setInvoiceScan({ note: 'No readable text in this PDF (a scan?) — enter the details by hand.' })
+        setPdfScan({ source, note: 'No readable text in this PDF (a scan?) — enter the details by hand.' })
         return
       }
-      const current = invoiceFieldsRef.current
-      const notes = []
-      if (result.invoiceNumber) {
-        if (!current.poDraftInvoiceNumber.trim()) setPoDraftInvoiceNumber(result.invoiceNumber.value)
-        notes.push(`Invoice # ${result.invoiceNumber.value}`)
+
+      let note = ''
+      if (source === 'invoice') {
+        const cur = formRef.current
+        const found = []
+        if (result.invoiceNumber) {
+          if (!cur.poDraftInvoiceNumber.trim()) setPoDraftInvoiceNumber(result.invoiceNumber.value)
+          found.push(`Invoice # ${result.invoiceNumber.value}`)
+        }
+        if (result.amount) {
+          if (cur.poDraftInvoiceAmount === '') setPoDraftInvoiceAmount(String(result.amount.value))
+          found.push(`${result.amount.value.toFixed(2)}${result.amount.currency ? ` ${result.amount.currency}` : ''}`)
+        }
+        const missing = [!result.invoiceNumber && 'invoice number', !result.amount && 'total'].filter(Boolean)
+        note = found.length ? `Read from the PDF: ${found.join(', ')}. Check before saving.` : ''
+        if (missing.length) note += `${note ? ' ' : ''}Couldn't find the ${missing.join(' or ')} — enter it by hand.`
       }
-      if (result.amount) {
-        if (current.poDraftInvoiceAmount === '') setPoDraftInvoiceAmount(String(result.amount.value))
-        notes.push(`${result.amount.value.toFixed(2)}${result.amount.currency ? ` ${result.amount.currency}` : ''}`)
+
+      const read = buildPdfRead(file.name, result, pages, matchers)
+      setPdfRead(read)
+      if (source === 'quote') {
+        note = read.items.length
+          ? `Found ${read.items.length} thing${read.items.length === 1 ? '' : 's'} to fill in — review below.`
+          : read.emptyNote
+      } else if (read.items.length) {
+        note += ' More to review below.'
       }
-      const missing = [!result.invoiceNumber && 'invoice number', !result.amount && 'total'].filter(Boolean)
-      let note = notes.length ? `Read from the PDF: ${notes.join(', ')}. Check before saving.` : ''
-      if (missing.length) note += `${note ? ' ' : ''}Couldn't find the ${missing.join(' or ')} — enter it by hand.`
-      const requestCurrency = (current.poDraftCurrency || 'CAD').trim().toUpperCase()
-      if (result.amount?.currency && result.amount.currency !== requestCurrency) {
-        note += ` ⚠ This invoice is in ${result.amount.currency} but the request is in ${requestCurrency}.`
-      }
-      setInvoiceScan({ note })
+      setPdfScan({ source, note })
     } catch (error) {
       console.error(error)
-      if (token === invoiceScanToken.current) {
-        setInvoiceScan({ note: "Couldn't read this PDF — enter the details by hand." })
+      if (token === pdfScanToken.current) {
+        setPdfScan({ source, note: "Couldn't read this PDF — enter the details by hand." })
       }
     }
+  }
+
+  function togglePdfReadItem(key) {
+    setPdfRead((r) => (r ? { ...r, items: r.items.map((i) => (i.key === key ? { ...i, checked: !i.checked } : i)) } : r))
+  }
+
+  async function applyPdfRead() {
+    const selection = {}
+    for (const item of pdfRead.items) if (item.checked) selection[item.key] = pdfRead.data[item.key]
+    const applied = await applyPdfReadToDraft(selection)
+    if (applied) setPdfRead(null)
   }
 
   useLayoutEffect(() => {
@@ -1136,17 +1276,23 @@ function PurchaseOrdersTab({
                   <span className="sub" style={{ margin: 0 }}>
                     {poDraftNewQuoteFile.name} (will upload on save)
                   </span>{' '}
-                  <button type="button" className="btn-secondary" onClick={clearPoDraftQuoteFile}>
+                  <button type="button" className="btn-secondary" onClick={() => readPdfFile(null, 'quote')}>
                     Cancel
                   </button>
                 </div>
               )}
               <input
                 id="po_draft_quote_file"
+                key={poDraftNewQuoteFile ? 'has-file' : 'no-file'}
                 type="file"
                 accept="application/pdf"
-                onChange={(e) => setPoDraftNewQuoteFile(e.target.files?.[0] || null)}
+                onChange={(e) => readPdfFile(e.target.files?.[0] || null, 'quote')}
               />
+              {pdfScan && pdfScan.source === 'quote' && poDraftNewQuoteFile && (
+                <p className="sub" style={{ margin: '6px 0 0' }}>
+                  {pdfScan.busy ? 'Reading the PDF…' : pdfScan.note}
+                </p>
+              )}
             </div>
           </div>
 
@@ -1199,7 +1345,7 @@ function PurchaseOrdersTab({
                     <span className="sub" style={{ margin: 0 }}>
                       {poDraftNewInvoiceFile.name} (will upload on save)
                     </span>{' '}
-                    <button type="button" className="btn-secondary" onClick={() => handleInvoiceFileChosen(null)}>
+                    <button type="button" className="btn-secondary" onClick={() => readPdfFile(null, 'invoice')}>
                       Cancel
                     </button>
                   </div>
@@ -1209,16 +1355,25 @@ function PurchaseOrdersTab({
                   key={poDraftNewInvoiceFile ? 'has-file' : 'no-file'}
                   type="file"
                   accept="application/pdf"
-                  onChange={(e) => handleInvoiceFileChosen(e.target.files?.[0] || null)}
+                  onChange={(e) => readPdfFile(e.target.files?.[0] || null, 'invoice')}
                 />
               </div>
             </div>
-            {invoiceScan && poDraftNewInvoiceFile && (
+            {pdfScan && pdfScan.source === 'invoice' && poDraftNewInvoiceFile && (
               <p className="sub" style={{ margin: '6px 0 0' }}>
-                {invoiceScan.busy ? 'Reading the PDF…' : invoiceScan.note}
+                {pdfScan.busy ? 'Reading the PDF…' : pdfScan.note}
               </p>
             )}
           </div>
+
+          {pdfRead && (poDraftNewQuoteFile || poDraftNewInvoiceFile) && (
+            <PdfReadPanel
+              read={pdfRead}
+              onToggle={togglePdfReadItem}
+              onApply={applyPdfRead}
+              onDismiss={() => setPdfRead(null)}
+            />
+          )}
 
           <div className="field-row" style={{ marginTop: 12 }}>
             <div>

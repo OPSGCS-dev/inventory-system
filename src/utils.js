@@ -557,13 +557,14 @@ export function buildPoMailto(request) {
   return `mailto:${vendorEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 }
 
-// Narrows the parts list to those whose GCS P/N, Part ID, or Description
-// contain the search text — used to pick a part on a purchase request line.
+// Narrows the parts list to those whose GCS P/N, Part ID, Manufacturer P/N or
+// Description contain the search text — used to pick a part on a purchase
+// request line.
 export function filterPartsForSearch(parts, search) {
   const q = (search || '').trim().toLowerCase()
   if (!q) return parts
   return parts.filter((p) =>
-    [String(p.gcs_id ?? ''), p.gcs_part_id, p.description]
+    [String(p.gcs_id ?? ''), p.gcs_part_id, p.manufacturer_part_number, p.description]
       .filter(Boolean)
       .some((field) => String(field).toLowerCase().includes(q))
   )

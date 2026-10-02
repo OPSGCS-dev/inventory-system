@@ -39,6 +39,7 @@ import InventoryOnHandTab from './tabs/InventoryOnHandTab'
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import UsersTab from './tabs/UsersTab'
 import GlobalSearch from './tabs/GlobalSearch'
+import { matchPart } from './scrape/matchers'
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true)
@@ -2439,7 +2440,90 @@ function App() {
     )
   }
 
+  // Applies the items ticked in the form's "Read from the PDF" box (see
+  // tabs/PdfReadPanel.jsx). `sel` holds only the ticked items: entity, site,
+  // vendor, currency, quote, tax, shipping, markup, lines. Returns false if
+  // the person backed out of replacing their existing lines.
+  async function applyPdfReadToDraft(sel) {
+    let newLines = null
+    if (sel.lines) {
+      const hasContent = poDraftLines.some(
+        (l) => l.part_gcs_id || (l.description || '').trim() || (l.unit_cost !== '' && l.unit_cost != null)
+      )
+      if (
+        hasContent &&
+        !window.confirm(
+          `Replace the ${poDraftLines.length} line${poDraftLines.length === 1 ? '' : 's'} already on this form with the ${sel.lines.length} read from the PDF?`
+        )
+      ) {
+        return false
+      }
+
+      const lineType = categoryLineType(poDraftCategory)
+      // Parts are matched against what's stocked for the entity the form will
+      // have once this is applied -- same list the part picker offers.
+      let eligibleParts = []
+      if (lineType === 'part') {
+        const targetProjectId = sel.entity ?? poDraftProjectId
+        let eligibleIds = poDraftEligiblePartIds
+        if (targetProjectId && targetProjectId !== poDraftProjectId) {
+          const { data } = await supabase.from('project_parts').select('part_gcs_id').eq('project_id', targetProjectId)
+          eligibleIds = new Set((data ?? []).map((r) => r.part_gcs_id))
+        }
+        eligibleParts = parts.filter((p) => eligibleIds.has(p.gcs_id))
+      }
+
+      newLines = sel.lines.map((l) => {
+        const line = {
+          ...blankPurchaseRequestLine(lineType),
+          quantity: String(l.quantity),
+          unit_cost: String(l.unitPrice),
+          // Marks a line that came from a PDF, so saving can refuse to
+          // silently drop one that never got matched to a part.
+          _scraped: true,
+        }
+        if (lineType === 'service') return { ...line, description: l.description }
+        const part = l.partNumber ? matchPart(l.partNumber, eligibleParts) : null
+        return {
+          ...line,
+          part_gcs_id: part ? part.gcs_id : null,
+          // Unmatched: leave the vendor's part number in the search box so the
+          // picker narrows to likely candidates, and keep it in the note.
+          partSearch: part ? '' : l.partNumber || '',
+          description: part ? l.description : [l.partNumber, l.description].filter(Boolean).join(' — '),
+        }
+      })
+    }
+
+    if (sel.entity !== undefined) {
+      setPoDraftProjectId(sel.entity)
+      setPoDraftSubProjectId(sel.site ?? null)
+    } else if (sel.site !== undefined) {
+      setPoDraftSubProjectId(sel.site)
+    }
+    if (sel.vendor !== undefined) setPoDraftVendorId(sel.vendor)
+    if (sel.currency !== undefined) setPoDraftCurrency(sel.currency)
+    if (sel.quote !== undefined) setPoDraftVendorQuoteNumber(sel.quote)
+    if (sel.tax !== undefined) setPoDraftTaxRate(String(sel.tax))
+    if (sel.shipping !== undefined) setPoDraftShippingHandling(String(sel.shipping))
+    if (sel.markup !== undefined) setPoDraftMarkupRate(String(sel.markup))
+    if (newLines) setPoDraftLines(newLines)
+    return true
+  }
+
   async function handleCreatePurchaseRequest() {
+    // A line read from a PDF that was never matched to a part would be
+    // dropped by the filter below without a word -- stop and say so instead.
+    const unmatchedFromPdf = poDraftLines.filter(
+      (l) => l._scraped && l.line_type === 'part' && !l.part_gcs_id && Number(l.unit_cost) > 0
+    )
+    if (unmatchedFromPdf.length > 0) {
+      flashPoStatus(
+        `Pick a part for ${unmatchedFromPdf.length === 1 ? 'the line' : `each of the ${unmatchedFromPdf.length} lines`} read from the PDF (or delete ${unmatchedFromPdf.length === 1 ? 'it' : 'them'}) — or switch the PO Category to Service.`,
+        false
+      )
+      return
+    }
     const validLines = poDraftLines.filter((l) =>
       l.line_type === 'part' ? Boolean(l.part_gcs_id) : (l.description || '').trim() !== ''
     )
@@ -4271,6 +4355,7 @@ function App() {
             setPoDraftQuoteFileName(null)
             setPoDraftNewQuoteFile(null)
           }}
+          applyPdfReadToDraft={applyPdfReadToDraft}
           poDraftInvoiceNumber={poDraftInvoiceNumber}
           setPoDraftInvoiceNumber={setPoDraftInvoiceNumber}
           poDraftInvoiceAmount={poDraftInvoiceAmount}

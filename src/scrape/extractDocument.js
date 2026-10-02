@@ -40,6 +40,14 @@ export function buildRows(items) {
         cells.push({ text: it.str, x: it.x, x2: it.x + it.w })
       }
     }
+    // A lone "$" belongs to the number after it ("$  17,257"), however far
+    // apart a spreadsheet-style layout sets them.
+    for (let i = cells.length - 2; i >= 0; i--) {
+      if (/^(?:US|CA)?\$$/.test(cells[i].text)) {
+        cells[i + 1] = { text: `${cells[i].text} ${cells[i + 1].text}`, x: cells[i].x, x2: cells[i + 1].x2 }
+        cells.splice(i, 1)
+      }
+    }
     return { y: row.y, cells }
   })
 }
@@ -232,9 +240,11 @@ function findTotal(pages) {
 
 // --- line item table --------------------------------------------------
 
-const HEADER_QTY = /^(?:qty\.?|quantity|(?:qty|quantity)\s*&\s*unit|units?)\.?$/i
-const HEADER_PRICE = /^(?:unit\s*price(?:\s*\(\w+\))?|unit\s*cost|rate|price)\.?$/i
-const HEADER_AMOUNT = /^(?:amount(?:\s*-\s*montant)?|extension|ext\.?|line\s*total|total(?:\s*\(\w+\))?)$/i
+const HEADER_QTY = /^(?:qty\.?|quan(?:tity)?\.?|(?:qty|quantity)\s*&\s*unit|units?)\.?$/i
+const HEADER_PRICE = /^(?:unit\s*price(?:\s*\(\w+\))?|unit\s*cost|price\s*each|rate|price)\.?$/i
+const HEADER_AMOUNT = /^(?:amount(?:\s*-\s*montant)?|extension|ext\.?|line\s*total|net\s*(?:price|amount)|total(?:\s*\(\w+\))?)$/i
+// A column holding what was bought, as opposed to a longer description of it.
+const HEADER_NAME = /^(?:product|service|product\s*\/\s*service|product\s*name|name)$/i
 const HEADER_DESC = /(?:^|\s)(?:description|items?|particulars|details)\s*:?$/i
 const HEADER_PART = /(?:part|sku|item|catalog(?:ue)?|product|model)\s*(?:no\.?|number|#|code|id)\b|^p\/n$|^mfr?\.?\s*p/i
 
@@ -368,15 +378,25 @@ export function buildLines(rows, start, end, header, anchors) {
     headerCells.find((c) => /description$/i.test(c.text)) || headerCells.find((c) => HEADER_DESC.test(c.text)) || null
   const partHeader = headerCells.find((c) => HEADER_PART.test(c.text) && c !== descHeader) || null
   const numericLeft = Math.min(...sorted.flatMap((a) => a.cells.map((c) => c.x)))
-  const descLeft = descHeader ? descHeader.x - 3 : 0
   const descRight = numericLeft - 2
+
+  // The description column starts where the heading before it ends -- not at
+  // its own heading, which spreadsheet-style forms centre over left-aligned
+  // text. A "Product/Service" heading just before it is part of the column.
+  let descLeft = 0
+  if (descHeader) {
+    const before = headerCells
+      .filter((c) => c !== descHeader && c.x2 <= descHeader.x + 1)
+      .sort((a, b) => b.x2 - a.x2)[0]
+    if (before) descLeft = HEADER_NAME.test(before.text) ? before.x - 3 : before.x2 - 1
+  }
 
   // Part-number column: from its heading to the description column.
   let partLeft = null
   let partRight = null
-  if (partHeader && partHeader.x < descLeft + 3) {
+  if (partHeader && descHeader && partHeader.x < descHeader.x) {
     partLeft = partHeader.x - 3
-    partRight = descLeft
+    partRight = descHeader.x - 3
   }
 
   const items = []
@@ -413,7 +433,7 @@ export function buildLines(rows, start, end, header, anchors) {
       // A big vertical gap ends the description (what follows is boilerplate
       // under the table, not part of this line).
       if (lastY !== null && row.y - lastY > 16) break
-      if (descRows.length >= 5) break
+      if (descRows.length >= 8) break
       lastY = row.y
       descRows.push(inDesc.map((c) => c.text))
     }
@@ -430,7 +450,13 @@ export function buildLines(rows, start, end, header, anchors) {
         }
       }
     }
-    const description = joinTexts(descRows.map((cells) => cells.join(' ')).filter(Boolean)).slice(0, 200)
+    let description = joinTexts(descRows.map((cells) => cells.join(' ')).filter(Boolean))
+    if (description.length > 240) description = `${description.slice(0, 240).replace(/\s+\S*$/, '')}…`
+    if (!partNumber) {
+      // "Part # 1SFN166521R1070" written inside the description text.
+      const m = description.match(/\b(?:part|p\/n|pn|model|sku)\s*(?:no\.?|number|#)?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9\-/.]{3,})/i)
+      if (m && /\d/.test(m[1])) partNumber = m[1].replace(/[.,]+$/, '')
+    }
     const firstRow = descRows[0] ? descRows[0].join(' ') : ''
 
     if (SHIPPING_WORDS.test(firstRow)) {
@@ -453,8 +479,17 @@ function reconcile(lines, totals) {
   const S = lines.shipping ?? totals.labelShipping ?? 0
   const T = totals.taxAmount || 0
   const { subtotal, total } = totals
-  if (subtotal !== null && (near(L + M, subtotal) || near(L + M + S, subtotal) || near(L, subtotal))) return true
-  if (total !== null && (near(L + M + S + T, total) || near(L + M + S, total))) return true
+  // A document printed in whole dollars ("$ 17,257") can sit up to 50 cents
+  // away from lines that add to 17,257.26; one with cents must match exactly.
+  const tol = (v) => (Number.isInteger(v) ? 0.5 : 0.02)
+  if (subtotal !== null) {
+    const t = tol(subtotal)
+    if (near(L + M, subtotal, t) || near(L + M + S, subtotal, t) || near(L, subtotal, t)) return true
+  }
+  if (total !== null) {
+    const t = tol(total)
+    if (near(L + M + S + T, total, t) || near(L + M + S, total, t)) return true
+  }
   return false
 }
 

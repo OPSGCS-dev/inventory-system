@@ -23,6 +23,7 @@ export default function PdfReadPanel({ read, onToggle, onApply, onDismiss }) {
                   <span>
                     <strong>{item.label}:</strong> {item.value}
                     {item.current ? <span className="sub"> (now: {item.current})</span> : null}
+                    {item.hint ? <span className="sub"> — {item.hint}</span> : null}
                     {item.warn ? <span style={{ color: 'var(--danger, #b3261e)' }}> ⚠ {item.warn}</span> : null}
                   </span>
                 </label>

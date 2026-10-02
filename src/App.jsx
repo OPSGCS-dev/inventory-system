@@ -2467,7 +2467,9 @@ function App() {
         return false
       }
 
-      const lineType = categoryLineType(poDraftCategory)
+      // A mixed document's service/parts group brings its own PO category;
+      // the lines are typed for it, not for whatever the form was set to.
+      const lineType = categoryLineType(sel.category ?? poDraftCategory)
       newLines = sel.lines.map((l) => {
         const line = {
           ...blankPurchaseRequestLine(lineType),
@@ -2493,6 +2495,9 @@ function App() {
       })
     }
 
+    // Switch the PO Category first (this also resets Not to Exceed when leaving
+    // Service); the lines set below replace whatever it re-typed.
+    if (sel.category && sel.category !== poDraftCategory) updatePoDraftCategory(sel.category)
     if (sel.entity !== undefined) {
       setPoDraftProjectId(sel.entity)
       setPoDraftSubProjectId(sel.site ?? null)

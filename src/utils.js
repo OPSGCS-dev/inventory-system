@@ -361,6 +361,19 @@ export function findUserName(users, id) {
   return (user && userDisplayName(user)) || '—'
 }
 
+// What goes on a PO's "Authorized by" line: whoever approved the request, their
+// saved signature image (if they've drawn/uploaded one) and when they approved.
+// Null until the request has been approved.
+export function approvalStamp(users, request) {
+  if (!request?.approved_by) return null
+  const user = (users || []).find((u) => u.id === request.approved_by)
+  return {
+    name: user ? userDisplayName(user) : '',
+    signature: user?.signature || null,
+    date: request.approved_at ? new Date(request.approved_at) : null,
+  }
+}
+
 // Roles are strictly additive and independent — admin included. Admin only
 // grants Admin-tab editing; it does NOT imply any other capability, so a
 // user who should also approve, receive, etc. needs those roles ticked too.

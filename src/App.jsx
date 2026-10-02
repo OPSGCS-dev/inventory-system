@@ -44,6 +44,7 @@ import RequiredInventoryTab from './tabs/RequiredInventoryTab'
 import InventoryOnHandTab from './tabs/InventoryOnHandTab'
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import UsersTab from './tabs/UsersTab'
+import SignatureCard from './tabs/SignatureCard'
 import GlobalSearch from './tabs/GlobalSearch'
 import { matchPart } from './scrape/matchers'
 
@@ -70,6 +71,9 @@ function App() {
   // from the passwordSetup* state above, which only applies to the one-time
   // invite/recovery-link flow.
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const [showSignature, setShowSignature] = useState(false)
+  const [savingSignature, setSavingSignature] = useState(false)
+  const [signatureMessage, setSignatureMessage] = useState(null)
   const [changePasswordValue, setChangePasswordValue] = useState('')
   const [changePasswordConfirm, setChangePasswordConfirm] = useState('')
   const [changePasswordError, setChangePasswordError] = useState(null)
@@ -3582,7 +3586,8 @@ function App() {
   // --- Users tab (admin-only) ---
   function flashUsersStatus(msg, ok) {
     setUsersStatus({ ok, msg })
-    setTimeout(() => setUsersStatus(null), 3000)
+    // Failures are worded to be read (what to fix), so they stay up longer.
+    setTimeout(() => setUsersStatus(null), ok ? 3000 : 12000)
   }
 
   function toggleDraftUserRole(index, role) {
@@ -3694,9 +3699,41 @@ function App() {
       await Promise.all([loadUsers(), loadUserRoleEntities()])
     } catch (error) {
       console.error(error)
-      flashUsersStatus('Could not save — check the console for details.', false)
+      // A missing column means a migration hasn't been run yet -- say so rather
+      // than leaving people guessing.
+      const msg = error?.message || ''
+      flashUsersStatus(
+        /display_name/.test(msg) && /column|schema cache/i.test(msg)
+          ? "Could not save names — the database is missing the display_name column. Run supabase/add_user_display_name.sql in the Inventory project's SQL editor, then try again."
+          : `Could not save — ${msg || 'check the console for details.'}`,
+        false
+      )
     } finally {
       setSavingUsers(false)
+    }
+  }
+
+  // Saves (or, with null, removes) the logged-in user's own signature, which
+  // the printed/emailed PO shows on the "Authorized by" line once they approve.
+  async function handleSaveSignature(dataUrl) {
+    setSavingSignature(true)
+    setSignatureMessage(null)
+    try {
+      const { error } = await supabase.from('users').update({ signature: dataUrl }).eq('id', loggedInUser.id)
+      if (error) throw error
+      setLoggedInUser((prev) => (prev ? { ...prev, signature: dataUrl } : prev))
+      await loadUsers()
+      setShowSignature(false)
+    } catch (error) {
+      console.error(error)
+      const msg = error?.message || ''
+      setSignatureMessage(
+        /signature/.test(msg) && /column|schema cache/i.test(msg)
+          ? "The database is missing the signature column. Run supabase/add_user_signature.sql in the Inventory project's SQL editor, then try again."
+          : `Could not save signature — ${msg || 'check the console for details.'}`
+      )
+    } finally {
+      setSavingSignature(false)
     }
   }
 
@@ -4342,6 +4379,17 @@ function App() {
             Ticketing ↗
           </a>
         )}
+        {userHasRole(loggedInUser, 'purchase_rec_approval') && (
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              setSignatureMessage(null)
+              setShowSignature((v) => !v)
+            }}
+          >
+            My Signature
+          </button>
+        )}
         <button className="btn-secondary" onClick={() => setShowChangePassword((v) => !v)}>
           Change Password
         </button>
@@ -4349,6 +4397,16 @@ function App() {
           Log out
         </button>
       </div>
+
+      {showSignature && (
+        <SignatureCard
+          current={loggedInUser.signature}
+          busy={savingSignature}
+          message={signatureMessage}
+          onSave={handleSaveSignature}
+          onClose={() => setShowSignature(false)}
+        />
+      )}
 
       {showChangePassword && (
         <div className="card">

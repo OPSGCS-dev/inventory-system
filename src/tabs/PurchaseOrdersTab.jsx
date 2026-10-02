@@ -5,6 +5,7 @@ import {
   workStatusLabel,
   paymentStatusLabel,
   findUserName,
+  approvalStamp,
   userHasRole,
   canCreatePurchaseRequests,
   canMatchInvoices,
@@ -252,7 +253,7 @@ function PurchaseOrdersTab({
     setEmailBusy(true)
     try {
       const { buildPoPdf } = await import('../poPdf.js')
-      const pdf = await buildPoPdf(r)
+      const pdf = await buildPoPdf(r, approvalStamp(users, r))
       downloadBlob(new Blob([pdf.bytes], { type: 'application/pdf' }), pdf.filename)
       setEmailNote({ id: r.id, text: `Downloaded ${pdf.filename}.` })
     } catch (error) {
@@ -270,7 +271,7 @@ function PurchaseOrdersTab({
         import('../poPdf.js'),
         import('../poEmail.js'),
       ])
-      const pdf = await buildPoPdf(r)
+      const pdf = await buildPoPdf(r, approvalStamp(users, r))
       const label = poLabel(r)
       const eml = buildEml({
         to: r.vendors.email,
@@ -1073,9 +1074,38 @@ function PurchaseOrdersTab({
                 </div>
               </div>
 
-              <div className="po-print-signature">
-                Authorized by: ____________________&nbsp;&nbsp;&nbsp;&nbsp; Date: ____________________
-              </div>
+              {(() => {
+                // Once approved, the approver's signature and approval date
+                // are filled in; before that the lines are left blank.
+                const stamp = approvalStamp(users, r)
+                if (!stamp) {
+                  return (
+                    <div className="po-print-signature">
+                      Authorized by: ____________________&nbsp;&nbsp;&nbsp;&nbsp; Date: ____________________
+                    </div>
+                  )
+                }
+                return (
+                  <div className="po-print-signature po-print-signed">
+                    <div className="po-signed-block">
+                      <div className="po-signed-mark">
+                        {stamp.signature ? (
+                          <img src={stamp.signature} alt={`Signature of ${stamp.name}`} />
+                        ) : (
+                          <span className="po-signed-typed">{stamp.name}</span>
+                        )}
+                      </div>
+                      <div className="po-signed-label">Authorized by: {stamp.name || '—'}</div>
+                    </div>
+                    <div className="po-signed-block">
+                      <div className="po-signed-mark">
+                        <span className="po-signed-date">{stamp.date ? stamp.date.toLocaleDateString() : ''}</span>
+                      </div>
+                      <div className="po-signed-label">Date</div>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           )}
 

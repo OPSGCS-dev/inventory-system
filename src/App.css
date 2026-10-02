@@ -795,3 +795,16 @@ table.po-summary-table {
 .po-print-reference { font-size: 12px; font-weight: 600; }
 
 .po-print-signature { font-size: 13px; margin-top: 12px; }
+.po-print-signed { display: flex; gap: 40px; align-items: flex-end; }
+.po-signed-block { min-width: 220px; }
+.po-signed-mark {
+  height: 56px;
+  display: flex;
+  align-items: flex-end;
+  border-bottom: 1px solid #333;
+  padding: 0 4px 2px;
+}
+.po-signed-mark img { max-height: 54px; max-width: 220px; }
+.po-signed-typed { font-family: 'Segoe Script', 'Brush Script MT', cursive; font-size: 24px; line-height: 1.1; }
+.po-signed-date { font-size: 13px; }
+.po-signed-label { font-size: 11px; color: #555; margin-top: 2px; }

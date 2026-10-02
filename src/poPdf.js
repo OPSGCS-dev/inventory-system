@@ -41,7 +41,9 @@ export function poPdfFilename(request) {
   return `${base.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'PO'}.pdf`
 }
 
-export async function buildPoPdf(request) {
+// `stamp` is who approved it ({ name, signature (PNG data URL or null), date }),
+// from approvalStamp() in utils.js; without one the Authorized-by lines stay blank.
+export async function buildPoPdf(request, stamp = null) {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
   const doc = new jsPDF({ unit: 'pt', format: 'letter' })
   const pageW = doc.internal.pageSize.getWidth()
@@ -215,7 +217,39 @@ export async function buildPoPdf(request) {
   doc.setFontSize(9).setTextColor(INK)
   text(`Additional Reference: Vendor Quote # ${request.vendor_quote_number || '-'}`, pageW - M, y + 8, { align: 'right' })
   y += COMPANY_ADDRESS_BLOCK.length * 11 + 28
-  text('Authorized by: ____________________     Date: ____________________', M, y)
+  if (!stamp) {
+    text('Authorized by: ____________________     Date: ____________________', M, y)
+  } else {
+    // Signature (or the name in script type if none is saved) sits on a rule,
+    // with the printed name and the approval date beneath / beside it.
+    needRoom(80)
+    const ruleY = y + 40
+    const signW = 200
+    const dateX = M + signW + 40
+    let drawn = false
+    if (stamp.signature) {
+      try {
+        const props = doc.getImageProperties(stamp.signature)
+        const scale = Math.min(signW / props.width, 38 / props.height)
+        doc.addImage(stamp.signature, 'PNG', M + 2, ruleY - 2 - props.height * scale, props.width * scale, props.height * scale)
+        drawn = true
+      } catch {
+        // an unreadable image falls back to the typed name below
+      }
+    }
+    if (!drawn) {
+      doc.setFont('times', 'italic').setFontSize(20).setTextColor(INK)
+      text(stamp.name || '', M + 2, ruleY - 5)
+    }
+    doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(INK)
+    text(stamp.date ? stamp.date.toLocaleDateString() : '', dateX + 2, ruleY - 5)
+    doc.setDrawColor(60).setLineWidth(0.6)
+    doc.line(M, ruleY, M + signW, ruleY)
+    doc.line(dateX, ruleY, dateX + 110, ruleY)
+    doc.setFontSize(8).setTextColor(MUTED)
+    text(`Authorized by: ${stamp.name || '-'}`, M, ruleY + 11)
+    text('Date', dateX, ruleY + 11)
+  }
 
   return { bytes: new Uint8Array(doc.output('arraybuffer')), filename: poPdfFilename(request) }
 }

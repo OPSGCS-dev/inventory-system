@@ -178,7 +178,7 @@ function App() {
   const [poDraftInvoiceAmount, setPoDraftInvoiceAmount] = useState('')
   const [poDraftNewInvoiceFile, setPoDraftNewInvoiceFile] = useState(null)
   const [poDraftCategory, setPoDraftCategory] = useState('purchase')
-  const [poDraftMarkupRate, setPoDraftMarkupRate] = useState('10')
+  const [poDraftMarkupRate, setPoDraftMarkupRate] = useState('0')
   const [poDraftTaxRate, setPoDraftTaxRate] = useState('13')
   const [poDraftShippingHandling, setPoDraftShippingHandling] = useState('0')
   const [poDraftCredit, setPoDraftCredit] = useState('0')
@@ -2263,7 +2263,7 @@ function App() {
       setPoDraftNewQuoteFile(null)
       setPoDraftCategory(existing.po_category || 'purchase')
       setPoDraftMarkupRate(
-        existing.markup_rate === null || existing.markup_rate === undefined ? '10' : String(existing.markup_rate)
+        existing.markup_rate === null || existing.markup_rate === undefined ? '0' : String(existing.markup_rate)
       )
       setPoDraftTaxRate(
         existing.tax_rate === null || existing.tax_rate === undefined ? '13' : String(existing.tax_rate)
@@ -2312,7 +2312,7 @@ function App() {
       setPoDraftQuoteFileName(null)
       setPoDraftNewQuoteFile(null)
       setPoDraftCategory('purchase')
-      setPoDraftMarkupRate('10')
+      setPoDraftMarkupRate('0')
       setPoDraftTaxRate('13')
       setPoDraftShippingHandling('0')
       setPoDraftCredit('0')
@@ -2569,7 +2569,7 @@ function App() {
     // Not to Exceed POs get zero for both regardless of what's still in the
     // (hidden) fields, and only a Not to Exceed PO stores a spending cap.
     const isPurchaseCategory = poDraftCategory === 'purchase'
-    const markupRateToSave = isPurchaseCategory ? (poDraftMarkupRate === '' ? 10 : Number(poDraftMarkupRate)) : 0
+    const markupRateToSave = isPurchaseCategory ? (poDraftMarkupRate === '' ? 0 : Number(poDraftMarkupRate)) : 0
     const shippingToSave = isPurchaseCategory
       ? poDraftShippingHandling === ''
         ? 0

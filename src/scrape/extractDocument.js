@@ -119,6 +119,16 @@ function findValue(rows, rowIdx, cellIdx, rest, parse, { allowBelow = true } = {
     if (v) return { ...v, currency: v.currency || currency, how: 'right' }
   }
 
+  // A value in a larger/bolder font sits a few points lower than its label
+  // and lands in the next row, but to the right it's still the same line.
+  for (let r = rowIdx + 1; r < rows.length && rows[r].y - row.y <= 6; r++) {
+    for (const c of rows[r].cells) {
+      if (c.x < label.x2 - 2) continue
+      v = tryText(c.text)
+      if (v) return { ...v, currency: v.currency || currency, how: 'right' }
+    }
+  }
+
   if (allowBelow) {
     for (let r = rowIdx + 1; r <= Math.min(rows.length - 1, rowIdx + 2); r++) {
       if (rows[r].y - row.y > 32) break

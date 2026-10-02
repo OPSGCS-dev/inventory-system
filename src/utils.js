@@ -552,6 +552,18 @@ export function lineTotal(line) {
   return qty * cost
 }
 
+// The numbered instructions at the foot of every PO, on screen/print and in
+// the emailed PDF alike -- one list so the two can't drift apart.
+// PLACEHOLDER: exact wording + the real invoice email still to be supplied;
+// until then the bracketed text goes out to vendors as written.
+export const PO_INSTRUCTIONS = [
+  'Please send the invoice to: [invoice email placeholder]',
+  'Enter this note in accordance with the prices, terms, delivery method, and specifications listed above.',
+  'Notify GCS immediately if PO number or work order is not specified.',
+  'Reference the PO number on the invoice.',
+  'Send all correspondence to: [same fixed company address block]',
+]
+
 // The company's mailing address as it appears on every printed PO, top-right
 // "Bill To" block and footer, regardless of project — fixed, never
 // per-project or database-driven.

@@ -28,6 +28,7 @@ import {
   buildPoMailto,
   computePoTotals,
   COMPANY_ADDRESS_BLOCK,
+  PO_INSTRUCTIONS,
   PO_STATUS_ORDER,
   nextStepInfo,
   truncate,
@@ -229,6 +230,69 @@ function PurchaseOrdersTab({
   //    form is silently overwritten.
   // The ref holds the latest form values for after the async read, and the
   // token drops a result whose file was replaced while it was being read.
+  // "Email Vendor" can't be a mailto: link any more -- those can't carry the
+  // PO's PDF. It builds the PDF and downloads an email draft (.eml) with the
+  // PDF attached, which opens in the email program as a message ready to send.
+  // If the PDF can't be built it falls back to the old plain-text email.
+  const [emailBusy, setEmailBusy] = useState(false)
+  const [emailNote, setEmailNote] = useState(null)
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
+  }
+
+  async function downloadPoPdf(r) {
+    setEmailBusy(true)
+    try {
+      const { buildPoPdf } = await import('../poPdf.js')
+      const pdf = await buildPoPdf(r)
+      downloadBlob(new Blob([pdf.bytes], { type: 'application/pdf' }), pdf.filename)
+      setEmailNote({ id: r.id, text: `Downloaded ${pdf.filename}.` })
+    } catch (error) {
+      console.error(error)
+      setEmailNote({ id: r.id, text: "Couldn't build the PDF — check the console for details." })
+    } finally {
+      setEmailBusy(false)
+    }
+  }
+
+  async function emailVendorWithPdf(r) {
+    setEmailBusy(true)
+    try {
+      const [{ buildPoPdf, poLabel }, { buildEml, buildPoEmailBody }] = await Promise.all([
+        import('../poPdf.js'),
+        import('../poEmail.js'),
+      ])
+      const pdf = await buildPoPdf(r)
+      const label = poLabel(r)
+      const eml = buildEml({
+        to: r.vendors.email,
+        subject: `Purchase Order ${label}`,
+        body: buildPoEmailBody(r, computePoTotals(r), label),
+        attachment: { filename: pdf.filename, mime: 'application/pdf', bytes: pdf.bytes },
+      })
+      downloadBlob(new Blob([eml], { type: 'message/rfc822' }), `${pdf.filename.replace(/\.pdf$/, '')} - email to vendor.eml`)
+      setEmailNote({
+        id: r.id,
+        text: `Open the downloaded file: it opens in your email program as a draft to ${r.vendors.email} with the PO PDF attached.`,
+      })
+    } catch (error) {
+      console.error(error)
+      setEmailNote({ id: r.id, text: "Couldn't attach the PDF, so a plain email (no attachment) was opened instead." })
+      const plain = buildPoMailto(r)
+      if (plain) window.location.href = plain
+    } finally {
+      setEmailBusy(false)
+    }
+  }
+
   // Which "Request a new vendor" panel is open: from the toolbar button
   // beside New Request, or from the form's Vendor field (null = neither).
   const [vendorPanel, setVendorPanel] = useState(null)
@@ -991,16 +1055,11 @@ function PurchaseOrdersTab({
                 )
               })()}
 
-              {/* PLACEHOLDER: user will provide exact wording + real invoice email later */}
+              {/* PLACEHOLDER wording lives in PO_INSTRUCTIONS (utils.js), shared with the emailed PDF */}
               <ol className="po-print-instructions">
-                <li>Please send the invoice to: [invoice email placeholder]</li>
-                <li>
-                  Enter this note in accordance with the prices, terms, delivery method, and
-                  specifications listed above.
-                </li>
-                <li>Notify GCS immediately if PO number or work order is not specified.</li>
-                <li>Reference the PO number on the invoice.</li>
-                <li>Send all correspondence to: [same fixed company address block]</li>
+                {PO_INSTRUCTIONS.map((text) => (
+                  <li key={text}>{text}</li>
+                ))}
               </ol>
 
               <div className="po-print-bottom">
@@ -1210,10 +1269,13 @@ function PurchaseOrdersTab({
                 <button className="btn-secondary" onClick={() => window.print()}>
                   Print PO
                 </button>
-                {buildPoMailto(r) ? (
-                  <a className="btn-secondary" href={buildPoMailto(r)}>
-                    Email Vendor
-                  </a>
+                <button className="btn-secondary" onClick={() => downloadPoPdf(r)} disabled={emailBusy}>
+                  Download PDF
+                </button>
+                {r.vendors?.email ? (
+                  <button className="btn-secondary" onClick={() => emailVendorWithPdf(r)} disabled={emailBusy}>
+                    {emailBusy ? 'Preparing…' : 'Email Vendor'}
+                  </button>
                 ) : (
                   <span className="sub" style={{ margin: 0 }}>
                     No vendor email on file.
@@ -1222,6 +1284,11 @@ function PurchaseOrdersTab({
               </>
             )}
           </div>
+          {emailNote && emailNote.id === r.id && (
+            <p className="sub" style={{ margin: '6px 0 0' }}>
+              {emailNote.text}
+            </p>
+          )}
 
           {(r.status === 'issued' || r.status === 'closed') && (
             <InvoicesPanel

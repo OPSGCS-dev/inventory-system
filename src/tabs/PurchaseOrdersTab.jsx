@@ -298,10 +298,24 @@ function PurchaseOrdersTab({
     const docItems = result.lines ? result.lines.items : []
     const mixed = docItems.some((l) => l.kind === 'service') && docItems.some((l) => l.kind === 'part')
 
+    // A document whose lines are all clearly one kind sets the PO Category to
+    // match when applied: every line a service, every line a part, or -- when
+    // nothing says either way -- every line carrying a part number (that
+    // never decides "service"; a service line can mention a part).
+    let docKind = null
+    if (!mixed && docItems.length > 0) {
+      if (docItems.every((l) => l.kind === 'service')) docKind = 'service'
+      else if (docItems.every((l) => l.kind === 'part')) docKind = 'purchase'
+      else if (docItems.every((l) => !l.kind && l.partNumber)) docKind = 'purchase'
+    }
+    // What the form will be set to once this is applied -- decides how lines
+    // are priced and whether shipping/markup are fields or lines.
+    const targetPurchase = docKind ? docKind === 'purchase' : isPurchase
+
     // A Purchase PO has a Markup % field, so a vendor price with markup folded
     // in goes into the unit cost without it and the % carries the markup; a
     // Service PO has no markup, so the price stays exactly as billed.
-    const asPoLine = (l, purchase = isPurchase) => {
+    const asPoLine = (l, purchase = targetPurchase) => {
       const unitPrice = purchase ? l.unitPrice : (l.billedUnitPrice ?? l.unitPrice)
       return { ...l, unitPrice, amount: Math.round(l.quantity * unitPrice * 100) / 100 }
     }
@@ -314,16 +328,16 @@ function PurchaseOrdersTab({
 
     // On a mixed document they belong to the parts side, so they're offered
     // too (ticked only while the parts group is) and follow its tick.
-    if (isPurchase || mixed) {
+    if (targetPurchase || mixed) {
       if (result.shipping > 0 && Number(cur.poDraftShippingHandling) !== result.shipping) {
         data.shipping = result.shipping
         add('shipping', 'Shipping / handling', result.shipping.toFixed(2), Number(cur.poDraftShippingHandling).toFixed(2), {
-          checked: isPurchase,
+          checked: mixed ? isPurchase : true,
         })
       }
       if (result.markup && result.markup.rate !== null && Number(cur.poDraftMarkupRate) !== result.markup.rate) {
         data.markup = result.markup.rate
-        add('markup', 'Markup', `${result.markup.rate}%`, `${cur.poDraftMarkupRate}%`, { checked: isPurchase })
+        add('markup', 'Markup', `${result.markup.rate}%`, `${cur.poDraftMarkupRate}%`, { checked: mixed ? isPurchase : true })
         if (result.markup.embedded) {
           notes.push("The unit costs below are the vendor's price before markup — the Markup % puts it back, so keep both ticked.")
         }
@@ -350,23 +364,21 @@ function PurchaseOrdersTab({
         lines: serviceLines,
         checked: !isPurchase,
         category: 'service',
-        hint: isPurchase ? 'Ticking this switches the PO Category to Service.' : null,
         warn: reconcileWarn,
       })
       add('lines_part', 'Parts lines', summarise(partLines), null, {
         lines: partLines,
         checked: isPurchase,
         category: 'purchase',
-        hint: !isPurchase ? 'Ticking this switches the PO Category to Purchase.' : null,
         warn: reconcileWarn,
       })
       notes.push(
-        'This document mixes services and parts, which your system keeps on separate POs. Tick the group for this rec — the PO Category switches to match. After saving, attach the same document to a second rec for the other group.'
+        'Mixes services and parts, which are separate POs here. Tick one (the PO Category follows), then use the same document for a second rec.'
       )
       if (!unreconciled) notes.push("All the lines together add up to the PDF's subtotal/total ✓")
     } else if (docItems.length > 0) {
-      const lineItems = docItems.map(asPoLine)
-      if (!isPurchase) {
+      const lineItems = docItems.map((l) => asPoLine(l))
+      if (!targetPurchase) {
         // No Shipping/Markup fields on a Service PO: they come in as lines so
         // the totals still match the document.
         if (result.shipping > 0) {
@@ -378,9 +390,15 @@ function PurchaseOrdersTab({
         }
       }
       data.lines = lineItems
-      add('lines', 'Line items', summarise(lineItems), null, { lines: lineItems, warn: reconcileWarn })
+      // The label says what kind of PO these lines make, so a category switch
+      // isn't a surprise.
+      add('lines', docKind === 'service' ? 'Service lines' : docKind === 'purchase' ? 'Parts lines' : 'Line items', summarise(lineItems), null, {
+        lines: lineItems,
+        warn: reconcileWarn,
+        category: docKind ? (docKind === 'service' ? 'service' : 'purchase') : undefined,
+      })
       if (!unreconciled) notes.push("The lines add up to the PDF's subtotal/total ✓")
-      if (isPurchase && lineItems.every((l) => !l.partNumber)) {
+      if (!docKind && isPurchase && lineItems.every((l) => !l.partNumber)) {
         notes.push(
           'No part numbers found — if this is a service rather than parts, set PO Category to Service before applying.'
         )
@@ -483,9 +501,9 @@ function PurchaseOrdersTab({
       if (!item.checked) continue
       // Either line group is applied as "the lines" for this form, and its
       // kind decides the PO Category.
-      if (item.key.startsWith('lines_')) {
+      if (item.key.startsWith('lines_') || item.key === 'lines') {
         selection.lines = pdfRead.data[item.key]
-        selection.category = item.category
+        if (item.category) selection.category = item.category
       } else {
         selection[item.key] = pdfRead.data[item.key]
       }

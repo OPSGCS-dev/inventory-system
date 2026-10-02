@@ -2168,7 +2168,8 @@ function App() {
 
   function flashPoStatus(msg, ok) {
     setPoStatus({ ok, msg })
-    setTimeout(() => setPoStatus(null), 3000)
+    // Failures carry what to fix, so they stay up long enough to read.
+    setTimeout(() => setPoStatus(null), ok ? 3000 : 10000)
   }
 
   // Attaches this session's per-role entity scope (from user_role_entities)
@@ -2639,6 +2640,7 @@ function App() {
       }
 
       let requestId = poDraftId
+      let replacedLineIds = []
       if (requestId) {
         const newValues = {
           project_id: poDraftProjectId,
@@ -2720,11 +2722,14 @@ function App() {
           }
         }
 
-        const { error: delError } = await supabase
+        // The old lines are only deleted once the new ones are in (below), so a
+        // failure part-way can't leave the request with no lines at all.
+        const { data: oldLines, error: oldLinesError } = await supabase
           .from('purchase_request_lines')
-          .delete()
+          .select('id')
           .eq('purchase_request_id', requestId)
-        if (delError) throw delError
+        if (oldLinesError) throw oldLinesError
+        replacedLineIds = (oldLines || []).map((l) => l.id)
       } else {
         const { data, error } = await supabase
           .from('purchase_requests')
@@ -2788,6 +2793,10 @@ function App() {
         })
       )
       if (lineError) throw lineError
+      if (replacedLineIds.length > 0) {
+        const { error: delError } = await supabase.from('purchase_request_lines').delete().in('id', replacedLineIds)
+        if (delError) throw delError
+      }
 
       // The draft is already saved by now, so a failed invoice upload is
       // reported on its own instead of looking like the whole save failed.
@@ -2815,7 +2824,11 @@ function App() {
       await refreshPurchaseRequest(requestId)
     } catch (error) {
       console.error(error)
-      flashPoStatus('Could not save draft — check the console for details.', false)
+      flashPoStatus(`Could not save draft — ${error?.message || 'check the console for details.'}`, false)
+      // Part of the save may already have gone through (the request's own
+      // fields are written first), so re-read it rather than leave the view
+      // showing what was there before.
+      if (poDraftId) await refreshPurchaseRequest(poDraftId)
     } finally {
       setSavingPoRequest(false)
     }

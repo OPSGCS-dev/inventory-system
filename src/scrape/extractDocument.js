@@ -121,7 +121,9 @@ function findValue(rows, rowIdx, cellIdx, rest, parse, { allowBelow = true } = {
 
   // A value in a larger/bolder font sits a few points lower than its label
   // and lands in the next row, but to the right it's still the same line.
-  for (let r = rowIdx + 1; r < rows.length && rows[r].y - row.y <= 6; r++) {
+  // Only for a label that stands alone ("TOTAL"), never one that already
+  // carries text of its own ("Shipping Weight (in kgs): 1.111").
+  for (let r = rowIdx + 1; r < rows.length && !rest.trim() && rows[r].y - row.y <= 6; r++) {
     for (const c of rows[r].cells) {
       if (c.x < label.x2 - 2) continue
       v = tryText(c.text)
@@ -409,6 +411,17 @@ export function buildLines(rows, start, end, header, anchors) {
     partRight = descHeader.x - 3
   }
 
+  // An "Activity"/"Type" column ("Services", "Materials/Supplies") says what
+  // kind of line each one is.
+  const activityHeader = headerCells.find((c) => /^(?:activity|type|category|item\s*type)$/i.test(c.text)) || null
+  let actLeft = null
+  let actRight = null
+  if (activityHeader) {
+    actLeft = activityHeader.x - 3
+    const next = headerCells.filter((c) => c.x > activityHeader.x + 1).sort((p, q) => p.x - q.x)[0]
+    actRight = next ? next.x - 3 : Infinity
+  }
+
   const items = []
   let shipping = null
   let markup = null
@@ -469,23 +482,104 @@ export function buildLines(rows, start, end, header, anchors) {
     }
     const firstRow = descRows[0] ? descRows[0].join(' ') : ''
 
+    // Service or part: from the Activity column when there is one, else from a
+    // leading "Labour" / "Materials" style heading on the line.
+    let kind = null
+    if (activityHeader) {
+      const activityText = segRows
+        .flatMap((row) => row.cells.filter((c) => c.x >= actLeft && c.x < actRight).map((c) => c.text))
+        .join(' ')
+      kind = lineKind(activityText)
+    } else if (/^(?:labou?r|services?)\b/i.test(firstRow)) {
+      kind = 'service'
+    } else if (/^(?:materials?|parts?|supplies)\b/i.test(firstRow)) {
+      kind = 'part'
+    }
+
+    // "($460.15) 10% mark-up fee ($46.01)": the vendor's own price and markup,
+    // already folded into the unit price. Only taken apart when the numbers
+    // prove it: price + fee is what's billed, and the fee is rate% of the price.
+    let baseUnit = null
+    let markupRate = null
+    let markupFee = null
+    const mk = description.match(/(\d+(?:\.\d+)?)\s*%\s*mark-?\s?up(?:\s*fee)?\s*\(\s*\$?\s*([\d,]+\.\d{2})\s*\)/i)
+    if (mk) {
+      const rate = Number(mk[1])
+      const fee = Number(mk[2].replace(/,/g, ''))
+      const bases = [...description.slice(0, mk.index).matchAll(/\(\s*\$?\s*([\d,]+\.\d{2})\s*\)/g)]
+      const base = bases.length ? Number(bases[bases.length - 1][1].replace(/,/g, '')) : null
+      if (base !== null && near((base * rate) / 100, fee)) {
+        const perUnit = near(base + fee, a.unit)
+        const perLine = near(base + fee, a.amount)
+        if (perUnit || perLine) {
+          baseUnit = perUnit ? base : round2(base / a.qty)
+          markupRate = rate
+          markupFee = perUnit ? round2(fee * a.qty) : fee
+          description = description
+            .replace(mk[0], '')
+            .replace(/\(\s*\$?\s*[\d,]+\.\d{2}\s*\)\s*$/, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+        }
+      }
+    }
+
     if (SHIPPING_WORDS.test(firstRow)) {
       shipping = round2((shipping || 0) + a.amount)
     } else if (MARKUP_WORDS.test(firstRow)) {
       const rate = description.match(/(\d+(?:\.\d+)?)\s*%/)
       markup = { amount: a.amount, rate: rate ? Number(rate[1]) : null }
     } else {
-      items.push({ description, partNumber, quantity: a.qty, unitPrice: a.unit, amount: a.amount })
+      items.push({
+        description,
+        partNumber,
+        kind,
+        quantity: a.qty,
+        unitPrice: baseUnit ?? a.unit,
+        billedUnitPrice: a.unit,
+        amount: a.amount,
+        markupRate,
+        markupFee,
+      })
     }
   })
 
+  // Markup found inside the lines counts as the document's markup only if
+  // every priced part line carries the same rate (services aren't marked up).
+  // Otherwise it's left in the unit prices, as billed.
+  const withMarkup = items.filter((i) => i.markupRate !== null)
+  if (withMarkup.length > 0 && !markup) {
+    const rates = new Set(withMarkup.map((i) => i.markupRate))
+    const unmarked = items.filter((i) => i.markupRate === null && i.kind !== 'service')
+    if (rates.size === 1 && unmarked.length === 0) {
+      markup = { rate: withMarkup[0].markupRate, amount: round2(withMarkup.reduce((s, i) => s + i.markupFee, 0)), embedded: true }
+    } else {
+      for (const i of withMarkup) {
+        i.unitPrice = i.billedUnitPrice
+        i.markupRate = null
+        i.markupFee = null
+      }
+    }
+  }
+
   return { items, shipping, markup }
+}
+
+const SERVICE_KIND = /\b(?:services?|labou?r|install(?:ation)?|repairs?|maintenance|inspection|commissioning|support|travel)\b/i
+const PART_KIND = /\b(?:materials?|supplies|supply|parts?|products?|equipment|hardware)\b/i
+function lineKind(text) {
+  const s = SERVICE_KIND.test(text)
+  const p = PART_KIND.test(text)
+  if (s && !p) return 'service'
+  if (p && !s) return 'part'
+  return null
 }
 
 // Does the table add back up to the document's own numbers?
 function reconcile(lines, totals) {
   const L = lines.items.reduce((s, i) => s + i.amount, 0)
-  const M = lines.markup ? lines.markup.amount : 0
+  // A markup folded into the line prices is already inside L.
+  const M = lines.markup && !lines.markup.embedded ? lines.markup.amount : 0
   const S = lines.shipping ?? totals.labelShipping ?? 0
   const T = totals.taxAmount || 0
   const { subtotal, total } = totals
@@ -534,7 +628,7 @@ const TAX_LABEL =
   /^(?:total\s+)?(?:(?:gst|hst|pst|qst|vat)(?:\s*\/\s*(?:gst|hst|pst|qst))?|sales\s+tax|tax)\b(?!\s*(?:no\b|number|#|registration|reg\b|id\b|summary|exempt|included|rate\s*$))/i
 const SUBTOTAL_LABEL = /^(?:sub\s*-?\s*total|merchandise\s+(?:amount|total))\s*:?/i
 const SHIPPING_LABEL =
-  /^(?:shipping(?:\s*(?:&|and|\/)\s*handling)?|freight(?:\s*\/\s*\w+)?|handling|estimated\s+shipping|delivery)(?:\s+(?:charges?|fees?|cost))?\s*:?/i
+  /^(?:shipping(?:\s*(?:&|and|\/)\s*handling)?|freight(?:\s*\/\s*\w+)?|handling|estimated\s+shipping|delivery)(?!\s*(?:weight|date|address|method|terms|attention|dimensions|country|instructions|to\b))(?:\s+(?:charges?|fees?|cost))?\s*:?/i
 
 // Totals-block labels, read from the rows below the line item table (so a
 // "HST ON" tax-code column inside the table is never mistaken for a tax line).

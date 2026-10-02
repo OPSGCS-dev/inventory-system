@@ -267,6 +267,13 @@ function PurchaseOrdersTab({
     if (vendor && vendor.id !== cur.poDraftVendorId) {
       data.vendor = vendor.id
       add('vendor', 'Vendor', vendor.name, nameOf(cur.vendors, cur.poDraftVendorId))
+    } else if (!vendor) {
+      // Say what the letterhead reads, so a vendor that didn't match (a
+      // differently-spelled or duplicate entry) is a quick pick, not a mystery.
+      const letterhead = matchers.guessLetterhead(pages)
+      if (letterhead) {
+        notes.push(`Vendor on the document: "${letterhead}" — couldn't match it to one vendor in your list, so choose it by hand.`)
+      }
     }
 
     const currency = result.amount?.currency
@@ -286,7 +293,23 @@ function PurchaseOrdersTab({
     // Shipping and markup are only fields on a Purchase PO; on a Service PO
     // they'd silently drop out of the totals, so they come in as lines instead.
     const isPurchase = cur.poDraftCategory === 'purchase'
-    const lineItems = result.lines ? [...result.lines.items] : []
+    const docItems = result.lines ? result.lines.items : []
+    const mixed = docItems.some((l) => l.kind === 'service') && docItems.some((l) => l.kind === 'part')
+
+    // A Purchase PO has a Markup % field, so a vendor price with markup folded
+    // in goes into the unit cost without it and the % carries the markup; a
+    // Service PO has no markup, so the price stays exactly as billed.
+    const asPoLine = (l) => {
+      const unitPrice = isPurchase ? l.unitPrice : (l.billedUnitPrice ?? l.unitPrice)
+      return { ...l, unitPrice, amount: Math.round(l.quantity * unitPrice * 100) / 100 }
+    }
+    const summarise = (list) => {
+      const sum = list.reduce((s, l) => s + l.amount, 0)
+      return `${list.length} line${list.length === 1 ? '' : 's'}, ${sum.toFixed(2)} in total`
+    }
+    const unreconciled = result.lines && !result.lines.reconciled
+    const reconcileWarn = unreconciled ? "These don't add up to the PDF's own subtotal/total — check every line." : null
+
     if (isPurchase) {
       if (result.shipping > 0 && Number(cur.poDraftShippingHandling) !== result.shipping) {
         data.shipping = result.shipping
@@ -295,31 +318,53 @@ function PurchaseOrdersTab({
       if (result.markup && result.markup.rate !== null && Number(cur.poDraftMarkupRate) !== result.markup.rate) {
         data.markup = result.markup.rate
         add('markup', 'Markup', `${result.markup.rate}%`, `${cur.poDraftMarkupRate}%`)
-      }
-    } else if (result.lines) {
-      if (result.shipping > 0) {
-        lineItems.push({ description: 'Shipping', partNumber: '', quantity: 1, unitPrice: result.shipping, amount: result.shipping })
-      }
-      if (result.markup) {
-        const label = result.markup.rate !== null ? `Markup @ ${result.markup.rate}%` : 'Markup'
-        lineItems.push({ description: label, partNumber: '', quantity: 1, unitPrice: result.markup.amount, amount: result.markup.amount })
+        if (result.markup.embedded) {
+          notes.push("The unit costs below are the vendor's price before markup — the Markup % puts it back, so keep both ticked.")
+        }
       }
     }
 
-    if (lineItems.length > 0) {
-      const sum = lineItems.reduce((s, l) => s + l.amount, 0)
-      data.lines = lineItems
-      add(
-        'lines',
-        'Line items',
-        `${lineItems.length} line${lineItems.length === 1 ? '' : 's'}, ${sum.toFixed(2)} in total`,
-        null,
-        {
-          lines: lineItems,
-          warn: result.lines.reconciled ? null : "These don't add up to the PDF's own subtotal/total — check every line.",
-        }
+    if (mixed) {
+      // Services and parts live on separate POs in this system, so a mixed
+      // document is offered as two groups -- only the one matching this form's
+      // category is ticked (and only one can be: a PO can't mix the two).
+      // Lines with no clear kind go with the form's own category.
+      const serviceLines = docItems.filter((l) => l.kind === 'service' || (l.kind === null && !isPurchase)).map(asPoLine)
+      const partLines = docItems.filter((l) => l.kind === 'part' || (l.kind === null && isPurchase)).map(asPoLine)
+      data.lines_service = serviceLines
+      data.lines_part = partLines
+      add('lines_service', 'Service lines', summarise(serviceLines), null, {
+        lines: serviceLines,
+        checked: !isPurchase,
+        warn: isPurchase ? 'Set PO Category to Service first.' : reconcileWarn,
+      })
+      add('lines_part', 'Parts lines', summarise(partLines), null, {
+        lines: partLines,
+        checked: isPurchase,
+        warn: !isPurchase ? 'Set PO Category to Purchase first.' : reconcileWarn,
+      })
+      notes.push(
+        `This document mixes services and parts, which your system keeps on separate POs. Only the ${
+          isPurchase ? 'parts' : 'service'
+        } lines are ticked for this form — after saving, attach the same document to a second rec for the other group.`
       )
-      if (result.lines.reconciled) notes.push("The lines add up to the PDF's subtotal/total ✓")
+      if (!unreconciled) notes.push("All the lines together add up to the PDF's subtotal/total ✓")
+    } else if (docItems.length > 0) {
+      const lineItems = docItems.map(asPoLine)
+      if (!isPurchase) {
+        // No Shipping/Markup fields on a Service PO: they come in as lines so
+        // the totals still match the document.
+        if (result.shipping > 0) {
+          lineItems.push({ description: 'Shipping', partNumber: '', quantity: 1, unitPrice: result.shipping, amount: result.shipping })
+        }
+        if (result.markup && !result.markup.embedded) {
+          const label = result.markup.rate !== null ? `Markup @ ${result.markup.rate}%` : 'Markup'
+          lineItems.push({ description: label, partNumber: '', quantity: 1, unitPrice: result.markup.amount, amount: result.markup.amount })
+        }
+      }
+      data.lines = lineItems
+      add('lines', 'Line items', summarise(lineItems), null, { lines: lineItems, warn: reconcileWarn })
+      if (!unreconciled) notes.push("The lines add up to the PDF's subtotal/total ✓")
       if (isPurchase && lineItems.every((l) => !l.partNumber)) {
         notes.push(
           'No part numbers found — if this is a service rather than parts, set PO Category to Service before applying.'
@@ -396,12 +441,29 @@ function PurchaseOrdersTab({
   }
 
   function togglePdfReadItem(key) {
-    setPdfRead((r) => (r ? { ...r, items: r.items.map((i) => (i.key === key ? { ...i, checked: !i.checked } : i)) } : r))
+    setPdfRead((r) => {
+      if (!r) return r
+      const turningOn = !r.items.find((i) => i.key === key)?.checked
+      return {
+        ...r,
+        items: r.items.map((i) => {
+          if (i.key === key) return { ...i, checked: !i.checked }
+          // Service lines and parts lines can't share one PO, so ticking one
+          // group unticks the other.
+          if (turningOn && key.startsWith('lines_') && i.key.startsWith('lines_')) return { ...i, checked: false }
+          return i
+        }),
+      }
+    })
   }
 
   async function applyPdfRead() {
     const selection = {}
-    for (const item of pdfRead.items) if (item.checked) selection[item.key] = pdfRead.data[item.key]
+    for (const item of pdfRead.items) {
+      if (!item.checked) continue
+      // Either line group is applied as "the lines" for this form.
+      selection[item.key.startsWith('lines_') ? 'lines' : item.key] = pdfRead.data[item.key]
+    }
     const applied = await applyPdfReadToDraft(selection)
     if (applied) setPdfRead(null)
   }

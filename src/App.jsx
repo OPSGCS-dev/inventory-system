@@ -552,6 +552,7 @@ function App() {
     setPurchaseRequests((prev) =>
       prev.some((r) => r.id === requestId) ? prev.map((r) => (r.id === requestId ? data : r)) : [data, ...prev]
     )
+    return data
   }
 
   // Compact, append-only activity log for a PO -- loaded lazily (only when
@@ -2828,10 +2829,16 @@ function App() {
       flashPoStatus(
         invoiceFailed
           ? 'Draft saved, but the invoice could not be attached — add it from the request instead.'
-          : 'Draft saved.',
+          : `Draft saved — vendor: ${vendors.find((v) => v.id === poDraftVendorId)?.name || '—'}.`,
         !invoiceFailed
       )
-      await refreshPurchaseRequest(requestId)
+      const fresh = await refreshPurchaseRequest(requestId)
+      if (fresh && fresh.vendor_id !== poDraftVendorId) {
+        flashPoStatus(
+          `Saved, but when re-read the database still has "${fresh.vendors?.name || fresh.vendor_id}" as the vendor — it was not changed.`,
+          false
+        )
+      }
     } catch (error) {
       console.error(error)
       flashPoStatus(`Could not save draft — ${error?.message || 'check the console for details.'}`, false)

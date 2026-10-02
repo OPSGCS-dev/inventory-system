@@ -21,6 +21,7 @@ import {
   canCreatePurchaseRequests,
   canApproveRequests,
   canApproveVendors,
+  canManagePayment,
   vendorApprovalStatus,
   vendorBlockReason,
   userDisplayName,
@@ -2229,6 +2230,19 @@ function App() {
     return pairs
   }, [purchaseRequests])
 
+  // Same shape for the "My Invoices to Pay" view: approved, not yet paid.
+  // Payment is a company-wide role too (payment), so everyone holding it
+  // sees every one of these.
+  const invoicesToPay = useMemo(() => {
+    const pairs = []
+    for (const r of purchaseRequests) {
+      for (const invoice of r.invoices || []) {
+        if (invoice.approved && !invoice.paid) pairs.push({ request: r, invoice })
+      }
+    }
+    return pairs
+  }, [purchaseRequests])
+
   // Counts for the small nav badges -- independent of whichever poView is
   // currently selected, so "3 POs waiting on you" is visible from any tab,
   // not just after already clicking into Purchase Orders.
@@ -2242,6 +2256,7 @@ function App() {
     const invoicesToApprove = userHasRole(loggedInUserWithScopes, 'invoice_approval')
       ? invoicesPendingApproval.length
       : 0
+    const invoicesToPayCount = canManagePayment(loggedInUserWithScopes) ? invoicesToPay.length : 0
     const vendorsToApprove = canApproveVendors(loggedInUserWithScopes)
       ? vendors.filter((v) => vendorApprovalStatus(v) === 'pending').length
       : 0
@@ -2249,10 +2264,11 @@ function App() {
       approvals,
       toIssue,
       invoicesToApprove,
+      invoicesToPay: invoicesToPayCount,
       vendorsToApprove,
-      total: approvals + toIssue + invoicesToApprove + vendorsToApprove,
+      total: approvals + toIssue + invoicesToApprove + invoicesToPayCount + vendorsToApprove,
     }
-  }, [purchaseRequests, loggedInUserWithScopes, invoicesPendingApproval, vendors])
+  }, [purchaseRequests, loggedInUserWithScopes, invoicesPendingApproval, invoicesToPay, vendors])
 
   function toggleExpandedPo(id) {
     setExpandedPoId((prev) => {
@@ -4689,6 +4705,7 @@ function App() {
           poLoading={poLoading}
           visiblePurchaseRequests={visiblePurchaseRequests}
           invoicesPendingApproval={invoicesPendingApproval}
+          invoicesToPay={invoicesToPay}
           poAttentionCounts={poAttentionCounts}
           expandedPoId={expandedPoId}
           toggleExpandedPo={toggleExpandedPo}

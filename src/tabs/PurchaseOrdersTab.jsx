@@ -50,6 +50,7 @@ import {
 } from '../utils'
 import InvoicesPanel from './InvoicesPanel'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
+import MyInvoicesToPayTable from './MyInvoicesToPayTable'
 import VendorRequestPanel from './VendorRequestPanel'
 import VendorsToApproveTable from './VendorsToApproveTable'
 
@@ -98,6 +99,7 @@ function PurchaseOrdersTab({
   poLoading,
   visiblePurchaseRequests,
   invoicesPendingApproval,
+  invoicesToPay,
   poAttentionCounts,
   expandedPoId,
   toggleExpandedPo,
@@ -2061,10 +2063,26 @@ function PurchaseOrdersTab({
               )}
             </button>
           )}
+          {canManagePayment(loggedInUser) && (
+            <button
+              className={poView === 'my-pay' ? 'btn-primary' : 'btn-secondary'}
+              onClick={() => setPoView('my-pay')}
+            >
+              My Invoices to Pay
+              {poAttentionCounts.invoicesToPay > 0 && <span className="nav-badge">{poAttentionCounts.invoicesToPay}</span>}
+            </button>
+          )}
         </div>
       </div>
 
-      {poView === 'vendors' ? (
+      {poView === 'my-pay' ? (
+        <MyInvoicesToPayTable
+          invoicesToPay={invoicesToPay}
+          toggleExpandedPo={toggleExpandedPo}
+          handlePayInvoice={handlePayInvoice}
+          poActionBusyId={poActionBusyId}
+        />
+      ) : poView === 'vendors' ? (
         <VendorsToApproveTable
           vendors={vendors}
           users={users}

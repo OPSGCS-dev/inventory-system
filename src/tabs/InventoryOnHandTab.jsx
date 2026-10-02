@@ -538,7 +538,7 @@ function InventoryOnHandTab({
           )}
           {locationEditMode && (
             <p className="sub" style={{ margin: 0 }}>
-              Enter how many units of each part sit in Storage and in the Barn. Entity is
+              Enter how many units of each part sit in Storage and in the Barn. On Site is
               calculated automatically as whatever's left over. Saving archives the previous values
               and logs an entry in History.
             </p>
@@ -640,7 +640,7 @@ function InventoryOnHandTab({
                   )}
                 </tr>
                 <tr className="header-row">
-                  <th className="center-cell total-col">Entity</th>
+                  <th className="center-cell total-col">On Site</th>
                   <th className="center-cell">Storage</th>
                   <th className="center-cell">Barn</th>
                 </tr>

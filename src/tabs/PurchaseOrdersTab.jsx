@@ -125,6 +125,12 @@ function PurchaseOrdersTab({
   poDraftNewQuoteFile,
   setPoDraftNewQuoteFile,
   clearPoDraftQuoteFile,
+  poDraftInvoiceNumber,
+  setPoDraftInvoiceNumber,
+  poDraftInvoiceAmount,
+  setPoDraftInvoiceAmount,
+  poDraftNewInvoiceFile,
+  setPoDraftNewInvoiceFile,
   poDraftTicketSystemTicketId,
   poDraftTicketSystemTicketNumber,
   poDraftCategory,
@@ -1083,6 +1089,71 @@ function PurchaseOrdersTab({
                 accept="application/pdf"
                 onChange={(e) => setPoDraftNewQuoteFile(e.target.files?.[0] || null)}
               />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <label>Invoice (optional)</label>
+            <p className="sub" style={{ margin: '0 0 6px' }}>
+              Already have the vendor's invoice? Attach it here — it's saved as an invoice on this
+              request, the same as one added later from the request's Invoices section.
+            </p>
+            {(visiblePurchaseRequests.find((r) => r.id === poDraftId)?.invoices || []).length > 0 && (
+              <div style={{ marginBottom: 6 }}>
+                <span className="sub" style={{ margin: 0 }}>
+                  Already attached:{' '}
+                  {(visiblePurchaseRequests.find((r) => r.id === poDraftId)?.invoices || []).map((inv, i) => (
+                    <span key={inv.id}>
+                      {i > 0 && ', '}
+                      <a href={inv.file_url} target="_blank" rel="noreferrer">
+                        {inv.invoice_number ? `#${inv.invoice_number}` : inv.file_name || 'Invoice'} ↗
+                      </a>
+                    </span>
+                  ))}
+                </span>
+              </div>
+            )}
+            <div className="field-row">
+              <div>
+                <label htmlFor="po_draft_invoice_number">Invoice #</label>
+                <input
+                  id="po_draft_invoice_number"
+                  type="text"
+                  value={poDraftInvoiceNumber}
+                  onChange={(e) => setPoDraftInvoiceNumber(e.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="po_draft_invoice_amount">Invoice Amount</label>
+                <input
+                  id="po_draft_invoice_amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={poDraftInvoiceAmount}
+                  onChange={(e) => setPoDraftInvoiceAmount(e.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="po_draft_invoice_file">Invoice File</label>
+                {poDraftNewInvoiceFile && (
+                  <div style={{ marginBottom: 6 }}>
+                    <span className="sub" style={{ margin: 0 }}>
+                      {poDraftNewInvoiceFile.name} (will upload on save)
+                    </span>{' '}
+                    <button type="button" className="btn-secondary" onClick={() => setPoDraftNewInvoiceFile(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                )}
+                <input
+                  id="po_draft_invoice_file"
+                  key={poDraftNewInvoiceFile ? 'has-file' : 'no-file'}
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) => setPoDraftNewInvoiceFile(e.target.files?.[0] || null)}
+                />
+              </div>
             </div>
           </div>
 

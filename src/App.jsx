@@ -170,6 +170,12 @@ function App() {
   const [poDraftQuoteFileUrl, setPoDraftQuoteFileUrl] = useState(null)
   const [poDraftQuoteFileName, setPoDraftQuoteFileName] = useState(null)
   const [poDraftNewQuoteFile, setPoDraftNewQuoteFile] = useState(null)
+  // An invoice already in hand when the rec is made. Saved as a real row in
+  // the invoices table (same as one added from the Invoices panel later), so
+  // it needs all three of number/amount/file -- never stored on the request.
+  const [poDraftInvoiceNumber, setPoDraftInvoiceNumber] = useState('')
+  const [poDraftInvoiceAmount, setPoDraftInvoiceAmount] = useState('')
+  const [poDraftNewInvoiceFile, setPoDraftNewInvoiceFile] = useState(null)
   const [poDraftCategory, setPoDraftCategory] = useState('purchase')
   const [poDraftMarkupRate, setPoDraftMarkupRate] = useState('10')
   const [poDraftTaxRate, setPoDraftTaxRate] = useState('13')
@@ -2235,6 +2241,9 @@ function App() {
   )
 
   function openPoDraftForm(existing, prefill) {
+    setPoDraftInvoiceNumber('')
+    setPoDraftInvoiceAmount('')
+    setPoDraftNewInvoiceFile(null)
     if (existing) {
       setPoDraftId(existing.id)
       setPoDraftProjectId(existing.project_id)
@@ -2320,6 +2329,9 @@ function App() {
     setPoDraftId(null)
     setPoDraftLines([])
     setPoDraftFieldErrors({})
+    setPoDraftInvoiceNumber('')
+    setPoDraftInvoiceAmount('')
+    setPoDraftNewInvoiceFile(null)
   }
 
   // Deep link from the ticket system's "Create Purchase Rec" button:
@@ -2454,6 +2466,18 @@ function App() {
     if (poDraftNewQuoteFile && poDraftNewQuoteFile.type !== 'application/pdf') {
       flashPoStatus('Quote attachment must be a PDF file.', false)
       return
+    }
+    const wantsInvoice = Boolean(poDraftNewInvoiceFile || poDraftInvoiceNumber.trim() || poDraftInvoiceAmount !== '')
+    const invoiceAmount = Number(poDraftInvoiceAmount)
+    if (wantsInvoice) {
+      if (!poDraftNewInvoiceFile || poDraftNewInvoiceFile.type !== 'application/pdf') {
+        flashPoStatus('Choose a PDF file for the invoice.', false)
+        return
+      }
+      if (poDraftInvoiceAmount === '' || Number.isNaN(invoiceAmount) || invoiceAmount <= 0) {
+        flashPoStatus('Enter a valid invoice amount.', false)
+        return
+      }
     }
     setPoDraftFieldErrors({})
 
@@ -2618,8 +2642,29 @@ function App() {
       )
       if (lineError) throw lineError
 
+      // The draft is already saved by now, so a failed invoice upload is
+      // reported on its own instead of looking like the whole save failed.
+      let invoiceFailed = false
+      if (wantsInvoice) {
+        try {
+          await uploadAndInsertInvoice(requestId, {
+            invoiceNumber: poDraftInvoiceNumber.trim(),
+            amount: invoiceAmount,
+            file: poDraftNewInvoiceFile,
+          })
+        } catch (invoiceError) {
+          console.error(invoiceError)
+          invoiceFailed = true
+        }
+      }
+
       closePoDraftForm()
-      flashPoStatus('Draft saved.', true)
+      flashPoStatus(
+        invoiceFailed
+          ? 'Draft saved, but the invoice could not be attached — add it from the request instead.'
+          : 'Draft saved.',
+        !invoiceFailed
+      )
       await refreshPurchaseRequest(requestId)
     } catch (error) {
       console.error(error)
@@ -3043,6 +3088,33 @@ function App() {
     if (error) console.error(`Could not remove ${bucket}/${path} from storage:`, error)
   }
 
+  // Shared by the Invoices panel (handleAddInvoice) and the invoice slot on
+  // the purchase request form: uploads the PDF, inserts the invoices row and
+  // logs it. Throws on failure -- callers do their own flash/refresh.
+  async function uploadAndInsertInvoice(requestId, { invoiceNumber, amount, file, matchToReceiptId }) {
+    const ext = file.name.split('.').pop() || 'pdf'
+    const path = `po-${requestId}-${Date.now()}.${ext}`
+    const { error: uploadError } = await supabase.storage
+      .from('invoices')
+      .upload(path, file, { contentType: 'application/pdf' })
+    if (uploadError) throw uploadError
+    const { data: urlData } = supabase.storage.from('invoices').getPublicUrl(path)
+    const { error } = await supabase.from('invoices').insert({
+      purchase_request_id: requestId,
+      invoice_number: invoiceNumber || null,
+      amount,
+      file_url: urlData.publicUrl,
+      file_name: file.name,
+      uploaded_by: loggedInUser.id,
+      matched_receipt_id: matchToReceiptId || null,
+    })
+    if (error) throw error
+    await logPoActivity(
+      requestId,
+      `Invoice added${invoiceNumber ? ` (#${invoiceNumber})` : ''}: $${amount.toFixed(2)}`
+    )
+  }
+
   // Accounting adds an invoice independently of, and in parallel with, the
   // requisitioner adding a receipt (handleAddReceipt below) -- neither
   // blocks the other. They start out unpaired; handleMatchInvoiceReceipt
@@ -3067,27 +3139,12 @@ function App() {
     }
     setPoActionBusyId(request.id)
     try {
-      const ext = file.name.split('.').pop() || 'pdf'
-      const path = `po-${request.id}-${Date.now()}.${ext}`
-      const { error: uploadError } = await supabase.storage
-        .from('invoices')
-        .upload(path, file, { contentType: 'application/pdf' })
-      if (uploadError) throw uploadError
-      const { data: urlData } = supabase.storage.from('invoices').getPublicUrl(path)
-      const { error } = await supabase.from('invoices').insert({
-        purchase_request_id: request.id,
-        invoice_number: invoiceNumber || null,
+      await uploadAndInsertInvoice(request.id, {
+        invoiceNumber,
         amount: numericAmount,
-        file_url: urlData.publicUrl,
-        file_name: file.name,
-        uploaded_by: loggedInUser.id,
-        matched_receipt_id: matchToReceiptId || null,
+        file,
+        matchToReceiptId,
       })
-      if (error) throw error
-      await logPoActivity(
-        request.id,
-        `Invoice added${invoiceNumber ? ` (#${invoiceNumber})` : ''}: $${numericAmount.toFixed(2)}`
-      )
       flashPoStatus(matchToReceiptId ? 'Invoice added and matched.' : 'Invoice added.', true)
       await refreshPurchaseRequest(request.id)
     } catch (error) {
@@ -4214,6 +4271,12 @@ function App() {
             setPoDraftQuoteFileName(null)
             setPoDraftNewQuoteFile(null)
           }}
+          poDraftInvoiceNumber={poDraftInvoiceNumber}
+          setPoDraftInvoiceNumber={setPoDraftInvoiceNumber}
+          poDraftInvoiceAmount={poDraftInvoiceAmount}
+          setPoDraftInvoiceAmount={setPoDraftInvoiceAmount}
+          poDraftNewInvoiceFile={poDraftNewInvoiceFile}
+          setPoDraftNewInvoiceFile={setPoDraftNewInvoiceFile}
           poDraftTicketSystemTicketId={poDraftTicketSystemTicketId}
           poDraftTicketSystemTicketNumber={poDraftTicketSystemTicketNumber}
           poDraftCategory={poDraftCategory}

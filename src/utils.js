@@ -289,6 +289,10 @@ export const PO_ROLE_OPTIONS = [
 // no rows there sees every entity, same as before this existed.
 export const ENTITY_SCOPED_ROLES = ['purchase_rec_approval', 'po_issue']
 
+// inventory_mode is how a draft part line relates to inventory -- 'inventory'
+// (pick a master-list part, on the entity's list or not), 'new' (a part that
+// isn't in the master list yet) or 'not_tracked' (a consumable that shouldn't
+// be counted). The last three fields only matter for 'new' / 'not_tracked'.
 export const blankPurchaseRequestLine = (lineType = 'part') => ({
   _tempId: crypto.randomUUID(),
   line_type: lineType,
@@ -297,7 +301,53 @@ export const blankPurchaseRequestLine = (lineType = 'part') => ({
   quantity: '1',
   unit_cost: '',
   partSearch: '',
+  inventory_mode: 'inventory',
+  vendor_part_number: '',
+  new_part_name: '',
+  not_tracked_reason: '',
 })
+
+// Has anything been entered on a draft part line at all? (The untouched
+// default line is not "content" -- it just isn't saved.)
+export function partLineHasContent(line) {
+  return Boolean(
+    line.part_gcs_id ||
+      (line.description || '').trim() ||
+      (line.vendor_part_number || '').trim() ||
+      (line.new_part_name || '').trim() ||
+      (line.not_tracked_reason || '').trim() ||
+      Number(line.unit_cost) > 0
+  )
+}
+
+// Has the person said how this part line relates to inventory? Every part
+// line with content has to answer that -- it can't just be left unlinked,
+// because that is how a part that needs counting gets skipped.
+export function partLineIsComplete(line) {
+  if (line.inventory_mode === 'new') {
+    return Boolean((line.vendor_part_number || '').trim() && (line.new_part_name || '').trim())
+  }
+  if (line.inventory_mode === 'not_tracked') return Boolean((line.not_tracked_reason || '').trim())
+  return Boolean(line.part_gcs_id)
+}
+
+// One line of plain English about what a saved part line will do to (or has
+// done to) inventory, for the approver and the PO detail view. Null for an
+// ordinary part already on the entity's list, and for service lines.
+export function describeLineInventory(line, entityName, approved) {
+  const where = entityName ? `${entityName}'s inventory` : "the entity's inventory"
+  if (line.inventory_action === 'add_existing') {
+    return approved ? `Added to ${where}` : `Will be added to ${where} on approval`
+  }
+  if (line.inventory_action === 'add_new') {
+    const what = [line.vendor_part_number, line.new_part_name].filter(Boolean).join(' — ')
+    return approved ? `New part created and added to ${where}: ${what}` : `New part "${what}" — will be created and added to ${where} on approval`
+  }
+  if (line.inventory_action === 'not_tracked') {
+    return `Not tracked in inventory — ${line.not_tracked_reason || 'no reason given'}`
+  }
+  return null
+}
 
 export function findUserName(users, id) {
   if (!id) return '—'

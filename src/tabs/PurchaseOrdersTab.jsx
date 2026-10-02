@@ -22,6 +22,7 @@ import {
   computePoProgressStage,
   lineTotal,
   filterPartsForSearch,
+  describeLineInventory,
   isApprovedOrLater,
   canPreviewPo,
   buildPoMailto,
@@ -126,6 +127,7 @@ function PurchaseOrdersTab({
   poDraftNewQuoteFile,
   setPoDraftNewQuoteFile,
   clearPoDraftQuoteFile,
+  allParts,
   applyPdfReadToDraft,
   poDraftInvoiceNumber,
   setPoDraftInvoiceNumber,
@@ -735,10 +737,27 @@ function PurchaseOrdersTab({
                   <td>{l.line_type === 'part' ? 'Part' : 'Service'}</td>
                   <td>
                     {l.line_type === 'part'
-                      ? `${l.parts?.gcs_id ?? l.part_gcs_id} — ${l.parts?.gcs_part_id || ''} — ${
-                          l.parts?.description || ''
-                        }${l.description ? ` (${l.description})` : ''}`
+                      ? l.part_gcs_id
+                        ? `${l.parts?.gcs_id ?? l.part_gcs_id} — ${l.parts?.gcs_part_id || ''} — ${
+                            l.parts?.description || ''
+                          }${l.description ? ` (${l.description})` : ''}`
+                        : // Not linked to a part (yet): a new part or a not-tracked line.
+                          [l.vendor_part_number, l.new_part_name || l.description].filter(Boolean).join(' — ') || '—'
                       : l.description || '—'}
+                    {l.line_type === 'part' &&
+                      (() => {
+                        const note = describeLineInventory(l, r.projects?.name, isApprovedOrLater(r.status))
+                        if (!note) return null
+                        return (
+                          <div
+                            className="sub"
+                            style={{ margin: '2px 0 0', color: l.inventory_action === 'not_tracked' ? 'var(--danger)' : undefined }}
+                          >
+                            {l.inventory_action === 'not_tracked' ? '⚠ ' : '＋ '}
+                            {note}
+                          </div>
+                        )
+                      })()}
                   </td>
                   <td className="center-cell">{l.quantity}</td>
                   <td className="center-cell">{l.unit_cost ?? '—'}</td>
@@ -829,12 +848,12 @@ function PurchaseOrdersTab({
                     <tr key={l.id}>
                       <td className="center-cell">{idx + 1}</td>
                       <td className="center-cell">
-                        {l.line_type === 'part' ? l.parts?.gcs_id ?? l.part_gcs_id : ''}
+                        {l.line_type === 'part' ? l.parts?.gcs_id ?? l.part_gcs_id ?? '' : ''}
                       </td>
                       <td className="center-cell">{l.quantity}</td>
                       <td>
                         {l.line_type === 'part'
-                          ? `${l.parts?.description || ''}${
+                          ? `${l.parts?.description || l.new_part_name || ''}${
                               l.description ? ` (${l.description})` : ''
                             }`
                           : l.description || '—'}
@@ -1581,42 +1600,142 @@ function PurchaseOrdersTab({
                   </tr>
                 ) : (
                   poDraftLines.map((line, i) => {
-                    const part = line.part_gcs_id ? parts.find((p) => p.gcs_id === line.part_gcs_id) : null
+                    const everyPart = allParts || parts
+                    const part = line.part_gcs_id ? everyPart.find((p) => p.gcs_id === line.part_gcs_id) : null
+                    const onEntityList = new Set(parts.map((p) => p.gcs_id))
+                    const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this entity'
+                    const searching = (line.partSearch || '').trim().length >= 2
+                    const listed = filterPartsForSearch(parts, line.partSearch)
+                    // Parts outside the entity's list only appear once you
+                    // search, so the dropdown doesn't become the whole master list.
+                    const others = searching
+                      ? filterPartsForSearch(
+                          everyPart.filter((p) => !onEntityList.has(p.gcs_id)),
+                          line.partSearch
+                        )
+                      : []
+                    const chosenElsewhere = part && !listed.includes(part) && !others.includes(part) ? part : null
+                    const needsAnswer = (poDraftFieldErrors?.incompleteLines || []).includes(line._tempId)
+                    const mode = line.inventory_mode || 'inventory'
+                    const setField = (field) => (e) => updatePoDraftLineField(i, field, e.target.value)
                     return (
                       <tr key={line._tempId}>
-                        <td>
+                        <td className={needsAnswer ? 'field-invalid' : ''}>
                           {line.line_type === 'part' ? (
                             <>
-                              <input
-                                type="text"
-                                className="part-search-input"
-                                placeholder="Search GCS P/N, Part ID, or description…"
-                                value={line.partSearch}
-                                onChange={(e) => updatePoDraftLineField(i, 'partSearch', e.target.value)}
-                              />
                               <select
                                 className="part-picker-select"
-                                value={line.part_gcs_id ?? ''}
-                                onChange={(e) =>
-                                  updatePoDraftLineField(
-                                    i,
-                                    'part_gcs_id',
-                                    e.target.value ? Number(e.target.value) : null
-                                  )
-                                }
-                                style={{ marginTop: 4 }}
+                                value={mode}
+                                onChange={setField('inventory_mode')}
+                                aria-label="How this part relates to inventory"
                               >
-                                <option value="">
-                                  {part
-                                    ? `${part.gcs_id} — ${part.gcs_part_id} — ${part.description || ''}`
-                                    : 'Select a part…'}
-                                </option>
-                                {filterPartsForSearch(parts, line.partSearch).map((p) => (
-                                  <option value={p.gcs_id} key={p.gcs_id}>
-                                    {p.gcs_id} — {p.gcs_part_id} — {p.description || ''}
-                                  </option>
-                                ))}
+                                <option value="inventory">Inventory part — pick from the list</option>
+                                <option value="new">New part — add it to {entityName}&apos;s inventory</option>
+                                <option value="not_tracked">Not tracked in inventory (needs a reason)</option>
                               </select>
+
+                              {mode === 'inventory' && (
+                                <>
+                                  <input
+                                    type="text"
+                                    className="part-search-input"
+                                    placeholder="Search GCS P/N, Part ID, mfr P/N or description…"
+                                    value={line.partSearch}
+                                    onChange={(e) => updatePoDraftLineField(i, 'partSearch', e.target.value)}
+                                    style={{ marginTop: 4 }}
+                                  />
+                                  <select
+                                    className="part-picker-select"
+                                    value={line.part_gcs_id ?? ''}
+                                    onChange={(e) =>
+                                      updatePoDraftLineField(
+                                        i,
+                                        'part_gcs_id',
+                                        e.target.value ? Number(e.target.value) : null
+                                      )
+                                    }
+                                    style={{ marginTop: 4 }}
+                                  >
+                                    <option value="">Select a part…</option>
+                                    {chosenElsewhere && (
+                                      <option value={chosenElsewhere.gcs_id}>
+                                        {chosenElsewhere.gcs_id} — {chosenElsewhere.gcs_part_id} — {chosenElsewhere.description || ''}
+                                      </option>
+                                    )}
+                                    <optgroup label={`On ${entityName}'s inventory list`}>
+                                      {listed.map((p) => (
+                                        <option value={p.gcs_id} key={p.gcs_id}>
+                                          {p.gcs_id} — {p.gcs_part_id} — {p.description || ''}
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                    {others.length > 0 && (
+                                      <optgroup label="Other master-list parts — will be added to this entity's inventory">
+                                        {others.map((p) => (
+                                          <option value={p.gcs_id} key={p.gcs_id}>
+                                            {p.gcs_id} — {p.gcs_part_id} — {p.description || ''}
+                                          </option>
+                                        ))}
+                                      </optgroup>
+                                    )}
+                                  </select>
+                                  {part && !onEntityList.has(part.gcs_id) && (
+                                    <p className="sub" style={{ margin: '4px 0 0' }}>
+                                      Not on {entityName}&apos;s inventory list yet — it will be added when this request is approved.
+                                    </p>
+                                  )}
+                                  {!part && !searching && (
+                                    <p className="sub" style={{ margin: '4px 0 0' }}>
+                                      Not on the list? Search above to find it elsewhere in the master list, or choose &quot;New part&quot;.
+                                    </p>
+                                  )}
+                                </>
+                              )}
+
+                              {mode === 'new' && (
+                                <>
+                                  <input
+                                    type="text"
+                                    placeholder="Vendor / manufacturer part number"
+                                    value={line.vendor_part_number}
+                                    onChange={setField('vendor_part_number')}
+                                    style={{ marginTop: 4 }}
+                                  />
+                                  <input
+                                    type="text"
+                                    placeholder="Part name / description"
+                                    value={line.new_part_name}
+                                    onChange={setField('new_part_name')}
+                                    style={{ marginTop: 4 }}
+                                  />
+                                  <p className="sub" style={{ margin: '4px 0 0' }}>
+                                    Created in the master list and added to {entityName}&apos;s inventory when this request is approved.
+                                  </p>
+                                </>
+                              )}
+
+                              {mode === 'not_tracked' && (
+                                <>
+                                  <input
+                                    type="text"
+                                    placeholder="Part number (if any)"
+                                    value={line.vendor_part_number}
+                                    onChange={setField('vendor_part_number')}
+                                    style={{ marginTop: 4 }}
+                                  />
+                                  <input
+                                    type="text"
+                                    placeholder="Why isn't this tracked in inventory? (required)"
+                                    value={line.not_tracked_reason}
+                                    onChange={setField('not_tracked_reason')}
+                                    style={{ marginTop: 4 }}
+                                  />
+                                  <p className="sub" style={{ margin: '4px 0 0' }}>
+                                    Won&apos;t be counted toward inventory. The approver is shown this line and your reason.
+                                  </p>
+                                </>
+                              )}
+
                               <input
                                 type="text"
                                 placeholder="Note (optional)"

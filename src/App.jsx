@@ -12,6 +12,9 @@ import {
   computeTargetSum,
   normalizeHeader,
   blankPurchaseRequestLine,
+  partLineHasContent,
+  partLineIsComplete,
+  describeLineInventory,
   isAdmin,
   isVendorUser,
   canEditInventory,
@@ -2293,6 +2296,11 @@ function App() {
           quantity: String(l.quantity ?? 1),
           unit_cost: l.unit_cost === null || l.unit_cost === undefined ? '' : String(l.unit_cost),
           partSearch: '',
+          inventory_mode:
+            l.inventory_action === 'add_new' ? 'new' : l.inventory_action === 'not_tracked' ? 'not_tracked' : 'inventory',
+          vendor_part_number: l.vendor_part_number || '',
+          new_part_name: l.new_part_name || '',
+          not_tracked_reason: l.not_tracked_reason || '',
         }))
       )
     } else {
@@ -2460,37 +2468,27 @@ function App() {
       }
 
       const lineType = categoryLineType(poDraftCategory)
-      // Parts are matched against what's stocked for the entity the form will
-      // have once this is applied -- same list the part picker offers.
-      let eligibleParts = []
-      if (lineType === 'part') {
-        const targetProjectId = sel.entity ?? poDraftProjectId
-        let eligibleIds = poDraftEligiblePartIds
-        if (targetProjectId && targetProjectId !== poDraftProjectId) {
-          const { data } = await supabase.from('project_parts').select('part_gcs_id').eq('project_id', targetProjectId)
-          eligibleIds = new Set((data ?? []).map((r) => r.part_gcs_id))
-        }
-        eligibleParts = parts.filter((p) => eligibleIds.has(p.gcs_id))
-      }
-
       newLines = sel.lines.map((l) => {
         const line = {
           ...blankPurchaseRequestLine(lineType),
           quantity: String(l.quantity),
           unit_cost: String(l.unitPrice),
-          // Marks a line that came from a PDF, so saving can refuse to
-          // silently drop one that never got matched to a part.
-          _scraped: true,
         }
         if (lineType === 'service') return { ...line, description: l.description }
-        const part = l.partNumber ? matchPart(l.partNumber, eligibleParts) : null
+        // Matched against the whole master list: a part that exists but isn't
+        // on this entity's list yet is still the right part, and choosing it
+        // just means "add it to this entity's inventory" (the line says so).
+        const part = l.partNumber ? matchPart(l.partNumber, parts) : null
+        if (part) return { ...line, part_gcs_id: part.gcs_id, description: l.description }
+        // No match: the line starts incomplete, so saving makes the person
+        // choose -- pick the part, add it as new, or mark it not tracked.
+        // The vendor's part number and the description are kept to hand.
         return {
           ...line,
-          part_gcs_id: part ? part.gcs_id : null,
-          // Unmatched: leave the vendor's part number in the search box so the
-          // picker narrows to likely candidates, and keep it in the note.
-          partSearch: part ? '' : l.partNumber || '',
-          description: part ? l.description : [l.partNumber, l.description].filter(Boolean).join(' — '),
+          partSearch: l.partNumber || '',
+          vendor_part_number: l.partNumber || '',
+          new_part_name: (l.description || '').slice(0, 120),
+          description: l.description,
         }
       })
     }
@@ -2512,20 +2510,40 @@ function App() {
   }
 
   async function handleCreatePurchaseRequest() {
-    // A line read from a PDF that was never matched to a part would be
-    // dropped by the filter below without a word -- stop and say so instead.
-    const unmatchedFromPdf = poDraftLines.filter(
-      (l) => l._scraped && l.line_type === 'part' && !l.part_gcs_id && Number(l.unit_cost) > 0
-    )
-    if (unmatchedFromPdf.length > 0) {
+    // Every part line with anything on it has to say how it relates to
+    // inventory. An unanswered one used to be dropped without a word, which is
+    // exactly how a part that needs counting gets skipped.
+    const partLines = poDraftLines.filter((l) => l.line_type === 'part')
+    const incompleteLines = partLines.filter((l) => partLineHasContent(l) && !partLineIsComplete(l))
+    if (incompleteLines.length > 0) {
+      setPoDraftFieldErrors({ incompleteLines: incompleteLines.map((l) => l._tempId) })
       flashPoStatus(
-        `Pick a part for ${unmatchedFromPdf.length === 1 ? 'the line' : `each of the ${unmatchedFromPdf.length} lines`} read from the PDF (or delete ${unmatchedFromPdf.length === 1 ? 'it' : 'them'}) — or switch the PO Category to Service.`,
+        `Choose what to do with ${incompleteLines.length === 1 ? 'the highlighted part line' : `each of the ${incompleteLines.length} highlighted part lines`}: pick a part from inventory, add it as a new part, or mark it not tracked (with a reason). Or delete the line, or switch the PO Category to Service.`,
         false
       )
       return
     }
+    // "New" and "not tracked" are the two ways around the counters, so check
+    // them against the master list: a part that's already there has to be
+    // linked, not recreated or waved through.
+    for (const l of partLines) {
+      if (l.inventory_mode === 'inventory' || !partLineIsComplete(l) || !(l.vendor_part_number || '').trim()) continue
+      const existing = matchPart(l.vendor_part_number, parts)
+      if (existing) {
+        setPoDraftFieldErrors({ incompleteLines: [l._tempId] })
+        flashPoStatus(
+          `"${l.vendor_part_number.trim()}" is already in the master list as ${existing.gcs_part_id}${
+            existing.description ? ` (${existing.description})` : ''
+          } — pick it from the list${
+            l.inventory_mode === 'not_tracked' ? ' so it is counted' : ' instead of creating it again'
+          }.`,
+          false
+        )
+        return
+      }
+    }
     const validLines = poDraftLines.filter((l) =>
-      l.line_type === 'part' ? Boolean(l.part_gcs_id) : (l.description || '').trim() !== ''
+      l.line_type === 'part' ? partLineIsComplete(l) : (l.description || '').trim() !== ''
     )
     const mixedTypes = linesAreMixedType(validLines)
     const entitySubProjects = subProjects.filter((sp) => sp.project_id === poDraftProjectId)
@@ -2715,14 +2733,33 @@ function App() {
       }
 
       const { error: lineError } = await supabase.from('purchase_request_lines').insert(
-        validLines.map((l) => ({
-          purchase_request_id: requestId,
-          line_type: l.line_type,
-          part_gcs_id: l.line_type === 'part' ? l.part_gcs_id : null,
-          description: (l.description || '').trim() || null,
-          quantity: l.quantity === '' ? 1 : Number(l.quantity),
-          unit_cost: l.unit_cost === '' ? null : Number(l.unit_cost),
-        }))
+        validLines.map((l) => {
+          const row = {
+            purchase_request_id: requestId,
+            line_type: l.line_type,
+            part_gcs_id: l.line_type === 'part' && l.inventory_mode === 'inventory' ? l.part_gcs_id : null,
+            description: (l.description || '').trim() || null,
+            quantity: l.quantity === '' ? 1 : Number(l.quantity),
+            unit_cost: l.unit_cost === '' ? null : Number(l.unit_cost),
+          }
+          // How this line relates to inventory. An ordinary part already on
+          // the entity's list leaves these unset (and the columns untouched),
+          // exactly like every line before this existed.
+          if (l.line_type === 'part') {
+            if (l.inventory_mode === 'new') {
+              row.inventory_action = 'add_new'
+              row.vendor_part_number = l.vendor_part_number.trim()
+              row.new_part_name = l.new_part_name.trim()
+            } else if (l.inventory_mode === 'not_tracked') {
+              row.inventory_action = 'not_tracked'
+              row.vendor_part_number = (l.vendor_part_number || '').trim() || null
+              row.not_tracked_reason = l.not_tracked_reason.trim()
+            } else if (!poDraftEligiblePartIds.has(l.part_gcs_id)) {
+              row.inventory_action = 'add_existing'
+            }
+          }
+          return row
+        })
       )
       if (lineError) throw lineError
 
@@ -2823,8 +2860,64 @@ function App() {
       flashPoStatus('You must be logged in.', false)
       return
     }
+    // Lines that go beyond "a part already on the entity's list" change
+    // inventory or deliberately skip it. Approving is the sign-off on that, so
+    // the approver is told exactly what will happen before it does.
+    const partLines = (request.purchase_request_lines || []).filter((l) => l.line_type === 'part')
+    const inventoryLines = partLines.filter((l) => l.inventory_action)
+    const entityName = request.projects?.name
+    if (inventoryLines.length > 0) {
+      const summary = inventoryLines
+        .map((l) => {
+          const what = l.parts?.gcs_part_id || l.vendor_part_number || (l.description || '').slice(0, 40) || 'a part'
+          return `• ${what}: ${describeLineInventory(l, entityName, false)}`
+        })
+        .join('\n')
+      if (!window.confirm(`Approving this request will change inventory:\n\n${summary}\n\nApprove?`)) return
+    }
     setPoActionBusyId(request.id)
     try {
+      // Inventory first: if this fails nothing is approved, and re-running is
+      // safe (a line that already has its part is skipped, and the entity's
+      // list uses insert-or-ignore).
+      const added = []
+      for (const l of inventoryLines) {
+        if (l.inventory_action === 'not_tracked') continue
+        let gcsId = l.part_gcs_id
+        if (l.inventory_action === 'add_new' && !gcsId) {
+          // The same part number may have been created since this was drafted.
+          const existing = matchPart(l.vendor_part_number, parts)
+          if (existing) {
+            gcsId = existing.gcs_id
+          } else {
+            const { data: created, error: partError } = await supabase
+              .from('parts')
+              .insert({
+                gcs_part_id: l.vendor_part_number,
+                manufacturer_part_number: l.vendor_part_number,
+                description: l.new_part_name,
+                // Seeds the "last price paid" that pre-fills future PO lines,
+                // from this line's price instead of the column's $250 default.
+                last_cost: l.unit_cost ?? null,
+              })
+              .select()
+              .single()
+            if (partError) throw partError
+            gcsId = created.gcs_id
+          }
+          const { error: linkError } = await supabase
+            .from('purchase_request_lines')
+            .update({ part_gcs_id: gcsId })
+            .eq('id', l.id)
+          if (linkError) throw linkError
+        }
+        const { error: listError } = await supabase
+          .from('project_parts')
+          .upsert({ project_id: request.project_id, part_gcs_id: gcsId }, { onConflict: 'project_id,part_gcs_id', ignoreDuplicates: true })
+        if (listError) throw listError
+        added.push(l.vendor_part_number || l.parts?.gcs_part_id || `part ${gcsId}`)
+      }
+
       const { error } = await supabase
         .from('purchase_requests')
         .update({
@@ -2835,7 +2928,20 @@ function App() {
         .eq('id', request.id)
       if (error) throw error
       await logPoActivity(request.id, 'Approved')
+      if (added.length > 0) {
+        await logPoActivity(request.id, `Added to ${entityName || 'the entity'}'s inventory: ${added.join(', ')}`)
+      }
+      const skipped = inventoryLines.filter((l) => l.inventory_action === 'not_tracked')
+      if (skipped.length > 0) {
+        await logPoActivity(
+          request.id,
+          `Not tracked in inventory: ${skipped.map((l) => `${l.vendor_part_number || (l.description || '').slice(0, 30) || 'line'} (${l.not_tracked_reason})`).join('; ')}`
+        )
+      }
       flashPoStatus('Request approved.', true)
+      if (added.length > 0) {
+        await Promise.all([loadParts(), loadStock(), selectedProjectId ? loadProjectItems(selectedProjectId) : null])
+      }
       await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
@@ -4385,6 +4491,7 @@ function App() {
           handleRemovePurchaseRequestLine={handleRemovePurchaseRequestLine}
           updatePoDraftLineField={updatePoDraftLineField}
           parts={poEligibleParts}
+          allParts={parts}
           savingPoRequest={savingPoRequest}
           handleCreatePurchaseRequest={handleCreatePurchaseRequest}
           handleSubmitPurchaseRequest={handleSubmitPurchaseRequest}

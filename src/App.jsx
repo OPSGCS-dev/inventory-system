@@ -32,6 +32,7 @@ import {
   canApproveVendors,
   canManagePayment,
   canApproveInvoice,
+  canReopenRejected,
   entitiesAllowedFor,
   vendorApprovalStatus,
   vendorBlockReason,
@@ -3029,6 +3030,71 @@ function App() {
     }
   }
 
+  // Sends a submitted request back to whoever submitted it, with a reason.
+  // A reason is required so they know what to change.
+  async function handleRejectPurchaseRequest(request) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    if (!canApproveRequests(loggedInUserWithScopes, request)) {
+      flashPoStatus("You can only reject requests for the entities you're assigned to.", false)
+      return
+    }
+    const reason = window.prompt(`Why is this request being rejected? The requester will see it. (required)`)
+    if (reason === null) return
+    if (!reason.trim()) {
+      flashPoStatus('A reason is required to reject a request.', false)
+      return
+    }
+    setPoActionBusyId(request.id)
+    try {
+      const { error } = await supabase
+        .from('purchase_requests')
+        .update({
+          status: 'rejected',
+          on_hold: false,
+          rejected_by: loggedInUser.id,
+          rejected_at: new Date().toISOString(),
+          rejection_reason: reason.trim(),
+        })
+        .eq('id', request.id)
+      if (error) throw error
+      await logPoActivity(request.id, `Rejected: ${reason.trim()}`)
+      flashPoStatus('Request rejected.', true)
+      await refreshPurchaseRequest(request.id)
+    } catch (error) {
+      console.error(error)
+      flashPoStatus(`Could not reject — ${error?.message || 'check the console for details.'}`, false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // Puts a rejected request back to a draft so it can be edited and submitted again.
+  async function handleReopenRejected(request) {
+    if (!canReopenRejected(loggedInUserWithScopes, request)) {
+      flashPoStatus('Only the person who submitted this request can send it back to draft.', false)
+      return
+    }
+    setPoActionBusyId(request.id)
+    try {
+      const { error } = await supabase
+        .from('purchase_requests')
+        .update({ status: 'draft', rejected_by: null, rejected_at: null, rejection_reason: null })
+        .eq('id', request.id)
+      if (error) throw error
+      await logPoActivity(request.id, 'Returned to draft after rejection')
+      flashPoStatus('Returned to draft — edit it and submit again.', true)
+      await refreshPurchaseRequest(request.id)
+    } catch (error) {
+      console.error(error)
+      flashPoStatus(`Could not return it to draft — ${error?.message || 'check the console for details.'}`, false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
   async function handleResumeFromHold(request) {
     setPoActionBusyId(request.id)
     try {
@@ -4779,6 +4845,8 @@ function App() {
           handleApprovePurchaseRequest={handleApprovePurchaseRequest}
           handleHoldPurchaseRequest={handleHoldPurchaseRequest}
           handleResumeFromHold={handleResumeFromHold}
+          handleRejectPurchaseRequest={handleRejectPurchaseRequest}
+          handleReopenRejected={handleReopenRejected}
           issuingRequestId={issuingRequestId}
           startIssuePurchaseOrder={startIssuePurchaseOrder}
           cancelIssuePurchaseOrder={cancelIssuePurchaseOrder}

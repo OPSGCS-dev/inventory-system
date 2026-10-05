@@ -66,7 +66,7 @@ export function normalizeHeader(h) {
 
 // --- Purchase Orders ---
 
-export const PO_STATUS_ORDER = ['draft', 'submitted', 'approved', 'issued', 'closed']
+export const PO_STATUS_ORDER = ['draft', 'submitted', 'approved', 'issued', 'closed', 'rejected']
 
 export const PO_STATUS_LABELS = {
   draft: 'Draft',
@@ -74,6 +74,7 @@ export const PO_STATUS_LABELS = {
   approved: 'Approved',
   issued: 'PO Issued',
   closed: 'Closed',
+  rejected: 'Rejected',
 }
 
 export function poStatusLabel(status) {
@@ -508,6 +509,13 @@ export function canEditPurchaseRequest(user, request) {
   return false
 }
 
+// A rejected request is sent back to the person who submitted it (or an admin),
+// who returns it to a draft to fix and submit again.
+export function canReopenRejected(user, request) {
+  if (request?.status !== 'rejected') return false
+  return isAdmin(user) || (Boolean(user?.id) && user.id === request.requested_by)
+}
+
 // Its own explicit role now, decoupled from Purchase Rec -- only used to
 // decide whether to show the "Ticketing" link; the ticket system re-checks
 // eligibility itself on login regardless.
@@ -651,6 +659,8 @@ export function nextStepInfo(request, users) {
     }
     case 'closed':
       return { step: 'Done', who: null }
+    case 'rejected':
+      return { step: 'Revise or drop', who: findUserName(users, request.requested_by) }
     default:
       return { step: '—', who: null }
   }

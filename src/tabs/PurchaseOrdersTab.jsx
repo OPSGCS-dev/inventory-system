@@ -15,6 +15,7 @@ import {
   canApproveRequests,
   canIssuePurchaseOrder,
   canClosePo,
+  canReopenRejected,
   workStatusEntries,
   statusOptions,
   PARTS_STATUS_OPTIONS,
@@ -84,6 +85,13 @@ const SHORT_WORK_LABELS = {
 const PO_PROGRESS_ALL_LABELS = PO_PROGRESS_STAGES.map((s) => PO_PROGRESS_STAGE_LABELS[s])
 
 function PoProgressStepper({ request }) {
+  if (request.status === 'rejected') {
+    return (
+      <span className="po-badge po-badge-rejected" title={request.rejection_reason || undefined}>
+        Rejected
+      </span>
+    )
+  }
   const stage = computePoProgressStage(request)
   const currentIndex = PO_PROGRESS_STAGES.indexOf(stage)
   const labels = PO_PROGRESS_ALL_LABELS
@@ -189,6 +197,8 @@ function PurchaseOrdersTab({
   handleApprovePurchaseRequest,
   handleHoldPurchaseRequest,
   handleResumeFromHold,
+  handleRejectPurchaseRequest,
+  handleReopenRejected,
   issuingRequestId,
   startIssuePurchaseOrder,
   cancelIssuePurchaseOrder,
@@ -655,6 +665,16 @@ function PurchaseOrdersTab({
                   </span>
                 </div>
               </>
+            )}
+            {r.status === 'rejected' && (
+              <div className="po-detail-meta-item">
+                <span className="po-detail-label">Rejected</span>
+                <span className="po-detail-value" style={{ color: 'var(--danger)' }}>
+                  {findUserName(users, r.rejected_by)}
+                  {r.rejected_at ? ` — ${new Date(r.rejected_at).toLocaleString()}` : ''}
+                  {r.rejection_reason ? `: ${r.rejection_reason}` : ''}
+                </span>
+              </div>
             )}
             {r.on_hold && (
               <div className="po-detail-meta-item">
@@ -1211,13 +1231,23 @@ function PurchaseOrdersTab({
             {r.status === 'submitted' &&
               (canApproveRequests(loggedInUser, r) ? (
                 r.on_hold ? (
-                  <button
-                    className="btn-primary"
-                    onClick={() => handleResumeFromHold(r)}
-                    disabled={busy}
-                  >
-                    {busy ? 'Resuming…' : 'Resume'}
-                  </button>
+                  <>
+                    <button
+                      className="btn-primary"
+                      onClick={() => handleResumeFromHold(r)}
+                      disabled={busy}
+                    >
+                      {busy ? 'Resuming…' : 'Resume'}
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                      onClick={() => handleRejectPurchaseRequest(r)}
+                      disabled={busy}
+                    >
+                      Reject
+                    </button>
+                  </>
                 ) : (
                   <>
                     <button
@@ -1234,11 +1264,30 @@ function PurchaseOrdersTab({
                     >
                       Hold
                     </button>
+                    <button
+                      className="btn-secondary"
+                      style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                      onClick={() => handleRejectPurchaseRequest(r)}
+                      disabled={busy}
+                    >
+                      Reject
+                    </button>
                   </>
                 )
               ) : (
                 <span className="sub" style={{ margin: 0 }}>
                   {r.on_hold ? 'On hold.' : 'Waiting on an approver.'}
+                </span>
+              ))}
+
+            {r.status === 'rejected' &&
+              (canReopenRejected(loggedInUser, r) ? (
+                <button className="btn-primary" onClick={() => handleReopenRejected(r)} disabled={busy}>
+                  {busy ? 'Working…' : 'Return to Draft'}
+                </button>
+              ) : (
+                <span className="sub" style={{ margin: 0 }}>
+                  Rejected — waiting on {findUserName(users, r.requested_by)} to revise it.
                 </span>
               ))}
 

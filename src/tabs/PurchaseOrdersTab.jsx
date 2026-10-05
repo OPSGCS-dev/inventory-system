@@ -896,9 +896,16 @@ function PurchaseOrdersTab({
               </div>
 
               <table className="sheet po-print-lines">
+                <colgroup>
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '12%' }} />
+                </colgroup>
                 <thead>
                   <tr className="header-row">
-                    <th>Item No.</th>
+                    <th className="center-cell">Item</th>
                     <th className="center-cell">Qty</th>
                     <th>Description</th>
                     <th className="center-cell">Unit Price</th>

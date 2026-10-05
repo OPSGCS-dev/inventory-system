@@ -116,12 +116,12 @@ export async function buildPoPdf(request, stamp = null) {
     styles: { fontSize: 9, cellPadding: 4, textColor: INK, lineColor: [200, 200, 200], overflow: 'linebreak' },
     headStyles: { fillColor: [230, 230, 230], textColor: INK, fontStyle: 'bold' },
     columnStyles: {
-      0: { halign: 'center', cellWidth: 45 },
-      1: { halign: 'center', cellWidth: 40 },
-      3: { halign: 'right', cellWidth: 70 },
-      4: { halign: 'right', cellWidth: 75 },
+      0: { halign: 'center', cellWidth: 32 },
+      1: { halign: 'center', cellWidth: 32 },
+      3: { halign: 'right', cellWidth: 62 },
+      4: { halign: 'right', cellWidth: 66 },
     },
-    head: [['Item No.', 'Qty', 'Description', 'Unit Price', 'Line Total']],
+    head: [['Item', 'Qty', 'Description', 'Unit Price', 'Line Total']],
     body: (request.purchase_request_lines || []).map((l, i) => [
       String(i + 1),
       String(l.quantity ?? ''),

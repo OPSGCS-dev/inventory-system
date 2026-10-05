@@ -233,6 +233,62 @@ export function isNotToExceed(request) {
   return poHasServices(request) && Boolean(request?.not_to_exceed)
 }
 
+// How what's been invoiced compares with the PO: the PO's grand total, or --
+// for a Not to Exceed PO with a cap set -- the cap. Null until there is an
+// invoice. state is 'over' | 'under' | 'equal' (to the cent).
+export function compareInvoicesToPo(request) {
+  const invoices = request?.invoices || []
+  if (invoices.length === 0) return null
+  const cents = (n) => Math.round((Number(n) || 0) * 100)
+  const cap = isNotToExceed(request) ? Number(request.spending_cap) || 0 : 0
+  const basis = cap > 0 ? 'cap' : 'po'
+  const invoiced = cents(computeInvoicedTotal(request))
+  const expected = cents(basis === 'cap' ? cap : computePoTotals(request).grandTotal)
+  const diff = invoiced - expected
+  return {
+    invoiced: invoiced / 100,
+    expected: expected / 100,
+    diff: diff / 100,
+    state: diff > 0 ? 'over' : diff < 0 ? 'under' : 'equal',
+    basis,
+  }
+}
+
+const moneyText = (n) => `$${Number(n).toFixed(2)}`
+
+// The sentence behind the invoice indicator, for its hover text.
+export function invoiceMatchText(match) {
+  const against = match.basis === 'cap' ? 'spending cap' : 'PO total'
+  const gap =
+    match.state === 'equal' ? 'matches' : `${moneyText(Math.abs(match.diff))} ${match.state === 'over' ? 'over' : 'under'}`
+  return `Invoiced ${moneyText(match.invoiced)} against the ${against} of ${moneyText(match.expected)} — ${gap}`
+}
+
+// Spare parts on issued POs whose parts haven't all been received: they're
+// already counted in the inventory view (flagged as not on the shelf yet) but
+// only join real stock when the parts are marked received. Keyed
+// "projectId:partGcsId" -> { qty, pos: [{ label, qty }] }.
+export function incomingStockByKey(requests) {
+  const map = new Map()
+  for (const r of requests || []) {
+    if (r.status !== 'issued' || partsStatus(r) === 'received') continue
+    const label = r.po_number || `#${r.id}`
+    for (const l of r.purchase_request_lines || []) {
+      if (!lineCountsInStock(l)) continue
+      const qty = Number(l.quantity) || 0
+      if (qty <= 0) continue
+      const key = `${r.project_id}:${l.part_gcs_id}`
+      const entry = map.get(key) || { qty: 0, pos: [] }
+      entry.qty += qty
+      const existing = entry.pos.find((p) => p.label === label)
+      if (existing) existing.qty += qty
+      else entry.pos.push({ label, qty })
+      map.set(key, entry)
+    }
+  }
+  return map
+}
+
 // Sum of every invoice on file for a request, regardless of approval/paid
 // state -- what's actually been billed against it so far.
 export function computeInvoicedTotal(request) {

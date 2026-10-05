@@ -19,6 +19,7 @@ import {
   INVENTORY_ACTION_TO_MODE,
   lineCountsInStock,
   linesHaveParts,
+  incomingStockByKey,
   linesHaveServices,
   partsStatus,
   serviceStatus,
@@ -792,6 +793,10 @@ function App() {
     }
     return map
   }, [stockItems, projects])
+
+  // Spare parts on issued POs that haven't been received yet (shown in yellow
+  // on the Inventory On Hand tab).
+  const incomingByKey = useMemo(() => incomingStockByKey(purchaseRequests), [purchaseRequests])
 
   function runAction(action) {
     if (action.type === 'edit') {
@@ -4555,6 +4560,7 @@ function App() {
 
       {activeTab === 'stock' && (
         <InventoryOnHandTab
+          incomingByKey={incomingByKey}
           canEditInventory={canEditInventory(loggedInUser)}
           stockPanel={stockPanel}
           resetStockPanel={resetStockPanel}

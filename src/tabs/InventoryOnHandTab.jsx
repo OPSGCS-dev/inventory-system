@@ -3,6 +3,7 @@ import { computeTargetSum, shortProjectName, journalEntryTypeLabel } from '../ut
 
 function InventoryOnHandTab({
   canEditInventory,
+  incomingByKey,
   stockPanel,
   resetStockPanel,
   stockEditMode,
@@ -72,6 +73,29 @@ function InventoryOnHandTab({
   draftLocationItems,
   updateLocationDraftField,
 }) {
+  // Spare parts on issued POs that haven't been received yet count toward the
+  // numbers shown but are marked yellow: they aren't on the shelf. Only in the
+  // plain view -- counting, moving and using stock work on what's physically here.
+  const showIncoming = !stockEditMode && !locationEditMode && !recordUseMode && !transferMode
+  const incomingAt = (projectId, gcsId) => {
+    const entry = showIncoming ? incomingByKey?.get(`${projectId}:${gcsId}`) : null
+    return entry && entry.qty > 0 ? entry : null
+  }
+  // Everything incoming for a part across the entities that use it.
+  const incomingAcross = (item) => {
+    let qty = 0
+    const pos = []
+    for (const pid of Object.keys(item.perProject)) {
+      const entry = incomingAt(pid, item.gcs_id)
+      if (!entry) continue
+      qty += entry.qty
+      for (const po of entry.pos) pos.push(po)
+    }
+    return { qty, pos }
+  }
+  const INCOMING_BG = '#fff3a8'
+  const incomingTitle = (pos) =>
+    `Includes ${pos.map((p) => `${p.qty} on ${p.label}`).join(', ')} — issued but not received yet, so not on the shelf`
   const isPartsActive = !stockPanel && !stockEditMode && !locationEditMode && !recordUseMode && !transferMode
   const isCountActive = stockPanel === 'count' || stockPanel === 'upload' || stockEditMode
   const isHistoryActive = stockPanel === 'history'
@@ -543,6 +567,12 @@ function InventoryOnHandTab({
               and logs an entry in History.
             </p>
           )}
+          {showIncoming && visibleStockItems.some((item) => incomingAcross(item).qty > 0) && (
+            <p className="sub" style={{ margin: 0 }}>
+              <span style={{ background: INCOMING_BG, padding: '0 6px', borderRadius: 3 }}>Yellow</span> numbers include
+              spare parts on issued POs that haven&apos;t been received yet — not on the shelf.
+            </p>
+          )}
           {transferMode && (
             <p className="sub" style={{ margin: 0 }}>
               Every entity's on-hand is shown for comparison — the From and To columns are
@@ -793,19 +823,40 @@ function InventoryOnHandTab({
                         <td className="row-head">{item.gcs_id}</td>
                         <td>{item.part?.description || '—'}</td>
                         {singleProjectView ? (
-                          <td className="center-cell">{viewEntry ? viewEntry.onHand : '—'}</td>
+                          (() => {
+                            const inc = viewEntry ? incomingAt(stockViewProjectId, item.gcs_id) : null
+                            return (
+                              <td
+                                className="center-cell"
+                                style={inc ? { background: INCOMING_BG } : undefined}
+                                title={inc ? incomingTitle(inc.pos) : undefined}
+                              >
+                                {viewEntry ? viewEntry.onHand + (inc ? inc.qty : 0) : '—'}
+                              </td>
+                            )
+                          })()
                         ) : (
                           projects.map((p) => {
                             const entry = item.perProject[p.id]
                             const isFrom = transferMode && String(p.id) === String(stockViewProjectId)
                             const isTo = transferMode && String(p.id) === String(transferToProjectId)
+                            const inc = entry ? incomingAt(p.id, item.gcs_id) : null
                             return (
                               <td
                                 className="center-cell"
                                 key={p.id}
-                                style={isFrom ? { background: '#fde2e2' } : isTo ? { background: '#dbeafe' } : undefined}
+                                style={
+                                  isFrom
+                                    ? { background: '#fde2e2' }
+                                    : isTo
+                                    ? { background: '#dbeafe' }
+                                    : inc
+                                    ? { background: INCOMING_BG }
+                                    : undefined
+                                }
+                                title={inc ? incomingTitle(inc.pos) : undefined}
                               >
-                                {entry ? entry.onHand : '—'}
+                                {entry ? entry.onHand + (inc ? inc.qty : 0) : '—'}
                               </td>
                             )
                           })
@@ -813,10 +864,30 @@ function InventoryOnHandTab({
                         <td className="center-cell total-col">
                           {singleProjectView ? (viewEntry ? viewEntry.target ?? 0 : '—') : item.targetSum}
                         </td>
-                        <td className="center-cell total-col">{item.onHandSum}</td>
-                        <td className="center-cell total-col">
-                          {singleProjectView ? (viewEntry ? viewEntry.onHand : 0) : item.projectQty}
-                        </td>
+                        {(() => {
+                          const all = incomingAcross(item)
+                          const here = singleProjectView ? incomingAt(stockViewProjectId, item.gcs_id) : null
+                          const onSiteInc = singleProjectView ? here : all.qty > 0 ? all : null
+                          return (
+                            <>
+                              <td
+                                className="center-cell total-col"
+                                style={all.qty > 0 ? { background: INCOMING_BG } : undefined}
+                                title={all.qty > 0 ? incomingTitle(all.pos) : undefined}
+                              >
+                                {item.onHandSum + all.qty}
+                              </td>
+                              <td
+                                className="center-cell total-col"
+                                style={onSiteInc ? { background: INCOMING_BG } : undefined}
+                                title={onSiteInc ? incomingTitle(onSiteInc.pos) : undefined}
+                              >
+                                {(singleProjectView ? (viewEntry ? viewEntry.onHand : 0) : item.projectQty) +
+                                  (onSiteInc ? onSiteInc.qty : 0)}
+                              </td>
+                            </>
+                          )
+                        })()}
                         <td className="center-cell">{item.storageQty}</td>
                         <td className="center-cell">{item.barnQty}</td>
                         {recordUseMode && (

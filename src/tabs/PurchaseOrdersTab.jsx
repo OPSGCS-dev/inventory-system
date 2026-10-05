@@ -23,6 +23,8 @@ import {
   linesHaveParts,
   linesHaveServices,
   consumableOverCap,
+  compareInvoicesToPo,
+  invoiceMatchText,
   CONSUMABLE_MAX_UNIT_COST,
   computePaymentStatus,
   canMarkPaymentPaid,
@@ -56,6 +58,7 @@ import {
 import InvoicesPanel from './InvoicesPanel'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
 import MyInvoicesToPayTable from './MyInvoicesToPayTable'
+import InvoiceMatchChip from './InvoiceMatchChip'
 import VendorRequestPanel from './VendorRequestPanel'
 import VendorsToApproveTable from './VendorsToApproveTable'
 
@@ -613,6 +616,19 @@ function PurchaseOrdersTab({
               <span className="po-detail-label">PO #</span>
               <span className="po-detail-value">{r.po_number || '—'}</span>
             </div>
+            {(() => {
+              const match = compareInvoicesToPo(r)
+              if (!match) return null
+              return (
+                <div className="po-detail-meta-item">
+                  <span className="po-detail-label">Invoiced</span>
+                  <span className="po-detail-value" title={invoiceMatchText(match)}>
+                    ${match.invoiced.toFixed(2)} of ${match.expected.toFixed(2)}
+                    <InvoiceMatchChip request={r} />
+                  </span>
+                </div>
+              )
+            })()}
             {r.sub_projects?.name && (
               <div className="po-detail-meta-item">
                 <span className="po-detail-label">Project</span>
@@ -2076,7 +2092,7 @@ function PurchaseOrdersTab({
                 <col style={{ width: '85px' }} />
                 <col style={{ width: '170px' }} />
                 <col style={{ width: '170px' }} />
-                <col style={{ width: '80px' }} />
+                <col style={{ width: '120px' }} />
                 <col style={{ width: '90px' }} />
                 <col style={{ width: '110px' }} />
                 <col style={{ width: '75px' }} />
@@ -2132,9 +2148,12 @@ function PurchaseOrdersTab({
                       </td>
                       <td className="center-cell">
                         {(r.status === 'issued' || r.status === 'closed') && (
-                          <span className={`po-badge po-payment-badge-${paymentStatus}`}>
-                            {paymentStatusLabel(paymentStatus)}
-                          </span>
+                          <>
+                            <span className={`po-badge po-payment-badge-${paymentStatus}`}>
+                              {paymentStatusLabel(paymentStatus)}
+                            </span>
+                            <InvoiceMatchChip request={r} />
+                          </>
                         )}
                       </td>
                       <td className="nowrap-cell">{findUserName(users, r.requested_by)}</td>

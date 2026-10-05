@@ -683,9 +683,9 @@ export const COMPANY_ADDRESS_BLOCK = [
 ]
 
 // The email address vendors send invoices to. It prints on every PO (screen,
-// print and the emailed PDF). Leave it empty until the real address is known:
-// the "send the invoice to" line is then left off rather than printing a blank.
-export const PO_INVOICE_EMAIL = ''
+// print and the emailed PDF), both for invoices and for all other correspondence.
+// If it is ever emptied, the invoice line is left off rather than printing a blank.
+export const PO_INVOICE_EMAIL = 'ap@greatcirclesolar.com'
 
 // The numbered instructions at the foot of every PO, on screen/print and in
 // the emailed PDF alike -- one list so the two can't drift apart.
@@ -694,7 +694,7 @@ export const PO_INSTRUCTIONS = [
   'Enter this note in accordance with the prices, terms, delivery method, and specifications listed above.',
   'Notify GCS immediately if PO number or work order is not specified.',
   'Reference the PO number on the invoice.',
-  `Send all correspondence to: ${COMPANY_ADDRESS_BLOCK.join(', ')}`,
+  ...(PO_INVOICE_EMAIL ? [`Send all correspondence to: ${PO_INVOICE_EMAIL}`] : []),
 ]
 
 // Single source of truth for the PO cost breakdown, shared by the printed PO

@@ -735,18 +735,6 @@ function PurchaseOrdersTab({
                     : '—'}
                 </td>
               </tr>
-              {poHasParts(r) && (
-                <tr>
-                  <th>Received</th>
-                  <td>
-                    {r.received_by
-                      ? `${findUserName(users, r.received_by)} — ${new Date(
-                          r.received_at
-                        ).toLocaleString()}${r.receipt_file_name ? ` (${r.receipt_file_name})` : ''}`
-                      : '—'}
-                  </td>
-                </tr>
-              )}
               {poHasServices(r) && (
                 <tr>
                   <th>Completed</th>
@@ -759,6 +747,27 @@ function PurchaseOrdersTab({
                   </td>
                 </tr>
               )}
+              {(() => {
+                // Who marked an invoice paid, and when -- the most recent payment
+                // when there are several, with how many invoices are paid so far.
+                const invoices = r.invoices || []
+                const paidInvoices = invoices.filter((inv) => inv.paid)
+                let text = '—'
+                if (paidInvoices.length > 0) {
+                  const latest = paidInvoices.reduce((a, b) =>
+                    new Date(b.paid_at || 0) > new Date(a.paid_at || 0) ? b : a
+                  )
+                  text = `${findUserName(users, latest.paid_by)}${
+                    latest.paid_at ? ` — ${new Date(latest.paid_at).toLocaleString()}` : ''
+                  }${paidInvoices.length < invoices.length ? ` (${paidInvoices.length} of ${invoices.length} invoices)` : ''}`
+                }
+                return (
+                  <tr>
+                    <th>Paid</th>
+                    <td>{text}</td>
+                  </tr>
+                )
+              })()}
               {workStatusEntries(r).map((entry, _i, all) => (
                 <tr key={entry.kind}>
                   <th>{all.length > 1 ? `${entry.label} Status` : 'PO Status'}</th>

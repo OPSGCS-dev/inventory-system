@@ -672,18 +672,6 @@ export function lineTotal(line) {
   return qty * cost
 }
 
-// The numbered instructions at the foot of every PO, on screen/print and in
-// the emailed PDF alike -- one list so the two can't drift apart.
-// PLACEHOLDER: exact wording + the real invoice email still to be supplied;
-// until then the bracketed text goes out to vendors as written.
-export const PO_INSTRUCTIONS = [
-  'Please send the invoice to: [invoice email placeholder]',
-  'Enter this note in accordance with the prices, terms, delivery method, and specifications listed above.',
-  'Notify GCS immediately if PO number or work order is not specified.',
-  'Reference the PO number on the invoice.',
-  'Send all correspondence to: [same fixed company address block]',
-]
-
 // The company's mailing address as it appears on every printed PO, top-right
 // "Bill To" block and footer, regardless of project — fixed, never
 // per-project or database-driven.
@@ -692,6 +680,21 @@ export const COMPANY_ADDRESS_BLOCK = [
   '#1210-330 Bay St',
   'Toronto, ON M5H 2S6',
   'O: 416.366.4227',
+]
+
+// The email address vendors send invoices to. It prints on every PO (screen,
+// print and the emailed PDF). Leave it empty until the real address is known:
+// the "send the invoice to" line is then left off rather than printing a blank.
+export const PO_INVOICE_EMAIL = ''
+
+// The numbered instructions at the foot of every PO, on screen/print and in
+// the emailed PDF alike -- one list so the two can't drift apart.
+export const PO_INSTRUCTIONS = [
+  ...(PO_INVOICE_EMAIL ? [`Please send the invoice to: ${PO_INVOICE_EMAIL}`] : []),
+  'Enter this note in accordance with the prices, terms, delivery method, and specifications listed above.',
+  'Notify GCS immediately if PO number or work order is not specified.',
+  'Reference the PO number on the invoice.',
+  `Send all correspondence to: ${COMPANY_ADDRESS_BLOCK.join(', ')}`,
 ]
 
 // Single source of truth for the PO cost breakdown, shared by the printed PO

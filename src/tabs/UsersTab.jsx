@@ -126,6 +126,9 @@ function UsersTab({
   savingVendor,
   handleSaveVendor,
   handleUpdateVendorLogon,
+  handleResetVendorPassword,
+  vendorLogonInfo,
+  dismissVendorLogonInfo,
   projects,
   newProjectName,
   setNewProjectName,
@@ -150,6 +153,17 @@ function UsersTab({
   resetAdminImportPanel,
 }) {
   const [passwordCopied, setPasswordCopied] = useState(false)
+  const [vendorPasswordCopied, setVendorPasswordCopied] = useState(false)
+
+  async function copyVendorPassword() {
+    try {
+      await navigator.clipboard.writeText(vendorLogonInfo.password)
+      setVendorPasswordCopied(true)
+      setTimeout(() => setVendorPasswordCopied(false), 2000)
+    } catch {
+      // Clipboard API unavailable -- the text box below is still selectable.
+    }
+  }
 
   async function copyInvitePassword() {
     try {
@@ -621,6 +635,30 @@ function UsersTab({
           <h2>Vendors {vendors.length ? `(${vendors.length})` : ''}</h2>
         </div>
 
+        {vendorLogonInfo && (
+          <div className="add-form" style={{ marginBottom: 16 }}>
+            <label htmlFor="vendor_logon_password">
+              Login for {vendorLogonInfo.vendorName} ({vendorLogonInfo.email}). No email is sent, so send them this
+              temporary password yourself. They can log in with it right away and change it from Change Password.
+            </label>
+            <div className="field-row" style={{ alignItems: 'center' }}>
+              <input
+                id="vendor_logon_password"
+                type="text"
+                readOnly
+                value={vendorLogonInfo.password}
+                onFocus={(e) => e.target.select()}
+              />
+              <button className="btn-secondary" onClick={copyVendorPassword} type="button">
+                {vendorPasswordCopied ? 'Copied!' : 'Copy'}
+              </button>
+              <button className="btn-secondary" onClick={dismissVendorLogonInfo} type="button">
+                Hide
+              </button>
+            </div>
+          </div>
+        )}
+
         {showVendorForm && (
           <div className="add-form" style={{ marginBottom: 16 }}>
             <label htmlFor="vendor_form_name">Vendor Name</label>
@@ -734,6 +772,17 @@ function UsersTab({
                         checked={Boolean(v.logon_enabled)}
                         onChange={(e) => handleUpdateVendorLogon(v, { logon_enabled: e.target.checked })}
                       />
+                      {v.logon_enabled && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ display: 'block', margin: '4px auto 0', padding: '1px 8px', fontSize: 12 }}
+                          onClick={() => handleResetVendorPassword(v)}
+                          title="Give this vendor a new temporary password"
+                        >
+                          Reset password
+                        </button>
+                      )}
                     </td>
                     <td>{v.address || '—'}</td>
                     <td>{v.notes || '—'}</td>

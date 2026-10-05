@@ -246,6 +246,9 @@ function App() {
   const [inviteRoles, setInviteRoles] = useState([])
   const [inviting, setInviting] = useState(false)
   const [invitePassword, setInvitePassword] = useState(null)
+  // The temporary password for a vendor login that was just created or reset:
+  // { vendorName, email, password }.
+  const [vendorLogonInfo, setVendorLogonInfo] = useState(null)
 
   const [showVendorForm, setShowVendorForm] = useState(false)
   const [editingVendorId, setEditingVendorId] = useState(null)
@@ -994,7 +997,10 @@ function App() {
 
     // Passwords are never included in the export — a new user row imported
     // from this file will need a Password filled in by hand before import.
-    const userRows = users.map((u) => ({
+    // Vendor-logon accounts are managed from the Vendors table (their one role
+    // is hidden), so they stay out of this sheet -- re-importing it would
+    // otherwise rewrite their roles as empty and lock the vendor out.
+    const userRows = users.filter((u) => !u.vendor_id).map((u) => ({
       Name: u.name,
       'Display Name': u.display_name || '',
       Admin: u.roles?.includes('admin') ? 'Yes' : '',
@@ -1086,6 +1092,9 @@ function App() {
       const name = String(getCell(row, 'Name') || '').trim()
       if (!name) return
       const existing = users.find((u) => u.name.toLowerCase() === name.toLowerCase())
+      // A vendor login in the file (from an export made before they were left
+      // out) is skipped, never touched.
+      if (existing?.vendor_id) return
       if (!existing) {
         errors.push(`Users row ${rowNum}: "${name}" doesn't match an existing user — add new users via the Invite form instead, then re-import to set their roles.`)
         return
@@ -4188,6 +4197,10 @@ function App() {
           })
           const body = await res.json()
           if (!res.ok) throw new Error(body.error || 'Could not invite vendor.')
+          // No email is sent, so the admin has to pass the password on.
+          if (body.password) {
+            setVendorLogonInfo({ vendorName: vendor.name, email: vendor.email, password: body.password })
+          }
         }
       } else if (existingUser) {
         const { error } = await supabase.from('users').update({ active: false }).eq('id', existingUser.id)
@@ -4199,6 +4212,33 @@ function App() {
     } catch (error) {
       console.error(error)
       flashUsersStatus(error.message || 'Could not update vendor logon — check the console for details.', false)
+    }
+  }
+
+  // Gives a vendor that already has a login a new temporary password (the
+  // invite endpoint resets an existing account's password) and shows it.
+  async function handleResetVendorPassword(vendor) {
+    if (!vendor.email) {
+      flashUsersStatus('Vendor needs an email first.', false)
+      return
+    }
+    if (!window.confirm(`Reset the login password for ${vendor.name}? Their current password stops working.`)) return
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const res = await fetch('/api/invite-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ email: vendor.email, roles: ['vendor'], vendor_id: vendor.id }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || 'Could not reset the password.')
+      setVendorLogonInfo({ vendorName: vendor.name, email: vendor.email, password: body.password })
+      await loadUsers()
+    } catch (error) {
+      console.error(error)
+      flashUsersStatus(error.message || 'Could not reset the password.', false)
     }
   }
 
@@ -4824,6 +4864,9 @@ function App() {
           savingVendor={savingVendor}
           handleSaveVendor={handleSaveVendor}
           handleUpdateVendorLogon={handleUpdateVendorLogon}
+          handleResetVendorPassword={handleResetVendorPassword}
+          vendorLogonInfo={vendorLogonInfo}
+          dismissVendorLogonInfo={() => setVendorLogonInfo(null)}
           projects={projects}
           newProjectName={newProjectName}
           setNewProjectName={setNewProjectName}

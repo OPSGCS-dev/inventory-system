@@ -899,7 +899,6 @@ function PurchaseOrdersTab({
                 <thead>
                   <tr className="header-row">
                     <th>Item No.</th>
-                    <th>GCS ID</th>
                     <th className="center-cell">Qty</th>
                     <th>Description</th>
                     <th className="center-cell">Unit Price</th>
@@ -910,9 +909,6 @@ function PurchaseOrdersTab({
                   {(r.purchase_request_lines || []).map((l, idx) => (
                     <tr key={l.id}>
                       <td className="center-cell">{idx + 1}</td>
-                      <td className="center-cell">
-                        {l.line_type === 'part' ? l.parts?.gcs_id ?? l.part_gcs_id ?? '' : ''}
-                      </td>
                       <td className="center-cell">{l.quantity}</td>
                       <td>
                         {l.line_type === 'part'

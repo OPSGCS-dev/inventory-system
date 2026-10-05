@@ -748,18 +748,18 @@ function PurchaseOrdersTab({
                 </tr>
               )}
               {(() => {
-                // Who marked an invoice paid, and when -- the most recent payment
-                // when there are several, with how many invoices are paid so far.
-                const invoices = r.invoices || []
-                const paidInvoices = invoices.filter((inv) => inv.paid)
+                // Who set the PO's Payment Status to Paid, and when. Read from the
+                // activity log (every status change is logged with the person and
+                // time), so it also covers POs marked paid before this row existed.
+                // Blank again if the status has since been moved off Paid.
                 let text = '—'
-                if (paidInvoices.length > 0) {
-                  const latest = paidInvoices.reduce((a, b) =>
-                    new Date(b.paid_at || 0) > new Date(a.paid_at || 0) ? b : a
-                  )
-                  text = `${findUserName(users, latest.paid_by)}${
-                    latest.paid_at ? ` — ${new Date(latest.paid_at).toLocaleString()}` : ''
-                  }${paidInvoices.length < invoices.length ? ` (${paidInvoices.length} of ${invoices.length} invoices)` : ''}`
+                if (computePaymentStatus(r) === 'paid') {
+                  const entry = poActivity.find((a) => /→ Paid$/.test(a.note || ''))
+                  if (entry) {
+                    text = `${findUserName(users, entry.user_id)} — ${new Date(entry.created_at).toLocaleString()}`
+                  } else if (poActivityLoading) {
+                    text = 'Loading…'
+                  }
                 }
                 return (
                   <tr>

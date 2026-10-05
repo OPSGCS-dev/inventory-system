@@ -4725,6 +4725,7 @@ function App() {
           startIssuePurchaseOrder={startIssuePurchaseOrder}
           cancelIssuePurchaseOrder={cancelIssuePurchaseOrder}
           pendingPoNumber={pendingPoNumber}
+          computeNextPoNumber={computeNextPoNumber}
           computingPoNumber={computingPoNumber}
           handleIssuePurchaseOrder={handleIssuePurchaseOrder}
           handleSetWorkStatus={handleSetWorkStatus}

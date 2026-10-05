@@ -65,6 +65,12 @@ function formatTicketNumber(n) {
 
 const PO_DESCRIPTION_MAX_LEN = 50
 
+// Shorter wording for the list's Work column when a mixed PO stacks two badges.
+const SHORT_WORK_LABELS = {
+  partially_received: 'Part. Received',
+  partial: 'Part. Complete',
+}
+
 // The summary list's progress stepper only covers the "in flight" statuses —
 // a draft hasn't entered the workflow yet, so every dot starts unfilled.
 // 'in_progress'/'paid' aren't real status values -- they're display-only
@@ -182,6 +188,7 @@ function PurchaseOrdersTab({
   startIssuePurchaseOrder,
   cancelIssuePurchaseOrder,
   pendingPoNumber,
+  computeNextPoNumber,
   computingPoNumber,
   handleIssuePurchaseOrder,
   handleSetWorkStatus,
@@ -216,6 +223,28 @@ function PurchaseOrdersTab({
   // printable layout used by Print PO, just inline on screen instead of
   // off-screen-until-printed.
   const [showPoPreview, setShowPoPreview] = useState(false)
+
+  // An approved request has no PO number until it is issued, but its printed PO
+  // and PDF should already carry the number it will be issued with.
+  const [peekedPo, setPeekedPo] = useState(null)
+  const peekId = viewingRequest?.id
+  const peekNeeded = viewingRequest?.status === 'approved' && !viewingRequest?.po_number
+  useEffect(() => {
+    if (!peekNeeded) return
+    let cancelled = false
+    computeNextPoNumber(viewingRequest)
+      .then((number) => {
+        if (!cancelled) setPeekedPo({ id: peekId, number })
+      })
+      .catch((error) => console.error(error))
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peekId, peekNeeded])
+  const shownPoNumber = (r) => r.po_number || (peekedPo?.id === r.id ? peekedPo.number : null)
+  // The request as it should be printed or emailed, with the number it will be issued with.
+  const withShownPoNumber = (r) => (shownPoNumber(r) && !r.po_number ? { ...r, po_number: shownPoNumber(r) } : r)
 
   // Collapsed by default -- the activity log is a secondary, rarely-needed
   // view, not something that should add height to every PO's detail page.
@@ -261,7 +290,7 @@ function PurchaseOrdersTab({
     setEmailBusy(true)
     try {
       const { buildPoPdf } = await import('../poPdf.js')
-      const pdf = await buildPoPdf(r, approvalStamp(users, r))
+      const pdf = await buildPoPdf(withShownPoNumber(r), approvalStamp(users, r))
       downloadBlob(new Blob([pdf.bytes], { type: 'application/pdf' }), pdf.filename)
       setEmailNote({ id: r.id, text: `Downloaded ${pdf.filename}.` })
     } catch (error) {
@@ -279,6 +308,7 @@ function PurchaseOrdersTab({
         import('../poPdf.js'),
         import('../poEmail.js'),
       ])
+      r = withShownPoNumber(r)
       const pdf = await buildPoPdf(r, approvalStamp(users, r))
       const label = poLabel(r)
       const eml = buildEml({
@@ -861,7 +891,7 @@ function PurchaseOrdersTab({
                       </tr>
                       <tr>
                         <th>PO #</th>
-                        <td>{r.po_number || `#${r.id}`}</td>
+                        <td>{shownPoNumber(r) || `#${r.id}`}</td>
                       </tr>
                       <tr>
                         <th>Chargeable Expense</th>
@@ -2045,7 +2075,7 @@ function PurchaseOrdersTab({
                 <col style={{ width: '100px' }} />
                 <col style={{ width: '85px' }} />
                 <col style={{ width: '170px' }} />
-                <col style={{ width: '80px' }} />
+                <col style={{ width: '170px' }} />
                 <col style={{ width: '80px' }} />
                 <col style={{ width: '90px' }} />
                 <col style={{ width: '110px' }} />
@@ -2092,8 +2122,9 @@ function PurchaseOrdersTab({
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
                             {workStatusEntries(r).map((entry, _i, all) => (
                               <span key={entry.kind} className={`po-badge po-work-badge-${entry.status}`}>
-                                {all.length > 1 ? `${entry.label}: ` : ''}
-                                {workStatusLabel(entry.status)}
+                                {all.length > 1
+                                  ? `${entry.label}: ${SHORT_WORK_LABELS[entry.status] || workStatusLabel(entry.status)}`
+                                  : workStatusLabel(entry.status)}
                               </span>
                             ))}
                           </div>

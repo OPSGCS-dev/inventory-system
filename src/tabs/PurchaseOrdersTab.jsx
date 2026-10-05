@@ -8,6 +8,8 @@ import {
   approvalStamp,
   userHasRole,
   canCreatePurchaseRequests,
+  entitiesAllowedFor,
+  isEntityAllowed,
   canMatchInvoices,
   canManagePayment,
   canApproveRequests,
@@ -795,7 +797,7 @@ function PurchaseOrdersTab({
               <tr>
                 <th>Payment Status</th>
                 <td>
-                  {r.status === 'issued' && canManagePayment(loggedInUser) ? (
+                  {r.status === 'issued' && canManagePayment(loggedInUser, r) ? (
                     <select
                       value={computePaymentStatus(r)}
                       disabled={busy}
@@ -1143,7 +1145,7 @@ function PurchaseOrdersTab({
           <div className="edit-toolbar">
             {r.status === 'draft' && (
               <>
-                {canCreate && (
+                {canCreatePurchaseRequests(loggedInUser, r.project_id) && (
                   <button
                     className="btn-secondary"
                     onClick={() => {
@@ -1157,11 +1159,11 @@ function PurchaseOrdersTab({
                 <button
                   className="btn-primary"
                   onClick={() => handleSubmitPurchaseRequest(r)}
-                  disabled={busy || !canCreate}
+                  disabled={busy || !canCreatePurchaseRequests(loggedInUser, r.project_id)}
                 >
                   {busy ? 'Submitting…' : 'Submit'}
                 </button>
-                {!canCreate && (
+                {!canCreatePurchaseRequests(loggedInUser, r.project_id) && (
                   <span className="sub" style={{ margin: 0 }}>
                     You don't have permission to submit requests.
                   </span>
@@ -1395,7 +1397,10 @@ function PurchaseOrdersTab({
                 }}
               >
                 <option value="">Select an entity…</option>
-                {projects.map((p) => (
+                {entitiesAllowedFor(loggedInUser, 'purchase_req', projects)
+                  // an entity already on an existing request stays in the list
+                  .concat(projects.filter((p) => p.id === poDraftProjectId && !isEntityAllowed(loggedInUser, 'purchase_req', p.id)))
+                  .map((p) => (
                   <option value={p.id} key={p.id}>
                     {p.name}
                   </option>
@@ -2169,7 +2174,7 @@ function PurchaseOrdersTab({
                       <td className="nowrap-cell">{next.who || '—'}</td>
                       <td className="nowrap-cell">{r.po_number || '—'}</td>
                       <td>
-                        {r.status === 'draft' && canCreate && (
+                        {r.status === 'draft' && canCreatePurchaseRequests(loggedInUser, r.project_id) && (
                           <button
                             className="btn-primary po-action-btn"
                             onClick={() => handleSubmitPurchaseRequest(r)}
@@ -2208,7 +2213,7 @@ function PurchaseOrdersTab({
                             Convert to PO
                           </button>
                         )}
-                        {r.status === 'issued' && canMatchInvoices(loggedInUser) && (
+                        {r.status === 'issued' && canMatchInvoices(loggedInUser, r) && (
                           <button
                             className="btn-primary po-action-btn"
                             onClick={() => toggleExpandedPo(r.id)}

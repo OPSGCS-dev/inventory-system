@@ -28,8 +28,8 @@ function InvoicesPanel({
   handleDeleteReceipt,
   handleMatchInvoiceReceipt,
 }) {
-  const canManage = canMatchInvoices(loggedInUser)
-  const canPay = canManagePayment(loggedInUser)
+  const canManage = canMatchInvoices(loggedInUser, request)
+  const canPay = canManagePayment(loggedInUser, request)
   const canAddReceipt = canConfirmReceipt(loggedInUser, request)
   const canDelete = isAdmin(loggedInUser)
   const invoices = request.invoices || []
@@ -246,7 +246,7 @@ function InvoicesPanel({
                     </td>
                     <td className="center-cell">
                       {matched ? (
-                        canApproveInvoice(loggedInUser, row.invoice) ? (
+                        canApproveInvoice(loggedInUser, row.invoice, request) ? (
                           <input
                             type="checkbox"
                             checked={Boolean(row.invoice.approved)}

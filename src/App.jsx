@@ -31,6 +31,8 @@ import {
   canApproveRequests,
   canApproveVendors,
   canManagePayment,
+  canApproveInvoice,
+  entitiesAllowedFor,
   vendorApprovalStatus,
   vendorBlockReason,
   userDisplayName,
@@ -2228,26 +2230,28 @@ function App() {
     const pairs = []
     for (const r of purchaseRequests) {
       for (const invoice of r.invoices || []) {
-        if (!invoice.approved && invoice.matched_receipt_id) {
+        // Invoice Approval can be limited to certain entities, like the other steps.
+        if (!invoice.approved && invoice.matched_receipt_id && canApproveInvoice(loggedInUserWithScopes, invoice, r)) {
           pairs.push({ request: r, invoice })
         }
       }
     }
     return pairs
-  }, [purchaseRequests])
+  }, [purchaseRequests, loggedInUserWithScopes])
 
   // Same shape for the "My Invoices to Pay" view: approved, not yet paid.
-  // Payment is a company-wide role too (payment), so everyone holding it
-  // sees every one of these.
+  // Payment can be limited to certain entities, like the other steps.
   const invoicesToPay = useMemo(() => {
     const pairs = []
     for (const r of purchaseRequests) {
       for (const invoice of r.invoices || []) {
-        if (invoice.approved && !invoice.paid) pairs.push({ request: r, invoice })
+        if (invoice.approved && !invoice.paid && canManagePayment(loggedInUserWithScopes, r)) {
+          pairs.push({ request: r, invoice })
+        }
       }
     }
     return pairs
-  }, [purchaseRequests])
+  }, [purchaseRequests, loggedInUserWithScopes])
 
   // Counts for the small nav badges -- independent of whichever poView is
   // currently selected, so "3 POs waiting on you" is visible from any tab,
@@ -2352,7 +2356,11 @@ function App() {
       )
     } else {
       setPoDraftId(null)
-      setPoDraftProjectId(prefill?.projectId ?? selectedProjectId ?? projects[0]?.id ?? null)
+      // A new request starts on an entity the person may create requests for.
+      const mayUse = entitiesAllowedFor(loggedInUserWithScopes, 'purchase_req', projects)
+      setPoDraftProjectId(
+        prefill?.projectId ?? mayUse.find((p) => p.id === selectedProjectId)?.id ?? mayUse[0]?.id ?? null
+      )
       setPoDraftVendorId(prefill?.vendorId ?? null)
       setPoDraftNotes('')
       setPoDraftDescription(prefill?.description ?? '')
@@ -2555,6 +2563,10 @@ function App() {
   }
 
   async function handleCreatePurchaseRequest() {
+    if (!canCreatePurchaseRequests(loggedInUserWithScopes, poDraftProjectId)) {
+      flashPoStatus("You can only create purchase requests for the entities you're assigned to.", false)
+      return
+    }
     const partLines = poDraftLines.filter((l) => l.line_type === 'part')
     const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this entity'
     const flagLines = (lines, message) => {

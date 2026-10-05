@@ -327,7 +327,14 @@ export const PO_ROLE_OPTIONS = [
 // Roles whose access can be narrowed to specific entities via the Users
 // tab's "Entity Assignments" table (user_role_entities). A role holder with
 // no rows there sees every entity, same as before this existed.
-export const ENTITY_SCOPED_ROLES = ['purchase_rec_approval', 'po_issue']
+export const ENTITY_SCOPED_ROLES = [
+  'purchase_req',
+  'purchase_rec_approval',
+  'po_issue',
+  'invoice_matching',
+  'invoice_approval',
+  'payment',
+]
 
 // How a part line relates to inventory. Parts can't be added to an entity's
 // inventory list from a PO -- that stays a guarded, separate job -- so a part
@@ -474,8 +481,19 @@ export function canEditInventory(user) {
   return userHasRole(user, 'inventory')
 }
 
-export function canCreatePurchaseRequests(user) {
-  return userHasRole(user, 'purchase_req')
+// `projectId` is optional -- omit it to just ask whether the user holds the
+// role at all (showing the New Request button), pass it to also check the
+// entity against their assignments.
+export function canCreatePurchaseRequests(user, projectId) {
+  if (!userHasRole(user, 'purchase_req')) return false
+  if (projectId === undefined || projectId === null) return true
+  return isEntityAllowed(user, 'purchase_req', projectId)
+}
+
+// The entities a user may act on for a role -- everything when they have no
+// assignments for it.
+export function entitiesAllowedFor(user, role, projects) {
+  return (projects || []).filter((p) => isEntityAllowed(user, role, p.id))
 }
 
 // A draft stays editable by anyone who can create requests (matching how
@@ -485,7 +503,7 @@ export function canCreatePurchaseRequests(user) {
 // dead end with no way to act on the reason for it.
 export function canEditPurchaseRequest(user, request) {
   if (!request) return false
-  if (request.status === 'draft') return canCreatePurchaseRequests(user)
+  if (request.status === 'draft') return canCreatePurchaseRequests(user, request.project_id)
   if (request.status === 'submitted') return isAdmin(user) || user?.id === request.requested_by
   return false
 }
@@ -563,22 +581,25 @@ export function vendorBlockReason(vendor) {
 
 // Adding an invoice and matching it to a receipt -- its own role, separate
 // from approving or paying it.
-export function canMatchInvoices(user) {
-  return userHasRole(user, 'invoice_matching')
+export function canMatchInvoices(user, request) {
+  if (!userHasRole(user, 'invoice_matching')) return false
+  return !request || isEntityAllowed(user, 'invoice_matching', request.project_id)
 }
 
 // Approving a matched invoice/receipt pair -- company-wide, not scoped to
 // whoever happened to approve that PO's original requisition. Only matters
 // once accounting has actually paired an invoice with a receipt (an
 // unmatched invoice has nothing to approve yet).
-export function canApproveInvoice(user, invoice) {
+export function canApproveInvoice(user, invoice, request) {
   if (!invoice?.matched_receipt_id) return false
-  return userHasRole(user, 'invoice_approval')
+  if (!userHasRole(user, 'invoice_approval')) return false
+  return !request || isEntityAllowed(user, 'invoice_approval', request.project_id)
 }
 
 // Marking an invoice paid and setting the manual Payment Status dropdown.
-export function canManagePayment(user) {
-  return userHasRole(user, 'payment')
+export function canManagePayment(user, request) {
+  if (!userHasRole(user, 'payment')) return false
+  return !request || isEntityAllowed(user, 'payment', request.project_id)
 }
 
 export function isApprovedOrLater(status) {

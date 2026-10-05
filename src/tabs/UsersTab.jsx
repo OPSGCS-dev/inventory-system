@@ -404,9 +404,10 @@ function UsersTab({
           <h2>Entity Assignments</h2>
         </div>
         <p className="sub" style={{ margin: '0 0 12px' }}>
-          Limits what a Purchase Rec Approval / PO Issue holder sees to specific entities. Leave an
-          entity list empty to see every entity — the default. Saved together with the Users table
-          above (Save button there).
+          Limits each step of the PO process (creating requests, approving them, issuing POs,
+          matching invoices, approving invoices and payment) to specific entities for the people
+          holding that role. Leave a person's entity list empty to allow every entity — the
+          default. Saved together with the Users table above (Save button there).
         </p>
 
         {ENTITY_SCOPED_ROLES.map((role) => {

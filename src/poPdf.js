@@ -13,7 +13,7 @@ import {
   isNotToExceed,
   isOverSpendingCap,
   lineTotal,
-  poCategory,
+  poHasParts,
 } from './utils.js'
 
 // The standard PDF fonts only cover Latin-1: swap the usual offenders (dashes,
@@ -129,7 +129,10 @@ export async function buildPoPdf(request, stamp = null) {
       String(l.quantity ?? ''),
       clean(
         l.line_type === 'part'
-          ? `${l.parts?.description || l.new_part_name || ''}${l.description ? ` (${l.description})` : ''}`
+          ? l.parts?.description
+            ? `${l.parts.description}${l.description ? ` (${l.description})` : ''}`
+            : // A consumable (or older unlinked line): its own part number + description.
+              [l.vendor_part_number, l.description || l.new_part_name].filter(Boolean).join(' - ') || '-'
           : l.description || '-'
       ),
       l.unit_cost !== null && l.unit_cost !== undefined ? money(l.unit_cost) : '-',
@@ -140,12 +143,12 @@ export async function buildPoPdf(request, stamp = null) {
 
   // --- site/notes on the left, totals on the right
   const totals = computePoTotals(request)
-  const isPurchase = poCategory(request) === 'purchase'
+  const hasParts = poHasParts(request)
   const totalRows = [
     ['Subtotal', money(totals.subtotal)],
     ['Credit', `-${money(totals.credit)}`],
-    ...(isPurchase ? [['Shipping/Handling', money(totals.shipping)]] : []),
-    ...(isPurchase ? [['Vendor Mark-Up', `${totals.markupRate.toFixed(1)}% ${money(totals.markupAmount)}`]] : []),
+    ...(hasParts ? [['Shipping/Handling', money(totals.shipping)]] : []),
+    ...(hasParts ? [['Vendor Mark-Up', `${totals.markupRate.toFixed(1)}% ${money(totals.markupAmount)}`]] : []),
     ['Sales Taxes', `${totals.taxRate.toFixed(1)}% ${money(totals.taxAmount)}`],
     ['Grand Total', money(totals.grandTotal)],
     ...(isNotToExceed(request)

@@ -13,7 +13,15 @@ import {
   blankPurchaseRequestLine,
   partLineHasContent,
   partLineIsComplete,
-  describeLineInventory,
+  consumableOverCap,
+  CONSUMABLE_MAX_UNIT_COST,
+  INVENTORY_MODE_TO_ACTION,
+  INVENTORY_ACTION_TO_MODE,
+  lineCountsInStock,
+  linesHaveParts,
+  linesHaveServices,
+  partsStatus,
+  serviceStatus,
   isAdmin,
   isVendorUser,
   canEditInventory,
@@ -27,16 +35,10 @@ import {
   userDisplayName,
   canIssuePurchaseOrder,
   ENTITY_SCOPED_ROLES,
-  linesAreMixedType,
-  poLineType,
-  categoryLineType,
-  poCategory,
   canMarkPaymentPaid,
   userHasRole,
-  PO_CATEGORY_LABELS,
   workStatusLabel,
   paymentStatusLabel,
-  computeWorkStatus,
   computePaymentStatus,
   TICKETING_URL,
 } from './utils'
@@ -188,7 +190,6 @@ function App() {
   const [poDraftInvoiceNumber, setPoDraftInvoiceNumber] = useState('')
   const [poDraftInvoiceAmount, setPoDraftInvoiceAmount] = useState('')
   const [poDraftNewInvoiceFile, setPoDraftNewInvoiceFile] = useState(null)
-  const [poDraftCategory, setPoDraftCategory] = useState('purchase')
   const [poDraftMarkupRate, setPoDraftMarkupRate] = useState('0')
   const [poDraftTaxRate, setPoDraftTaxRate] = useState('13')
   const [poDraftShippingHandling, setPoDraftShippingHandling] = useState('0')
@@ -2303,7 +2304,6 @@ function App() {
       setPoDraftQuoteFileUrl(existing.quote_file_url || null)
       setPoDraftQuoteFileName(existing.quote_file_name || null)
       setPoDraftNewQuoteFile(null)
-      setPoDraftCategory(existing.po_category || 'purchase')
       setPoDraftMarkupRate(
         existing.markup_rate === null || existing.markup_rate === undefined ? '0' : String(existing.markup_rate)
       )
@@ -2331,15 +2331,18 @@ function App() {
           id: l.id,
           line_type: l.line_type,
           part_gcs_id: l.part_gcs_id,
-          description: l.description || '',
+          description: l.description || l.new_part_name || '',
           quantity: String(l.quantity ?? 1),
           unit_cost: l.unit_cost === null || l.unit_cost === undefined ? '' : String(l.unit_cost),
           partSearch: '',
+          // How the line relates to inventory. A part with no stored answer is
+          // an older ordinary list part (a spare); one that used the options
+          // that no longer exist comes back unanswered so it has to be re-chosen.
           inventory_mode:
-            l.inventory_action === 'add_new' ? 'new' : l.inventory_action === 'not_tracked' ? 'not_tracked' : 'inventory',
+            l.line_type !== 'part'
+              ? 'spare'
+              : INVENTORY_ACTION_TO_MODE[l.inventory_action] ?? (l.inventory_action ? '' : l.part_gcs_id ? 'spare' : ''),
           vendor_part_number: l.vendor_part_number || '',
-          new_part_name: l.new_part_name || '',
-          not_tracked_reason: l.not_tracked_reason || '',
         }))
       )
     } else {
@@ -2358,7 +2361,6 @@ function App() {
       setPoDraftQuoteFileUrl(null)
       setPoDraftQuoteFileName(null)
       setPoDraftNewQuoteFile(null)
-      setPoDraftCategory('purchase')
       setPoDraftMarkupRate('0')
       setPoDraftTaxRate('13')
       setPoDraftShippingHandling('0')
@@ -2366,7 +2368,8 @@ function App() {
       setPoDraftNotToExceed(false)
       setPoDraftSpendingCap('')
       setPoDraftCurrency('CAD')
-      setPoDraftLines([blankPurchaseRequestLine(categoryLineType('purchase'))])
+      // Starts with no lines: the person adds the parts and/or services it needs.
+      setPoDraftLines([])
     }
     setPoDraftFieldErrors({})
     setPoFormOpen(true)
@@ -2444,29 +2447,12 @@ function App() {
     })
   }, [loggedInUser, projects, subProjects, vendors])
 
-  function handleAddPurchaseRequestLine() {
-    // Line type is dictated by the PO's category now (Purchase = parts,
-    // Service/Not to Exceed = services) -- no per-line type picker anymore.
-    setPoDraftLines((prev) => [...prev, blankPurchaseRequestLine(categoryLineType(poDraftCategory))])
+  function handleAddPurchaseRequestLine(lineType = 'part') {
+    setPoDraftLines((prev) => [...prev, blankPurchaseRequestLine(lineType)])
   }
 
   function handleRemovePurchaseRequestLine(index) {
     setPoDraftLines((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  // Switching category switches every existing line's type to match, since
-  // Purchase POs are parts-only and Service/Not to Exceed POs are
-  // services-only -- there's no manual per-line override anymore.
-  function updatePoDraftCategory(category) {
-    setPoDraftCategory(category)
-    const lineType = categoryLineType(category)
-    setPoDraftLines((prev) => prev.map((l) => ({ ...l, line_type: lineType })))
-    // Not to Exceed only ever makes sense on a Service PO -- switching away
-    // from Service clears it rather than leaving a stale flag/cap behind.
-    if (category !== 'service') {
-      setPoDraftNotToExceed(false)
-      setPoDraftSpendingCap('')
-    }
   }
 
   function updatePoDraftLineField(index, field, value) {
@@ -2474,6 +2460,8 @@ function App() {
       prev.map((l, i) => {
         if (i !== index) return l
         const updated = { ...l, [field]: value }
+        // A consumable is free text: it isn't linked to a master-list part.
+        if (field === 'inventory_mode' && value === 'consumable') updated.part_gcs_id = null
         // Pre-fill the price from the part's last-paid cost so purchasers
         // aren't starting from a blank field — still freely overridable.
         if (field === 'part_gcs_id' && !l.unit_cost) {
@@ -2506,37 +2494,32 @@ function App() {
         return false
       }
 
-      // A mixed document's service/parts group brings its own PO category;
-      // the lines are typed for it, not for whatever the form was set to.
-      const lineType = categoryLineType(sel.category ?? poDraftCategory)
+      // Each line carries its own type, so one document can bring services and
+      // parts together.
       newLines = sel.lines.map((l) => {
         const line = {
-          ...blankPurchaseRequestLine(lineType),
+          ...blankPurchaseRequestLine(l.lineType === 'service' ? 'service' : 'part'),
           quantity: String(l.quantity),
           unit_cost: String(l.unitPrice),
         }
-        if (lineType === 'service') return { ...line, description: l.description }
-        // Matched against the whole master list: a part that exists but isn't
-        // on this entity's list yet is still the right part, and choosing it
-        // just means "add it to this entity's inventory" (the line says so).
+        if (line.line_type === 'service') return { ...line, description: l.description }
+        // A part number found in the master list picks that part, as a spare to
+        // start with (saving checks it is on the entity's inventory list).
         const part = l.partNumber ? matchPart(l.partNumber, parts) : null
         if (part) return { ...line, part_gcs_id: part.gcs_id, description: l.description }
-        // No match: the line starts incomplete, so saving makes the person
-        // choose -- pick the part, add it as new, or mark it not tracked.
-        // The vendor's part number and the description are kept to hand.
+        // No match: the line starts unanswered, so saving makes the person
+        // choose -- pick a list part, make it a consumable, or move it into a
+        // service line. The part number and description are kept to hand.
         return {
           ...line,
+          inventory_mode: '',
           partSearch: l.partNumber || '',
           vendor_part_number: l.partNumber || '',
-          new_part_name: (l.description || '').slice(0, 120),
           description: l.description,
         }
       })
     }
 
-    // Switch the PO Category first (this also resets Not to Exceed when leaving
-    // Service); the lines set below replace whatever it re-typed.
-    if (sel.category && sel.category !== poDraftCategory) updatePoDraftCategory(sel.category)
     if (sel.entity !== undefined) {
       setPoDraftProjectId(sel.entity)
       setPoDraftSubProjectId(sel.site ?? null)
@@ -2554,34 +2537,58 @@ function App() {
   }
 
   async function handleCreatePurchaseRequest() {
-    // Every part line with anything on it has to say how it relates to
-    // inventory. An unanswered one used to be dropped without a word, which is
-    // exactly how a part that needs counting gets skipped.
     const partLines = poDraftLines.filter((l) => l.line_type === 'part')
-    const incompleteLines = partLines.filter((l) => partLineHasContent(l) && !partLineIsComplete(l))
-    if (incompleteLines.length > 0) {
-      setPoDraftFieldErrors({ incompleteLines: incompleteLines.map((l) => l._tempId) })
-      flashPoStatus(
-        `Choose what to do with ${incompleteLines.length === 1 ? 'the highlighted part line' : `each of the ${incompleteLines.length} highlighted part lines`}: pick a part from inventory, add it as a new part, or mark it not tracked (with a reason). Or delete the line, or switch the PO Category to Service.`,
-        false
+    const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this entity'
+    const flagLines = (lines, message) => {
+      setPoDraftFieldErrors({ incompleteLines: lines.map((l) => l._tempId) })
+      flashPoStatus(message, false)
+    }
+
+    // A consumable is never counted, so it is capped per unit: anything dearer
+    // is a real part and has to go through inventory (or into a service line).
+    const overCap = partLines.filter(consumableOverCap)
+    if (overCap.length > 0) {
+      flagLines(
+        overCap,
+        `A consumable can't cost more than $${CONSUMABLE_MAX_UNIT_COST.toLocaleString()} each. If it's an inventory part, pick it from the list as a Spare or Used immediately; otherwise include it in a service line.`
       )
       return
     }
-    // "New" and "not tracked" are the two ways around the counters, so check
-    // them against the master list: a part that's already there has to be
-    // linked, not recreated or waved through.
+    // Every part line with anything on it has to say how it relates to
+    // inventory. An unanswered one used to be dropped without a word, which is
+    // exactly how a part that needs counting gets skipped.
+    const incompleteLines = partLines.filter((l) => partLineHasContent(l) && !partLineIsComplete(l))
+    if (incompleteLines.length > 0) {
+      flagLines(
+        incompleteLines,
+        `Finish ${incompleteLines.length === 1 ? 'the highlighted part line' : `each of the ${incompleteLines.length} highlighted part lines`}: choose a part from ${entityName}'s inventory list (as a Spare or Used immediately), or make it a Consumable with a description. A part that's neither can go in a service line instead. Or delete the line.`
+      )
+      return
+    }
+    // Spares and used-immediately parts must be on this entity's list: parts
+    // are not added to inventory from a PO.
+    const offList = partLines.filter(
+      (l) => l.inventory_mode !== 'consumable' && l.part_gcs_id && !poDraftEligiblePartIds.has(l.part_gcs_id)
+    )
+    if (offList.length > 0) {
+      const names = offList.map((l) => parts.find((p) => p.gcs_id === l.part_gcs_id)?.gcs_part_id || `part ${l.part_gcs_id}`)
+      flagLines(
+        offList,
+        `${names.join(', ')} ${offList.length === 1 ? "isn't" : "aren't"} on ${entityName}'s inventory list, and parts can't be added to it from a PO. Pick a different part, make it a Consumable, or include it in a service line.`
+      )
+      return
+    }
+    // A consumable is the one way around the counters, so check it against the
+    // entity's list: a part that's already there has to be linked, not waved through.
     for (const l of partLines) {
-      if (l.inventory_mode === 'inventory' || !partLineIsComplete(l) || !(l.vendor_part_number || '').trim()) continue
-      const existing = matchPart(l.vendor_part_number, parts)
+      if (l.inventory_mode !== 'consumable' || !(l.vendor_part_number || '').trim()) continue
+      const existing = matchPart(l.vendor_part_number, poEligibleParts)
       if (existing) {
-        setPoDraftFieldErrors({ incompleteLines: [l._tempId] })
-        flashPoStatus(
-          `"${l.vendor_part_number.trim()}" is already in the master list as ${existing.gcs_part_id}${
+        flagLines(
+          [l],
+          `"${l.vendor_part_number.trim()}" is on ${entityName}'s inventory list as ${existing.gcs_part_id}${
             existing.description ? ` (${existing.description})` : ''
-          } — pick it from the list${
-            l.inventory_mode === 'not_tracked' ? ' so it is counted' : ' instead of creating it again'
-          }.`,
-          false
+          } — pick it from the list as a Spare or Used immediately instead of a Consumable.`
         )
         return
       }
@@ -2589,22 +2596,19 @@ function App() {
     const validLines = poDraftLines.filter((l) =>
       l.line_type === 'part' ? partLineIsComplete(l) : (l.description || '').trim() !== ''
     )
-    const mixedTypes = linesAreMixedType(validLines)
+    const hasPartLines = linesHaveParts(validLines)
+    const hasServiceLines = linesHaveServices(validLines)
     const entitySubProjects = subProjects.filter((sp) => sp.project_id === poDraftProjectId)
     const errors = {}
     if (!poDraftProjectId) errors.project = true
     if (!poDraftVendorId) errors.vendor = true
-    if (validLines.length === 0 || mixedTypes) errors.lines = true
+    if (validLines.length === 0) errors.lines = true
     if (entitySubProjects.length > 0 && !poDraftSubProjectId) errors.subProject = true
 
     if (Object.keys(errors).length > 0) {
       setPoDraftFieldErrors(errors)
       flashPoStatus(
-        mixedTypes
-          ? 'A purchase order cannot mix parts and services — use one type per PO.'
-          : errors.subProject
-          ? 'Select which project this request is for.'
-          : 'Fill in the highlighted fields before saving.',
+        errors.subProject ? 'Select which project this request is for.' : 'Fill in the highlighted fields before saving.',
         false
       )
       return
@@ -2627,17 +2631,12 @@ function App() {
     }
     setPoDraftFieldErrors({})
 
-    // Markup/shipping only ever apply to a Purchase-category PO; Service and
-    // Not to Exceed POs get zero for both regardless of what's still in the
-    // (hidden) fields, and only a Not to Exceed PO stores a spending cap.
-    const isPurchaseCategory = poDraftCategory === 'purchase'
-    const markupRateToSave = isPurchaseCategory ? (poDraftMarkupRate === '' ? 0 : Number(poDraftMarkupRate)) : 0
-    const shippingToSave = isPurchaseCategory
-      ? poDraftShippingHandling === ''
-        ? 0
-        : Number(poDraftShippingHandling)
-      : 0
-    const notToExceedToSave = poDraftCategory === 'service' && poDraftNotToExceed
+    // Markup/shipping only apply when the PO has part lines (and the markup only
+    // to those lines), and Not to Exceed only when it has service lines -- a
+    // value left in a field that no longer applies is saved as zero / off.
+    const markupRateToSave = hasPartLines ? (poDraftMarkupRate === '' ? 0 : Number(poDraftMarkupRate)) : 0
+    const shippingToSave = hasPartLines ? (poDraftShippingHandling === '' ? 0 : Number(poDraftShippingHandling)) : 0
+    const notToExceedToSave = hasServiceLines && poDraftNotToExceed
     const spendingCapToSave = notToExceedToSave && poDraftSpendingCap !== '' ? Number(poDraftSpendingCap) : null
 
     setSavingPoRequest(true)
@@ -2664,7 +2663,6 @@ function App() {
           vendor_id: poDraftVendorId,
           description: poDraftDescription.trim() || null,
           vendor_quote_number: poDraftVendorQuoteNumber.trim() || null,
-          po_category: poDraftCategory,
           markup_rate: markupRateToSave,
           tax_rate: poDraftTaxRate === '' ? 13 : Number(poDraftTaxRate),
           shipping_handling: shippingToSave,
@@ -2716,13 +2714,6 @@ function App() {
           if ((existing.description || '') !== (newValues.description || '')) {
             changeLines.push(`Description: ${newValues.description || '(cleared)'}`)
           }
-          if (existing.po_category !== newValues.po_category) {
-            changeLines.push(
-              `Category: ${PO_CATEGORY_LABELS[existing.po_category] || existing.po_category} → ${
-                PO_CATEGORY_LABELS[newValues.po_category] || newValues.po_category
-              }`
-            )
-          }
           if (Number(existing.markup_rate) !== newValues.markup_rate) {
             changeLines.push(`Markup: ${existing.markup_rate}% → ${newValues.markup_rate}%`)
           }
@@ -2772,7 +2763,6 @@ function App() {
             vendor_quote_number: poDraftVendorQuoteNumber.trim() || null,
             quote_file_url: quoteFileUrl,
             quote_file_name: quoteFileName,
-            po_category: poDraftCategory,
             markup_rate: markupRateToSave,
             tax_rate: poDraftTaxRate === '' ? 13 : Number(poDraftTaxRate),
             shipping_handling: shippingToSave,
@@ -2795,26 +2785,16 @@ function App() {
           const row = {
             purchase_request_id: requestId,
             line_type: l.line_type,
-            part_gcs_id: l.line_type === 'part' && l.inventory_mode === 'inventory' ? l.part_gcs_id : null,
+            // Only spares and used-immediately parts are linked to a master-list
+            // part; a consumable is free text.
+            part_gcs_id: l.line_type === 'part' && l.inventory_mode !== 'consumable' ? l.part_gcs_id : null,
             description: (l.description || '').trim() || null,
             quantity: l.quantity === '' ? 1 : Number(l.quantity),
             unit_cost: l.unit_cost === '' ? null : Number(l.unit_cost),
           }
-          // How this line relates to inventory. An ordinary part already on
-          // the entity's list leaves these unset (and the columns untouched),
-          // exactly like every line before this existed.
           if (l.line_type === 'part') {
-            if (l.inventory_mode === 'new') {
-              row.inventory_action = 'add_new'
-              row.vendor_part_number = l.vendor_part_number.trim()
-              row.new_part_name = l.new_part_name.trim()
-            } else if (l.inventory_mode === 'not_tracked') {
-              row.inventory_action = 'not_tracked'
-              row.vendor_part_number = (l.vendor_part_number || '').trim() || null
-              row.not_tracked_reason = l.not_tracked_reason.trim()
-            } else if (!poDraftEligiblePartIds.has(l.part_gcs_id)) {
-              row.inventory_action = 'add_existing'
-            }
+            row.inventory_action = INVENTORY_MODE_TO_ACTION[l.inventory_mode]
+            if (l.inventory_mode === 'consumable') row.vendor_part_number = (l.vendor_part_number || '').trim() || null
           }
           return row
         })
@@ -2943,64 +2923,20 @@ function App() {
       flashPoStatus(`${vendorBlock} The vendor has to be approved before this request can be.`, false)
       return
     }
-    // Lines that go beyond "a part already on the entity's list" change
-    // inventory or deliberately skip it. Approving is the sign-off on that, so
-    // the approver is told exactly what will happen before it does.
-    const partLines = (request.purchase_request_lines || []).filter((l) => l.line_type === 'part')
-    const inventoryLines = partLines.filter((l) => l.inventory_action)
-    const entityName = request.projects?.name
-    if (inventoryLines.length > 0) {
-      const summary = inventoryLines
-        .map((l) => {
-          const what = l.parts?.gcs_part_id || l.vendor_part_number || (l.description || '').slice(0, 40) || 'a part'
-          return `• ${what}: ${describeLineInventory(l, entityName, false)}`
-        })
-        .join('\n')
-      if (!window.confirm(`Approving this request will change inventory:\n\n${summary}\n\nApprove?`)) return
+    // Parts are no longer added to inventory from a PO, so a line saved with the
+    // older "add new part" / "not tracked" options can't be approved as-is.
+    const legacyLines = (request.purchase_request_lines || []).filter(
+      (l) => l.line_type === 'part' && ['add_new', 'not_tracked'].includes(l.inventory_action)
+    )
+    if (legacyLines.length > 0) {
+      flashPoStatus(
+        'This request has a part line using an option that no longer exists. Edit it and choose Spare, Used immediately or Consumable for that line first.',
+        false
+      )
+      return
     }
     setPoActionBusyId(request.id)
     try {
-      // Inventory first: if this fails nothing is approved, and re-running is
-      // safe (a line that already has its part is skipped, and the entity's
-      // list uses insert-or-ignore).
-      const added = []
-      for (const l of inventoryLines) {
-        if (l.inventory_action === 'not_tracked') continue
-        let gcsId = l.part_gcs_id
-        if (l.inventory_action === 'add_new' && !gcsId) {
-          // The same part number may have been created since this was drafted.
-          const existing = matchPart(l.vendor_part_number, parts)
-          if (existing) {
-            gcsId = existing.gcs_id
-          } else {
-            const { data: created, error: partError } = await supabase
-              .from('parts')
-              .insert({
-                gcs_part_id: l.vendor_part_number,
-                manufacturer_part_number: l.vendor_part_number,
-                description: l.new_part_name,
-                // Seeds the "last price paid" that pre-fills future PO lines,
-                // from this line's price instead of the column's $250 default.
-                last_cost: l.unit_cost ?? null,
-              })
-              .select()
-              .single()
-            if (partError) throw partError
-            gcsId = created.gcs_id
-          }
-          const { error: linkError } = await supabase
-            .from('purchase_request_lines')
-            .update({ part_gcs_id: gcsId })
-            .eq('id', l.id)
-          if (linkError) throw linkError
-        }
-        const { error: listError } = await supabase
-          .from('project_parts')
-          .upsert({ project_id: request.project_id, part_gcs_id: gcsId }, { onConflict: 'project_id,part_gcs_id', ignoreDuplicates: true })
-        if (listError) throw listError
-        added.push(l.vendor_part_number || l.parts?.gcs_part_id || `part ${gcsId}`)
-      }
-
       const { error } = await supabase
         .from('purchase_requests')
         .update({
@@ -3011,20 +2947,7 @@ function App() {
         .eq('id', request.id)
       if (error) throw error
       await logPoActivity(request.id, 'Approved')
-      if (added.length > 0) {
-        await logPoActivity(request.id, `Added to ${entityName || 'the entity'}'s inventory: ${added.join(', ')}`)
-      }
-      const skipped = inventoryLines.filter((l) => l.inventory_action === 'not_tracked')
-      if (skipped.length > 0) {
-        await logPoActivity(
-          request.id,
-          `Not tracked in inventory: ${skipped.map((l) => `${l.vendor_part_number || (l.description || '').slice(0, 30) || 'line'} (${l.not_tracked_reason})`).join('; ')}`
-        )
-      }
       flashPoStatus('Request approved.', true)
-      if (added.length > 0) {
-        await Promise.all([loadParts(), loadStock(), selectedProjectId ? loadProjectItems(selectedProjectId) : null])
-      }
       await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
@@ -3220,29 +3143,26 @@ function App() {
     }
   }
 
-  // A plain dropdown -- no evidence file required for any transition. Moving
-  // into the fully-done state for the first time ('received' for a Purchase
-  // PO, 'complete' for a Service PO) also rolls the PO's part quantities
-  // into stock (same effect the old photo-upload confirmation had, just
-  // without requiring a file); re-selecting it after moving away would roll
-  // stock in again, so this only fires on the actual transition into it.
-  async function handleSetWorkStatus(request, workStatus) {
+  // A plain dropdown -- no evidence file required for any transition. A PO's
+  // parts and its services are tracked separately: `kind` is 'parts'
+  // (ordering/receiving) or 'service' (doing the work). Moving the parts into
+  // 'received' for the first time also rolls the quantities of the lines that
+  // are kept as spares into stock; re-selecting it after moving away would roll
+  // stock in again, so this only fires on the actual transition into it. Parts
+  // marked Used immediately and consumables are never added.
+  async function handleSetWorkStatus(request, kind, status) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
     }
-    const fullyDoneValue = poCategory(request) === 'purchase' ? 'received' : 'complete'
-    const enteringComplete = workStatus === fullyDoneValue && request.work_status !== fullyDoneValue
+    const isParts = kind === 'parts'
+    const previous = isParts ? partsStatus(request) : serviceStatus(request)
+    const doneValue = isParts ? 'received' : 'complete'
+    const enteringDone = status === doneValue && previous !== doneValue
     setPoActionBusyId(request.id)
     try {
-      // Belt-and-suspenders on top of the partLines check below: a Service
-      // (or Not to Exceed) PO never has part lines by construction, but
-      // gating on category too means a mislabeled/edited-after-the-fact row
-      // still can't roll stock in or write a journal entry it shouldn't.
-      if (enteringComplete && poCategory(request) === 'purchase') {
-        const partLines = (request.purchase_request_lines || []).filter(
-          (l) => l.line_type === 'part' && l.part_gcs_id
-        )
+      if (enteringDone && isParts) {
+        const partLines = (request.purchase_request_lines || []).filter(lineCountsInStock)
         if (partLines.length > 0) {
           const gcsIds = [...new Set(partLines.map((l) => l.part_gcs_id))]
           const { data: existingStock, error: stockError } = await supabase
@@ -3259,8 +3179,8 @@ function App() {
           }
 
           const stockUpdates = [...byPart.entries()].map(([gcsId, qty]) => {
-            const previous = prevMap.get(gcsId) ?? 0
-            return { part_gcs_id: gcsId, previous, next: previous + qty }
+            const before = prevMap.get(gcsId) ?? 0
+            return { part_gcs_id: gcsId, previous: before, next: before + qty }
           })
 
           const { error: upsertError } = await supabase
@@ -3299,22 +3219,27 @@ function App() {
         }
       }
 
-      const payload = { work_status: workStatus }
-      if (enteringComplete) {
-        payload.received_by = loggedInUser.id
-        payload.received_at = new Date().toISOString()
+      const payload = isParts ? { parts_status: status } : { service_status: status }
+      if (enteringDone) {
+        if (isParts) {
+          payload.received_by = loggedInUser.id
+          payload.received_at = new Date().toISOString()
+        } else {
+          payload.service_completed_by = loggedInUser.id
+          payload.service_completed_at = new Date().toISOString()
+        }
       }
       const { error } = await supabase.from('purchase_requests').update(payload).eq('id', request.id)
       if (error) throw error
       await logPoActivity(
         request.id,
-        `PO Status: ${workStatusLabel(computeWorkStatus(request))} → ${workStatusLabel(workStatus)}`
+        `${isParts ? 'Parts' : 'Service'} status: ${workStatusLabel(previous)} → ${workStatusLabel(status)}`
       )
-      flashPoStatus('Work status updated.', true)
+      flashPoStatus('Status updated.', true)
       await Promise.all([refreshPurchaseRequest(request.id), loadStock()])
     } catch (error) {
       console.error(error)
-      flashPoStatus('Could not update work status — check the console for details.', false)
+      flashPoStatus(`Could not update status — ${error?.message || 'check the console for details.'}`, false)
     } finally {
       setPoActionBusyId(null)
     }
@@ -4758,8 +4683,6 @@ function App() {
           setPoDraftNewInvoiceFile={setPoDraftNewInvoiceFile}
           poDraftTicketSystemTicketId={poDraftTicketSystemTicketId}
           poDraftTicketSystemTicketNumber={poDraftTicketSystemTicketNumber}
-          poDraftCategory={poDraftCategory}
-          setPoDraftCategory={updatePoDraftCategory}
           poDraftMarkupRate={poDraftMarkupRate}
           setPoDraftMarkupRate={setPoDraftMarkupRate}
           poDraftTaxRate={poDraftTaxRate}

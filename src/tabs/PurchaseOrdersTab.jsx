@@ -13,10 +13,19 @@ import {
   canApproveRequests,
   canIssuePurchaseOrder,
   canClosePo,
-  computeWorkStatus,
+  workStatusEntries,
+  statusOptions,
+  PARTS_STATUS_OPTIONS,
+  SERVICE_STATUS_OPTIONS,
+  partsStatus,
+  poHasParts,
+  poHasServices,
+  linesHaveParts,
+  linesHaveServices,
+  consumableOverCap,
+  CONSUMABLE_MAX_UNIT_COST,
   computePaymentStatus,
   canMarkPaymentPaid,
-  workStatusOptionsForCategory,
   PAYMENT_STATUS_LABELS,
   PO_PROGRESS_STAGES,
   PO_PROGRESS_STAGE_LABELS,
@@ -35,12 +44,8 @@ import {
   truncate,
   canConfirmReceipt,
   canEditPurchaseRequest,
-  poLineType,
   TICKETING_URL,
   isAdmin,
-  PO_CATEGORY_OPTIONS,
-  PO_CATEGORY_LABELS,
-  poCategory,
   isNotToExceed,
   computeInvoicedTotal,
   isOverSpendingCap,
@@ -149,8 +154,6 @@ function PurchaseOrdersTab({
   setPoDraftNewInvoiceFile,
   poDraftTicketSystemTicketId,
   poDraftTicketSystemTicketNumber,
-  poDraftCategory,
-  setPoDraftCategory,
   poDraftMarkupRate,
   setPoDraftMarkupRate,
   poDraftTaxRate,
@@ -205,6 +208,10 @@ function PurchaseOrdersTab({
   )
   const availableSubProjects = subProjects.filter((sp) => sp.project_id === poDraftProjectId)
   const viewingRequest = expandedPoId ? visiblePurchaseRequests.find((r) => r.id === expandedPoId) : null
+  // Markup and shipping only apply to a PO with part lines; Not to Exceed only
+  // to one with service lines -- the form shows each only then.
+  const formHasParts = linesHaveParts(poDraftLines)
+  const formHasServices = linesHaveServices(poDraftLines)
 
   // Toggled by the "View PO" button on the detail screen — shows the same
   // printable layout used by Print PO, just inline on screen instead of
@@ -315,7 +322,7 @@ function PurchaseOrdersTab({
       poDraftShippingHandling,
       poDraftMarkupRate,
       poDraftVendorQuoteNumber,
-      poDraftCategory,
+      poDraftLines,
       projects,
       subProjects,
       vendors,
@@ -370,117 +377,65 @@ function PurchaseOrdersTab({
       add('tax', 'Sales tax', `${result.tax.rate}%`, `${cur.poDraftTaxRate}%`)
     }
 
-    // Shipping and markup are only fields on a Purchase PO; on a Service PO
-    // they'd silently drop out of the totals, so they come in as lines instead.
-    const isPurchase = cur.poDraftCategory === 'purchase'
+    // Each document line is a service or a part: the document's own wording
+    // decides where it says so, otherwise a line with a part number is a part and
+    // one without is a service. One PO can hold both.
     const docItems = result.lines ? result.lines.items : []
-    const mixed = docItems.some((l) => l.kind === 'service') && docItems.some((l) => l.kind === 'part')
+    const lineKind = (l) => l.kind || (l.partNumber ? 'part' : 'service')
+    const docHasParts = docItems.some((l) => lineKind(l) === 'part')
+    // Shipping and markup are fields of the PO and only apply while it has parts
+    // (the markup only to those lines).
+    const poHasPartLines = docItems.length > 0 ? docHasParts : linesHaveParts(cur.poDraftLines)
 
-    // A document whose lines are all clearly one kind sets the PO Category to
-    // match when applied: every line a service, every line a part, or -- when
-    // nothing says either way -- every line carrying a part number (that
-    // never decides "service"; a service line can mention a part).
-    let docKind = null
-    if (!mixed && docItems.length > 0) {
-      if (docItems.every((l) => l.kind === 'service')) docKind = 'service'
-      else if (docItems.every((l) => l.kind === 'part')) docKind = 'purchase'
-      else if (docItems.every((l) => !l.kind && l.partNumber)) docKind = 'purchase'
-    }
-    // What the form will be set to once this is applied -- decides how lines
-    // are priced and whether shipping/markup are fields or lines.
-    const targetPurchase = docKind ? docKind === 'purchase' : isPurchase
-
-    // A Purchase PO has a Markup % field, so a vendor price with markup folded
-    // in goes into the unit cost without it and the % carries the markup; a
-    // Service PO has no markup, so the price stays exactly as billed.
-    const asPoLine = (l, purchase = targetPurchase) => {
-      const unitPrice = purchase ? l.unitPrice : (l.billedUnitPrice ?? l.unitPrice)
-      return { ...l, unitPrice, amount: Math.round(l.quantity * unitPrice * 100) / 100 }
+    // A vendor price with markup folded in goes into a part's unit cost without
+    // it, and the Markup % carries the markup; a service has no markup, so its
+    // price stays exactly as billed.
+    const asPoLine = (l) => {
+      const kind = lineKind(l)
+      const unitPrice = kind === 'part' ? l.unitPrice : (l.billedUnitPrice ?? l.unitPrice)
+      return { ...l, lineType: kind, unitPrice, amount: Math.round(l.quantity * unitPrice * 100) / 100 }
     }
     const summarise = (list) => {
       const sum = list.reduce((s, l) => s + l.amount, 0)
       return `${list.length} line${list.length === 1 ? '' : 's'}, ${sum.toFixed(2)} in total`
     }
     const unreconciled = result.lines && !result.lines.reconciled
-    const reconcileWarn = unreconciled ? "These don't add up to the PDF's own subtotal/total — check every line." : null
+    const reconcileWarn = unreconciled ? "These don't add up to the PDF's subtotal/total — check every line." : null
 
-    // On a mixed document they belong to the parts side, so they're offered
-    // too (ticked only while the parts group is) and follow its tick.
-    if (targetPurchase || mixed) {
+    if (poHasPartLines) {
       if (result.shipping > 0 && Number(cur.poDraftShippingHandling) !== result.shipping) {
         data.shipping = result.shipping
-        add('shipping', 'Shipping / handling', result.shipping.toFixed(2), Number(cur.poDraftShippingHandling).toFixed(2), {
-          checked: mixed ? isPurchase : true,
-        })
+        add('shipping', 'Shipping / handling', result.shipping.toFixed(2), Number(cur.poDraftShippingHandling).toFixed(2))
       }
       if (result.markup && result.markup.rate !== null && Number(cur.poDraftMarkupRate) !== result.markup.rate) {
         data.markup = result.markup.rate
-        add('markup', 'Markup', `${result.markup.rate}%`, `${cur.poDraftMarkupRate}%`, { checked: mixed ? isPurchase : true })
+        add('markup', 'Markup', `${result.markup.rate}%`, `${cur.poDraftMarkupRate}%`)
         if (result.markup.embedded) {
           notes.push("The unit costs below are the vendor's price before markup — the Markup % puts it back, so keep both ticked.")
         }
       }
     }
 
-    if (mixed) {
-      // Services and parts live on separate POs in this system, so a mixed
-      // document is offered as two groups, one ticked at a time (a PO can't
-      // mix the two). Ticking a group also switches the PO Category to match
-      // when applied, and each group is priced for its own kind of PO (a
-      // parts line carries its markup in the Markup %, a service line keeps
-      // its billed price). Lines with no clear kind go with the form's own
-      // category.
-      const serviceLines = docItems
-        .filter((l) => l.kind === 'service' || (l.kind === null && !isPurchase))
-        .map((l) => asPoLine(l, false))
-      const partLines = docItems
-        .filter((l) => l.kind === 'part' || (l.kind === null && isPurchase))
-        .map((l) => asPoLine(l, true))
-      data.lines_service = serviceLines
-      data.lines_part = partLines
-      add('lines_service', 'Service lines', summarise(serviceLines), null, {
-        lines: serviceLines,
-        checked: !isPurchase,
-        category: 'service',
-        warn: reconcileWarn,
-      })
-      add('lines_part', 'Parts lines', summarise(partLines), null, {
-        lines: partLines,
-        checked: isPurchase,
-        category: 'purchase',
-        warn: reconcileWarn,
-      })
-      notes.push(
-        'Mixes services and parts, which are separate POs here. Tick one (the PO Category follows), then use the same document for a second rec.'
-      )
-      if (!unreconciled) notes.push("All the lines together add up to the PDF's subtotal/total ✓")
-    } else if (docItems.length > 0) {
-      const lineItems = docItems.map((l) => asPoLine(l))
-      if (!targetPurchase) {
-        // No Shipping/Markup fields on a Service PO: they come in as lines so
-        // the totals still match the document.
+    if (docItems.length > 0) {
+      const lineItems = docItems.map(asPoLine)
+      if (!docHasParts) {
+        // No Shipping/Markup fields without parts: they come in as lines so the
+        // totals still match the document.
         if (result.shipping > 0) {
-          lineItems.push({ description: 'Shipping', partNumber: '', quantity: 1, unitPrice: result.shipping, amount: result.shipping })
+          lineItems.push({ lineType: 'service', description: 'Shipping', partNumber: '', quantity: 1, unitPrice: result.shipping, amount: result.shipping })
         }
         if (result.markup && !result.markup.embedded) {
           const label = result.markup.rate !== null ? `Markup @ ${result.markup.rate}%` : 'Markup'
-          lineItems.push({ description: label, partNumber: '', quantity: 1, unitPrice: result.markup.amount, amount: result.markup.amount })
+          lineItems.push({ lineType: 'service', description: label, partNumber: '', quantity: 1, unitPrice: result.markup.amount, amount: result.markup.amount })
         }
       }
       data.lines = lineItems
-      // The label says what kind of PO these lines make, so a category switch
-      // isn't a surprise.
-      add('lines', docKind === 'service' ? 'Service lines' : docKind === 'purchase' ? 'Parts lines' : 'Line items', summarise(lineItems), null, {
+      const kinds = new Set(lineItems.map((l) => l.lineType))
+      add('lines', kinds.size > 1 ? 'Line items' : kinds.has('part') ? 'Parts lines' : 'Service lines', summarise(lineItems), null, {
         lines: lineItems,
         warn: reconcileWarn,
-        category: docKind ? (docKind === 'service' ? 'service' : 'purchase') : undefined,
       })
       if (!unreconciled) notes.push("The lines add up to the PDF's subtotal/total ✓")
-      if (!docKind && isPurchase && lineItems.every((l) => !l.partNumber)) {
-        notes.push(
-          'No part numbers found — if this is a service rather than parts, set PO Category to Service before applying.'
-        )
-      }
     }
 
     return {
@@ -552,39 +507,15 @@ function PurchaseOrdersTab({
   }
 
   function togglePdfReadItem(key) {
-    setPdfRead((r) => {
-      if (!r) return r
-      const turningOn = !r.items.find((i) => i.key === key)?.checked
-      return {
-        ...r,
-        items: r.items.map((i) => {
-          if (i.key === key) return { ...i, checked: !i.checked }
-          if (turningOn && key.startsWith('lines_')) {
-            // Service lines and parts lines can't share one PO, so ticking one
-            // group unticks the other...
-            if (i.key.startsWith('lines_')) return { ...i, checked: false }
-            // ...and shipping/markup are fields of a Purchase PO only, so they
-            // follow the parts group.
-            if (i.key === 'shipping' || i.key === 'markup') return { ...i, checked: key === 'lines_part' }
-          }
-          return i
-        }),
-      }
-    })
+    setPdfRead((r) =>
+      r ? { ...r, items: r.items.map((i) => (i.key === key ? { ...i, checked: !i.checked } : i)) } : r
+    )
   }
 
   async function applyPdfRead() {
     const selection = {}
     for (const item of pdfRead.items) {
-      if (!item.checked) continue
-      // Either line group is applied as "the lines" for this form, and its
-      // kind decides the PO Category.
-      if (item.key.startsWith('lines_') || item.key === 'lines') {
-        selection.lines = pdfRead.data[item.key]
-        if (item.category) selection.category = item.category
-      } else {
-        selection[item.key] = pdfRead.data[item.key]
-      }
+      if (item.checked) selection[item.key] = pdfRead.data[item.key]
     }
     const applied = await applyPdfReadToDraft(selection)
     if (applied) setPdfRead(null)
@@ -623,9 +554,6 @@ function PurchaseOrdersTab({
               Request #{r.id} — {r.projects?.name || '—'}
             </h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span className={`po-badge po-category-badge-${poCategory(r)}`}>
-                {PO_CATEGORY_LABELS[poCategory(r)]}
-              </span>
               {isNotToExceed(r) && <span className="po-badge po-category-badge-nte">Not to Exceed</span>}
               <span className={`po-badge po-badge-${computePoProgressStage(r)}`}>
                 {PO_PROGRESS_STAGE_LABELS[computePoProgressStage(r)] || poStatusLabel(r.status)}
@@ -762,36 +690,54 @@ function PurchaseOrdersTab({
                     : '—'}
                 </td>
               </tr>
-              <tr>
-                <th>{poLineType(r) === 'service' ? 'Completed' : 'Received'}</th>
-                <td>
-                  {r.received_by
-                    ? `${findUserName(users, r.received_by)} — ${new Date(
-                        r.received_at
-                      ).toLocaleString()}${r.receipt_file_name ? ` (${r.receipt_file_name})` : ''}`
-                    : '—'}
-                </td>
-              </tr>
-              <tr>
-                <th>PO Status</th>
-                <td>
-                  {r.status === 'issued' && canConfirmReceipt(loggedInUser, r) ? (
-                    <select
-                      value={computeWorkStatus(r)}
-                      disabled={busy}
-                      onChange={(e) => handleSetWorkStatus(r, e.target.value)}
-                    >
-                      {workStatusOptionsForCategory(poCategory(r)).map(({ value, label }) => (
-                        <option value={value} key={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    workStatusLabel(computeWorkStatus(r))
-                  )}
-                </td>
-              </tr>
+              {poHasParts(r) && (
+                <tr>
+                  <th>Received</th>
+                  <td>
+                    {r.received_by
+                      ? `${findUserName(users, r.received_by)} — ${new Date(
+                          r.received_at
+                        ).toLocaleString()}${r.receipt_file_name ? ` (${r.receipt_file_name})` : ''}`
+                      : '—'}
+                  </td>
+                </tr>
+              )}
+              {poHasServices(r) && (
+                <tr>
+                  <th>Completed</th>
+                  <td>
+                    {r.service_completed_by
+                      ? `${findUserName(users, r.service_completed_by)} — ${new Date(
+                          r.service_completed_at
+                        ).toLocaleString()}`
+                      : '—'}
+                  </td>
+                </tr>
+              )}
+              {workStatusEntries(r).map((entry, _i, all) => (
+                <tr key={entry.kind}>
+                  <th>{all.length > 1 ? `${entry.label} Status` : 'PO Status'}</th>
+                  <td>
+                    {r.status === 'issued' && canConfirmReceipt(loggedInUser, r) ? (
+                      <select
+                        value={entry.status}
+                        disabled={busy}
+                        onChange={(e) => handleSetWorkStatus(r, entry.kind, e.target.value)}
+                      >
+                        {statusOptions(entry.kind === 'parts' ? PARTS_STATUS_OPTIONS : SERVICE_STATUS_OPTIONS).map(
+                          ({ value, label }) => (
+                            <option value={value} key={value}>
+                              {label}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    ) : (
+                      workStatusLabel(entry.status)
+                    )}
+                  </td>
+                </tr>
+              ))}
               <tr>
                 <th>Payment Status</th>
                 <td>
@@ -866,14 +812,12 @@ function PurchaseOrdersTab({
                       : l.description || '—'}
                     {l.line_type === 'part' &&
                       (() => {
-                        const note = describeLineInventory(l, r.projects?.name, isApprovedOrLater(r.status))
+                        const note = describeLineInventory(l, r.projects?.name, partsStatus(r) === 'received')
                         if (!note) return null
+                        const outdated = ['add_new', 'not_tracked'].includes(l.inventory_action)
                         return (
-                          <div
-                            className="sub"
-                            style={{ margin: '2px 0 0', color: l.inventory_action === 'not_tracked' ? 'var(--danger)' : undefined }}
-                          >
-                            {l.inventory_action === 'not_tracked' ? '⚠ ' : '＋ '}
+                          <div className="sub" style={{ margin: '2px 0 0', color: outdated ? 'var(--danger)' : undefined }}>
+                            {outdated ? '⚠ ' : ''}
                             {note}
                           </div>
                         )
@@ -973,9 +917,9 @@ function PurchaseOrdersTab({
                       <td className="center-cell">{l.quantity}</td>
                       <td>
                         {l.line_type === 'part'
-                          ? `${l.parts?.description || l.new_part_name || ''}${
-                              l.description ? ` (${l.description})` : ''
-                            }`
+                          ? l.parts?.description
+                            ? `${l.parts.description}${l.description ? ` (${l.description})` : ''}`
+                            : [l.vendor_part_number, l.description || l.new_part_name].filter(Boolean).join(' — ') || '—'
                           : l.description || '—'}
                       </td>
                       <td className="center-cell">
@@ -1012,13 +956,13 @@ function PurchaseOrdersTab({
                             <th>Credit</th>
                             <td>-${totals.credit.toFixed(2)}</td>
                           </tr>
-                          {poCategory(r) === 'purchase' && (
+                          {poHasParts(r) && (
                             <tr>
                               <th>Shipping/Handling</th>
                               <td>${totals.shipping.toFixed(2)}</td>
                             </tr>
                           )}
-                          {poCategory(r) === 'purchase' && (
+                          {poHasParts(r) && (
                             <tr>
                               <th>Vendor Mark-Up</th>
                               <td>
@@ -1293,7 +1237,7 @@ function PurchaseOrdersTab({
             )}
             {r.receipt_file_url && (
               <a className="btn-secondary" href={r.receipt_file_url} target="_blank" rel="noreferrer">
-                {poLineType(r) === 'service' ? 'View Service Report' : 'View Photo'}
+                {poHasServices(r) && !poHasParts(r) ? 'View Service Report' : poHasParts(r) && !poHasServices(r) ? 'View Photo' : 'View Receipt File'}
               </a>
             )}
             {isApprovedOrLater(r.status) && canIssuePurchaseOrder(loggedInUser, r) && (
@@ -1676,20 +1620,6 @@ function PurchaseOrdersTab({
 
           <div className="field-row" style={{ marginTop: 12 }}>
             <div>
-              <label htmlFor="po_draft_category">PO Category</label>
-              <select
-                id="po_draft_category"
-                value={poDraftCategory}
-                onChange={(e) => setPoDraftCategory(e.target.value)}
-              >
-                {PO_CATEGORY_OPTIONS.map((c) => (
-                  <option value={c.value} key={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
               <label htmlFor="po_draft_tax_rate">Sales Tax %</label>
               <input
                 id="po_draft_tax_rate"
@@ -1702,7 +1632,7 @@ function PurchaseOrdersTab({
             </div>
           </div>
 
-          {poDraftCategory === 'purchase' && (
+          {formHasParts && (
             <div className="field-row" style={{ marginTop: 12 }}>
               <div>
                 <label htmlFor="po_draft_markup_rate">Markup %</label>
@@ -1729,7 +1659,7 @@ function PurchaseOrdersTab({
             </div>
           )}
 
-          {poDraftCategory === 'service' && (
+          {formHasServices && (
             <div className="field-row" style={{ marginTop: 12 }}>
               <div>
                 <label htmlFor="po_draft_not_to_exceed" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1813,28 +1743,20 @@ function PurchaseOrdersTab({
                 {poDraftLines.length === 0 ? (
                   <tr>
                     <td className="empty" colSpan={5}>
-                      No line items yet — click "+ Add Line".
+                      No line items yet — add a part or a service below.
                     </td>
                   </tr>
                 ) : (
                   poDraftLines.map((line, i) => {
-                    const everyPart = allParts || parts
-                    const part = line.part_gcs_id ? everyPart.find((p) => p.gcs_id === line.part_gcs_id) : null
-                    const onEntityList = new Set(parts.map((p) => p.gcs_id))
                     const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this entity'
-                    const searching = (line.partSearch || '').trim().length >= 2
+                    const part = line.part_gcs_id ? (allParts || parts).find((p) => p.gcs_id === line.part_gcs_id) : null
                     const listed = filterPartsForSearch(parts, line.partSearch)
-                    // Parts outside the entity's list only appear once you
-                    // search, so the dropdown doesn't become the whole master list.
-                    const others = searching
-                      ? filterPartsForSearch(
-                          everyPart.filter((p) => !onEntityList.has(p.gcs_id)),
-                          line.partSearch
-                        )
-                      : []
-                    const chosenElsewhere = part && !listed.includes(part) && !others.includes(part) ? part : null
+                    // A part chosen earlier that isn't on the entity's list (an
+                    // older request, or the entity was changed) stays visible so
+                    // it can be seen and replaced.
+                    const offList = part && !parts.some((p) => p.gcs_id === part.gcs_id) ? part : null
                     const needsAnswer = (poDraftFieldErrors?.incompleteLines || []).includes(line._tempId)
-                    const mode = line.inventory_mode || 'inventory'
+                    const mode = line.inventory_mode || ''
                     const setField = (field) => (e) => updatePoDraftLineField(i, field, e.target.value)
                     return (
                       <tr key={line._tempId}>
@@ -1845,14 +1767,19 @@ function PurchaseOrdersTab({
                                 className="part-picker-select"
                                 value={mode}
                                 onChange={setField('inventory_mode')}
-                                aria-label="How this part relates to inventory"
+                                aria-label="How this part is handled"
                               >
-                                <option value="inventory">Inventory part — pick from the list</option>
-                                <option value="new">New part — add it to {entityName}&apos;s inventory</option>
-                                <option value="not_tracked">Not tracked in inventory (needs a reason)</option>
+                                <option value="" disabled>
+                                  Part — choose how it&apos;s handled…
+                                </option>
+                                <option value="spare">Spare — from the inventory list, added to stock when received</option>
+                                <option value="used">Used immediately — from the inventory list, not added to stock</option>
+                                <option value="consumable">
+                                  {`Consumable — not tracked (max $${CONSUMABLE_MAX_UNIT_COST.toLocaleString()} each)`}
+                                </option>
                               </select>
 
-                              {mode === 'inventory' && (
+                              {(mode === 'spare' || mode === 'used') && (
                                 <>
                                   <input
                                     type="text"
@@ -1874,65 +1801,35 @@ function PurchaseOrdersTab({
                                     }
                                     style={{ marginTop: 4 }}
                                   >
-                                    <option value="">Select a part…</option>
-                                    {chosenElsewhere && (
-                                      <option value={chosenElsewhere.gcs_id}>
-                                        {chosenElsewhere.gcs_id} — {chosenElsewhere.gcs_part_id} — {chosenElsewhere.description || ''}
+                                    <option value="">Select a part from {entityName}&apos;s inventory list…</option>
+                                    {offList && (
+                                      <option value={offList.gcs_id}>
+                                        {offList.gcs_id} — {offList.gcs_part_id} — {offList.description || ''} (not on the list)
                                       </option>
                                     )}
-                                    <optgroup label={`On ${entityName}'s inventory list`}>
-                                      {listed.map((p) => (
-                                        <option value={p.gcs_id} key={p.gcs_id}>
-                                          {p.gcs_id} — {p.gcs_part_id} — {p.description || ''}
-                                        </option>
-                                      ))}
-                                    </optgroup>
-                                    {others.length > 0 && (
-                                      <optgroup label="Other master-list parts — will be added to this entity's inventory">
-                                        {others.map((p) => (
-                                          <option value={p.gcs_id} key={p.gcs_id}>
-                                            {p.gcs_id} — {p.gcs_part_id} — {p.description || ''}
-                                          </option>
-                                        ))}
-                                      </optgroup>
-                                    )}
+                                    {listed.map((p) => (
+                                      <option value={p.gcs_id} key={p.gcs_id}>
+                                        {p.gcs_id} — {p.gcs_part_id} — {p.description || ''}
+                                      </option>
+                                    ))}
                                   </select>
-                                  {part && !onEntityList.has(part.gcs_id) && (
-                                    <p className="sub" style={{ margin: '4px 0 0' }}>
-                                      Not on {entityName}&apos;s inventory list yet — it will be added when this request is approved.
+                                  {offList && (
+                                    <p className="sub" style={{ margin: '4px 0 0', color: 'var(--danger)' }}>
+                                      Not on {entityName}&apos;s inventory list — pick a part from the list, make it a consumable, or
+                                      put it in a service line.
                                     </p>
                                   )}
-                                  {!part && !searching && (
-                                    <p className="sub" style={{ margin: '4px 0 0' }}>
-                                      Not on the list? Search above to find it elsewhere in the master list, or choose &quot;New part&quot;.
-                                    </p>
-                                  )}
+                                  <input
+                                    type="text"
+                                    placeholder="Note (optional)"
+                                    value={line.description}
+                                    onChange={(e) => updatePoDraftLineField(i, 'description', e.target.value)}
+                                    style={{ marginTop: 4 }}
+                                  />
                                 </>
                               )}
 
-                              {mode === 'new' && (
-                                <>
-                                  <input
-                                    type="text"
-                                    placeholder="Vendor / manufacturer part number"
-                                    value={line.vendor_part_number}
-                                    onChange={setField('vendor_part_number')}
-                                    style={{ marginTop: 4 }}
-                                  />
-                                  <input
-                                    type="text"
-                                    placeholder="Part name / description"
-                                    value={line.new_part_name}
-                                    onChange={setField('new_part_name')}
-                                    style={{ marginTop: 4 }}
-                                  />
-                                  <p className="sub" style={{ margin: '4px 0 0' }}>
-                                    Created in the master list and added to {entityName}&apos;s inventory when this request is approved.
-                                  </p>
-                                </>
-                              )}
-
-                              {mode === 'not_tracked' && (
+                              {mode === 'consumable' && (
                                 <>
                                   <input
                                     type="text"
@@ -1943,24 +1840,24 @@ function PurchaseOrdersTab({
                                   />
                                   <input
                                     type="text"
-                                    placeholder="Why isn't this tracked in inventory? (required)"
-                                    value={line.not_tracked_reason}
-                                    onChange={setField('not_tracked_reason')}
+                                    placeholder="Description (required)"
+                                    value={line.description}
+                                    onChange={(e) => updatePoDraftLineField(i, 'description', e.target.value)}
                                     style={{ marginTop: 4 }}
                                   />
-                                  <p className="sub" style={{ margin: '4px 0 0' }}>
-                                    Won&apos;t be counted toward inventory. The approver is shown this line and your reason.
-                                  </p>
+                                  {consumableOverCap(line) && (
+                                    <p className="sub" style={{ margin: '4px 0 0', color: 'var(--danger)' }}>
+                                      {`Over the $${CONSUMABLE_MAX_UNIT_COST.toLocaleString()} limit for a consumable — it has to be an inventory part, or go in a service line.`}
+                                    </p>
+                                  )}
                                 </>
                               )}
 
-                              <input
-                                type="text"
-                                placeholder="Note (optional)"
-                                value={line.description}
-                                onChange={(e) => updatePoDraftLineField(i, 'description', e.target.value)}
-                                style={{ marginTop: 4 }}
-                              />
+                              {mode === '' && (line.vendor_part_number || line.description) && (
+                                <p className="sub" style={{ margin: '4px 0 0' }}>
+                                  {[line.vendor_part_number, line.description].filter(Boolean).join(' — ')}
+                                </p>
+                              )}
                             </>
                           ) : (
                             <input
@@ -1983,6 +1880,7 @@ function PurchaseOrdersTab({
                           <input
                             type="number"
                             min="0"
+                            max={mode === 'consumable' ? CONSUMABLE_MAX_UNIT_COST : undefined}
                             value={line.unit_cost}
                             onChange={(e) => updatePoDraftLineField(i, 'unit_cost', e.target.value)}
                           />
@@ -2002,8 +1900,11 @@ function PurchaseOrdersTab({
           </div>
 
           <div className="edit-toolbar" style={{ marginTop: 12 }}>
-            <button className="btn-secondary" onClick={handleAddPurchaseRequestLine}>
-              + Add Line
+            <button className="btn-secondary" onClick={() => handleAddPurchaseRequestLine('part')}>
+              + Add Part
+            </button>
+            <button className="btn-secondary" onClick={() => handleAddPurchaseRequestLine('service')}>
+              + Add Service
             </button>
           </div>
 
@@ -2184,7 +2085,6 @@ function PurchaseOrdersTab({
                 {visiblePurchaseRequests.map((r) => {
                   const next = nextStepInfo(r, users)
                   const busy = poActionBusyId === r.id
-                  const workStatus = computeWorkStatus(r)
                   const paymentStatus = computePaymentStatus(r)
                   return (
                     <tr key={r.id}>
@@ -2199,9 +2099,14 @@ function PurchaseOrdersTab({
                       </td>
                       <td className="center-cell">
                         {(r.status === 'issued' || r.status === 'closed') && (
-                          <span className={`po-badge po-work-badge-${workStatus}`}>
-                            {workStatusLabel(workStatus)}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+                            {workStatusEntries(r).map((entry, _i, all) => (
+                              <span key={entry.kind} className={`po-badge po-work-badge-${entry.status}`}>
+                                {all.length > 1 ? `${entry.label}: ` : ''}
+                                {workStatusLabel(entry.status)}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </td>
                       <td className="center-cell">

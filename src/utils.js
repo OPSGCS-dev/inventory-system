@@ -94,17 +94,11 @@ export const WORK_STATUS_LABELS = {
 // Exceed) POs track doing the work -- different vocabulary, same column and
 // same "PO Status" label, so a Purchase PO never offers "Complete" and a
 // Service PO never offers "Ordered".
-export const WORK_STATUS_OPTIONS_BY_CATEGORY = {
-  purchase: ['not_ordered', 'ordered', 'partially_received', 'received'],
-  service: ['not_started', 'partial', 'complete'],
-}
+export const PARTS_STATUS_OPTIONS = ['not_ordered', 'ordered', 'partially_received', 'received']
+export const SERVICE_STATUS_OPTIONS = ['not_started', 'partial', 'complete']
 
-export function workStatusOptionsForCategory(category) {
-  const key = category === 'purchase' ? 'purchase' : 'service'
-  return WORK_STATUS_OPTIONS_BY_CATEGORY[key].map((value) => ({
-    value,
-    label: WORK_STATUS_LABELS[value],
-  }))
+export function statusOptions(values) {
+  return values.map((value) => ({ value, label: WORK_STATUS_LABELS[value] }))
 }
 
 export function workStatusLabel(workStatus) {
@@ -121,18 +115,49 @@ export function paymentStatusLabel(paymentStatus) {
   return PAYMENT_STATUS_LABELS[paymentStatus] || paymentStatus
 }
 
-export function computeWorkStatus(request) {
-  if (request?.work_status) return request.work_status
-  return poCategory(request) === 'purchase' ? 'not_ordered' : 'not_started'
+// A PO can hold part lines, service lines, or both, and tracks each kind on
+// its own: parts are ordered and received, services are started and completed.
+// A marker only applies when the PO actually has lines of that kind.
+export function linesHaveParts(lines) {
+  return (lines || []).some((l) => l.line_type === 'part')
 }
 
-// The "fully done" end of whichever vocabulary applies -- 'complete' for a
-// Service PO, 'received' for a Purchase PO. Everything that used to compare
-// work_status straight against 'complete' (closing a PO, the progress
-// stepper, "what's next") goes through this instead.
+export function linesHaveServices(lines) {
+  return (lines || []).some((l) => l.line_type === 'service')
+}
+
+export function poHasParts(request) {
+  return linesHaveParts(request?.purchase_request_lines)
+}
+
+export function poHasServices(request) {
+  return linesHaveServices(request?.purchase_request_lines)
+}
+
+export function partsStatus(request) {
+  return request?.parts_status || 'not_ordered'
+}
+
+export function serviceStatus(request) {
+  return request?.service_status || 'not_started'
+}
+
+// The status marker(s) that apply to this PO, in display order. One entry for a
+// parts-only or service-only PO, two for a mixed one, none while it has no lines.
+export function workStatusEntries(request) {
+  const entries = []
+  if (poHasParts(request)) entries.push({ kind: 'parts', label: 'Parts', status: partsStatus(request) })
+  if (poHasServices(request)) entries.push({ kind: 'service', label: 'Service', status: serviceStatus(request) })
+  return entries
+}
+
+// Every kind of work on the PO is at its "done" end: all parts received and
+// all services complete. Closing a PO, the progress stepper and "what's next"
+// all go through this.
 export function isWorkFullyDone(request) {
-  const status = computeWorkStatus(request)
-  return poCategory(request) === 'purchase' ? status === 'received' : status === 'complete'
+  const entries = workStatusEntries(request)
+  if (entries.length === 0) return false
+  return entries.every((e) => (e.kind === 'parts' ? e.status === 'received' : e.status === 'complete'))
 }
 
 export function computePaymentStatus(request) {
@@ -201,50 +226,11 @@ export function computePoProgressStage(request) {
   return workDone && paid ? 'paid' : 'in_progress'
 }
 
-// A purchase request is either entirely parts or entirely a service — never
-// mixed — so its "type" is just whatever its lines are. Defaults to 'part'
-// when there are no lines yet (a fresh draft).
-export function poLineType(request) {
-  const lines = request?.purchase_request_lines || []
-  return lines.some((l) => l.line_type === 'service') ? 'service' : 'part'
-}
-
-// Used to block saving a draft that mixes part lines and service lines.
-export function linesAreMixedType(lines) {
-  const types = new Set((lines || []).map((l) => l.line_type))
-  return types.has('part') && types.has('service')
-}
-
-// A PO's category is independent of its line type (part vs service): it
-// decides whether markup/shipping apply and whether a spending cap is
-// tracked. Defaults to 'purchase' for anything created before this existed.
-export const PO_CATEGORY_OPTIONS = [
-  { value: 'purchase', label: 'Purchase' },
-  { value: 'service', label: 'Service' },
-]
-
-export const PO_CATEGORY_LABELS = {
-  purchase: 'Purchase',
-  service: 'Service',
-}
-
-export function poCategory(request) {
-  return request?.po_category || 'purchase'
-}
-
-// A PO's category dictates its line type outright -- Purchase POs are parts
-// only, Service POs (Not to Exceed or not) are services only -- so there's
-// no separate per-line type picker for the requester to get wrong.
-export function categoryLineType(category) {
-  return category === 'purchase' ? 'part' : 'service'
-}
-
-// Not to Exceed is a checkbox on a Service PO, not its own category -- it
-// only ever means anything once category is 'service', but this guards it
-// directly in case a stale row still has the flag set from before a
-// category change.
+// Not to Exceed is a checkbox that only means anything while the PO has
+// service lines; this guards against a stale flag left on a request whose
+// services were removed.
 export function isNotToExceed(request) {
-  return poCategory(request) === 'service' && Boolean(request?.not_to_exceed)
+  return poHasServices(request) && Boolean(request?.not_to_exceed)
 }
 
 // Sum of every invoice on file for a request, regardless of approval/paid
@@ -287,10 +273,34 @@ export const PO_ROLE_OPTIONS = [
 // no rows there sees every entity, same as before this existed.
 export const ENTITY_SCOPED_ROLES = ['purchase_rec_approval', 'po_issue']
 
-// inventory_mode is how a draft part line relates to inventory -- 'inventory'
-// (pick a master-list part, on the entity's list or not), 'new' (a part that
-// isn't in the master list yet) or 'not_tracked' (a consumable that shouldn't
-// be counted). The last three fields only matter for 'new' / 'not_tracked'.
+// How a part line relates to inventory. Parts can't be added to an entity's
+// inventory list from a PO -- that stays a guarded, separate job -- so a part
+// line is one of:
+//   spare       a part already on the entity's list, kept as a spare:
+//               receiving the PO adds it to stock
+//   used        a part on the entity's list that is used straight away (e.g.
+//               in the service on the same PO): never added to stock
+//   consumable  anything else that isn't tracked: free text, no master-list
+//               link, and capped per unit (CONSUMABLE_MAX_UNIT_COST)
+// A part that is neither on the list nor a consumable belongs in a service
+// line instead.
+export const CONSUMABLE_MAX_UNIT_COST = 1000
+
+// inventory_mode is the draft's choice ('spare' | 'used' | 'consumable', or ''
+// when a line still has to be answered); inventory_action is the stored form.
+export const INVENTORY_MODE_TO_ACTION = {
+  spare: 'spare',
+  used: 'used_immediately',
+  consumable: 'consumable',
+}
+
+export const INVENTORY_ACTION_TO_MODE = {
+  spare: 'spare',
+  add_existing: 'spare', // older "list part not on the entity's list" -- still a part to count
+  used_immediately: 'used',
+  consumable: 'consumable',
+}
+
 export const blankPurchaseRequestLine = (lineType = 'part') => ({
   _tempId: crypto.randomUUID(),
   line_type: lineType,
@@ -299,10 +309,8 @@ export const blankPurchaseRequestLine = (lineType = 'part') => ({
   quantity: '1',
   unit_cost: '',
   partSearch: '',
-  inventory_mode: 'inventory',
+  inventory_mode: 'spare',
   vendor_part_number: '',
-  new_part_name: '',
-  not_tracked_reason: '',
 })
 
 // Has anything been entered on a draft part line at all? (The untouched
@@ -312,39 +320,51 @@ export function partLineHasContent(line) {
     line.part_gcs_id ||
       (line.description || '').trim() ||
       (line.vendor_part_number || '').trim() ||
-      (line.new_part_name || '').trim() ||
-      (line.not_tracked_reason || '').trim() ||
       Number(line.unit_cost) > 0
   )
+}
+
+// A consumable over the per-unit cap is not allowed -- it would be a real
+// part being waved past the inventory counters.
+export function consumableOverCap(line) {
+  return line.inventory_mode === 'consumable' && Number(line.unit_cost) > CONSUMABLE_MAX_UNIT_COST
 }
 
 // Has the person said how this part line relates to inventory? Every part
 // line with content has to answer that -- it can't just be left unlinked,
 // because that is how a part that needs counting gets skipped.
 export function partLineIsComplete(line) {
-  if (line.inventory_mode === 'new') {
-    return Boolean((line.vendor_part_number || '').trim() && (line.new_part_name || '').trim())
+  if (line.inventory_mode === 'consumable') {
+    return Boolean((line.description || '').trim()) && !consumableOverCap(line)
   }
-  if (line.inventory_mode === 'not_tracked') return Boolean((line.not_tracked_reason || '').trim())
-  return Boolean(line.part_gcs_id)
+  if (line.inventory_mode === 'spare' || line.inventory_mode === 'used') return Boolean(line.part_gcs_id)
+  return false
 }
 
-// One line of plain English about what a saved part line will do to (or has
-// done to) inventory, for the approver and the PO detail view. Null for an
-// ordinary part already on the entity's list, and for service lines.
-export function describeLineInventory(line, entityName, approved) {
+// Does receiving this saved part line add it to stock? Only spares do; a line
+// with no action at all is an older ordinary list part and counted as before.
+export function lineCountsInStock(line) {
+  if (line.line_type !== 'part' || !line.part_gcs_id) return false
+  return !['used_immediately', 'consumable'].includes(line.inventory_action)
+}
+
+// One line of plain English about what a saved part line does with inventory,
+// for the approver and the PO detail view. `received` is whether the PO's
+// parts have been received yet. Null for service lines.
+export function describeLineInventory(line, entityName, received) {
+  if (line.line_type !== 'part') return null
   const where = entityName ? `${entityName}'s inventory` : "the entity's inventory"
-  if (line.inventory_action === 'add_existing') {
-    return approved ? `Added to ${where}` : `Will be added to ${where} on approval`
+  switch (line.inventory_action) {
+    case 'used_immediately':
+      return 'Used immediately — not added to inventory'
+    case 'consumable':
+      return 'Consumable — not tracked in inventory'
+    case 'add_new':
+    case 'not_tracked':
+      return 'Uses an older inventory option that no longer exists — edit the request and choose Spare, Used immediately or Consumable'
+    default:
+      return line.part_gcs_id ? (received ? `Added to ${where} as a spare` : `Spare — added to ${where} when received`) : null
   }
-  if (line.inventory_action === 'add_new') {
-    const what = [line.vendor_part_number, line.new_part_name].filter(Boolean).join(' — ')
-    return approved ? `New part created and added to ${where}: ${what}` : `New part "${what}" — will be created and added to ${where} on approval`
-  }
-  if (line.inventory_action === 'not_tracked') {
-    return `Not tracked in inventory — ${line.not_tracked_reason || 'no reason given'}`
-  }
-  return null
 }
 
 // A user's `name` is their login email (it's what sign-in and the ticket
@@ -456,7 +476,7 @@ export function canIssuePurchaseOrder(user, request) {
 // receiving the parts).
 export function canConfirmReceipt(user, request) {
   if (user?.id && user.id === request?.requested_by) return true
-  if (isVendorUser(user) && poLineType(request) === 'service' && user?.vendor_id === request?.vendor_id) {
+  if (isVendorUser(user) && poHasServices(request) && !poHasParts(request) && user?.vendor_id === request?.vendor_id) {
     return true
   }
   return false
@@ -599,13 +619,13 @@ export function computePoTotals(request) {
     .filter((l) => l.line_type === 'part')
     .reduce((sum, l) => sum + lineTotal(l), 0)
 
-  // Markup and shipping/handling only apply to Purchase-category POs --
-  // Service and Not to Exceed POs never carry either, even if a stale value
-  // is still sitting on the row from before the category was changed.
-  const isPurchaseCategory = poCategory(request) === 'purchase'
+  // Markup and shipping/handling only apply when the PO has part lines (the
+  // markup itself only ever applies to those lines) -- a services-only PO never
+  // carries either, even if a stale value is still sitting on the row.
+  const hasParts = linesHaveParts(lines)
   const credit = Number(request?.credit) || 0
-  const shipping = isPurchaseCategory ? Number(request?.shipping_handling) || 0 : 0
-  const markupRate = isPurchaseCategory ? Number(request?.markup_rate) || 0 : 0
+  const shipping = hasParts ? Number(request?.shipping_handling) || 0 : 0
+  const markupRate = hasParts ? Number(request?.markup_rate) || 0 : 0
   const taxRate = Number(request?.tax_rate) || 0
 
   const markupAmount = partSubtotal * (markupRate / 100)

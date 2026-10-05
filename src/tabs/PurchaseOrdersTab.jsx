@@ -141,7 +141,6 @@ function PurchaseOrdersTab({
   poDraftNewQuoteFile,
   setPoDraftNewQuoteFile,
   clearPoDraftQuoteFile,
-  allParts,
   applyPdfReadToDraft,
   handleRequestVendor,
   handleApproveVendor,
@@ -1749,12 +1748,11 @@ function PurchaseOrdersTab({
                 ) : (
                   poDraftLines.map((line, i) => {
                     const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this entity'
-                    const part = line.part_gcs_id ? (allParts || parts).find((p) => p.gcs_id === line.part_gcs_id) : null
                     const listed = filterPartsForSearch(parts, line.partSearch)
-                    // A part chosen earlier that isn't on the entity's list (an
-                    // older request, or the entity was changed) stays visible so
-                    // it can be seen and replaced.
-                    const offList = part && !parts.some((p) => p.gcs_id === part.gcs_id) ? part : null
+                    // Only a part that is on the entity's list shows as chosen: one
+                    // that isn't (an older request, or the entity was changed) reads
+                    // as not chosen yet, so a part has to be picked again.
+                    const chosenOnList = parts.some((p) => p.gcs_id === line.part_gcs_id) ? line.part_gcs_id : ''
                     const needsAnswer = (poDraftFieldErrors?.incompleteLines || []).includes(line._tempId)
                     const mode = line.inventory_mode || ''
                     const setField = (field) => (e) => updatePoDraftLineField(i, field, e.target.value)
@@ -1791,7 +1789,7 @@ function PurchaseOrdersTab({
                                   />
                                   <select
                                     className="part-picker-select"
-                                    value={line.part_gcs_id ?? ''}
+                                    value={chosenOnList}
                                     onChange={(e) =>
                                       updatePoDraftLineField(
                                         i,
@@ -1802,23 +1800,12 @@ function PurchaseOrdersTab({
                                     style={{ marginTop: 4 }}
                                   >
                                     <option value="">Select a part from {entityName}&apos;s inventory list…</option>
-                                    {offList && (
-                                      <option value={offList.gcs_id}>
-                                        {offList.gcs_id} — {offList.gcs_part_id} — {offList.description || ''} (not on the list)
-                                      </option>
-                                    )}
                                     {listed.map((p) => (
                                       <option value={p.gcs_id} key={p.gcs_id}>
                                         {p.gcs_id} — {p.gcs_part_id} — {p.description || ''}
                                       </option>
                                     ))}
                                   </select>
-                                  {offList && (
-                                    <p className="sub" style={{ margin: '4px 0 0', color: 'var(--danger)' }}>
-                                      Not on {entityName}&apos;s inventory list — pick a part from the list, make it a consumable, or
-                                      put it in a service line.
-                                    </p>
-                                  )}
                                   <input
                                     type="text"
                                     placeholder="Note (optional)"

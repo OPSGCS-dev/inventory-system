@@ -2494,6 +2494,19 @@ function App() {
         return false
       }
 
+      // Only parts on the entity's inventory list can be matched -- a part that
+      // exists elsewhere in the master list is left for the person to handle
+      // (a list part, a consumable, or part of a service), not filled in. If the
+      // same apply also changes the entity, its list has to be fetched first.
+      const targetProjectId = sel.entity !== undefined ? sel.entity : poDraftProjectId
+      let listedIds = poDraftEligiblePartIds
+      if (targetProjectId !== poDraftProjectId) {
+        const { data, error } = await supabase.from('project_parts').select('part_gcs_id').eq('project_id', targetProjectId)
+        if (error) console.error(error)
+        listedIds = new Set((data ?? []).map((r) => r.part_gcs_id))
+      }
+      const listedParts = parts.filter((p) => listedIds.has(p.gcs_id))
+
       // Each line carries its own type, so one document can bring services and
       // parts together.
       newLines = sel.lines.map((l) => {
@@ -2503,9 +2516,9 @@ function App() {
           unit_cost: String(l.unitPrice),
         }
         if (line.line_type === 'service') return { ...line, description: l.description }
-        // A part number found in the master list picks that part, as a spare to
-        // start with (saving checks it is on the entity's inventory list).
-        const part = l.partNumber ? matchPart(l.partNumber, parts) : null
+        // A part number found on the entity's list picks that part, as a spare
+        // to start with.
+        const part = l.partNumber ? matchPart(l.partNumber, listedParts) : null
         if (part) return { ...line, part_gcs_id: part.gcs_id, description: l.description }
         // No match: the line starts unanswered, so saving makes the person
         // choose -- pick a list part, make it a consumable, or move it into a
@@ -4702,7 +4715,6 @@ function App() {
           handleRemovePurchaseRequestLine={handleRemovePurchaseRequestLine}
           updatePoDraftLineField={updatePoDraftLineField}
           parts={poEligibleParts}
-          allParts={parts}
           savingPoRequest={savingPoRequest}
           handleCreatePurchaseRequest={handleCreatePurchaseRequest}
           handleSubmitPurchaseRequest={handleSubmitPurchaseRequest}

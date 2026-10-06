@@ -29,7 +29,6 @@ import {
   canAccessTicketing,
   canCreatePurchaseRequests,
   canApproveRequests,
-  isOwnRequest,
   canApproveVendors,
   canManagePayment,
   canApproveInvoice,
@@ -3002,12 +3001,9 @@ function App() {
   }
 
   // Shared by approve / hold / resume / reject: needs the Purchase Rec Approval
-  // role for the request's entity, and never on a request you submitted yourself.
+  // role for the request's entity.
   function approvalBlockMessage(request) {
     if (canApproveRequests(loggedInUserWithScopes, request)) return null
-    if (isOwnRequest(loggedInUser, request)) {
-      return 'You submitted this request, so someone else has to approve it.'
-    }
     return "You can only act on requests for the entities you're approving for."
   }
 

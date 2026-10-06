@@ -590,10 +590,19 @@ export function isEntityAllowed(user, role, projectId) {
 // `request` is optional -- omit it to just check whether the user holds the
 // role at all (e.g. deciding whether to show a tab), pass it to also check
 // that specific request's entity against their assigned scope.
+//
+// Nobody can approve, hold, resume or reject a request they submitted
+// themselves, even with the role -- someone else has to.
 export function canApproveRequests(user, request) {
   if (!userHasRole(user, 'purchase_rec_approval')) return false
   if (!request) return true
+  if (isOwnRequest(user, request)) return false
   return isEntityAllowed(user, 'purchase_rec_approval', request.project_id)
+}
+
+// The person who submitted this request (requested_by is set on submit).
+export function isOwnRequest(user, request) {
+  return Boolean(user?.id) && Boolean(request?.requested_by) && user.id === request.requested_by
 }
 
 export function canIssuePurchaseOrder(user, request) {

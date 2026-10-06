@@ -58,6 +58,7 @@ import {
   vendorApprovalStatus,
   vendorBlockReason,
   voidBlockReason,
+  isOwnRequest,
 } from '../utils'
 import InvoicesPanel from './InvoicesPanel'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
@@ -1306,7 +1307,11 @@ function PurchaseOrdersTab({
                 )
               ) : (
                 <span className="sub" style={{ margin: 0 }}>
-                  {r.on_hold ? 'On hold.' : 'Waiting on an approver.'}
+                  {userHasRole(loggedInUser, 'purchase_rec_approval') && isOwnRequest(loggedInUser, r)
+                    ? 'You submitted this request, so someone else has to approve it.'
+                    : r.on_hold
+                    ? 'On hold.'
+                    : 'Waiting on an approver.'}
                 </span>
               ))}
 

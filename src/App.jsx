@@ -29,6 +29,7 @@ import {
   canAccessTicketing,
   canCreatePurchaseRequests,
   canApproveRequests,
+  isOwnRequest,
   canApproveVendors,
   canManagePayment,
   canApproveInvoice,
@@ -3000,9 +3001,24 @@ function App() {
     return vendorBlockReason(request.vendors || vendors.find((v) => v.id === request.vendor_id))
   }
 
+  // Shared by approve / hold / resume / reject: needs the Purchase Rec Approval
+  // role for the request's entity, and never on a request you submitted yourself.
+  function approvalBlockMessage(request) {
+    if (canApproveRequests(loggedInUserWithScopes, request)) return null
+    if (isOwnRequest(loggedInUser, request)) {
+      return 'You submitted this request, so someone else has to approve it.'
+    }
+    return "You can only act on requests for the entities you're approving for."
+  }
+
   async function handleApprovePurchaseRequest(request) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
+      return
+    }
+    const blocked = approvalBlockMessage(request)
+    if (blocked) {
+      flashPoStatus(blocked, false)
       return
     }
     const vendorBlock = vendorBlockFor(request)
@@ -3052,6 +3068,11 @@ function App() {
       flashPoStatus('You must be logged in.', false)
       return
     }
+    const blocked = approvalBlockMessage(request)
+    if (blocked) {
+      flashPoStatus(blocked, false)
+      return
+    }
     const reason = window.prompt('Reason for putting this PO on hold (optional):')
     if (reason === null) return
     setPoActionBusyId(request.id)
@@ -3084,8 +3105,9 @@ function App() {
       flashPoStatus('You must be logged in.', false)
       return
     }
-    if (!canApproveRequests(loggedInUserWithScopes, request)) {
-      flashPoStatus("You can only reject requests for the entities you're assigned to.", false)
+    const blocked = approvalBlockMessage(request)
+    if (blocked) {
+      flashPoStatus(blocked, false)
       return
     }
     const reason = window.prompt(`Why is this request being rejected? The requester will see it. (required)`)
@@ -3143,6 +3165,11 @@ function App() {
   }
 
   async function handleResumeFromHold(request) {
+    const blocked = approvalBlockMessage(request)
+    if (blocked) {
+      flashPoStatus(blocked, false)
+      return
+    }
     setPoActionBusyId(request.id)
     try {
       const { error } = await supabase

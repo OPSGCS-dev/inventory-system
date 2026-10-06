@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import Papa from 'papaparse'
 import { computeTargetSum, shortProjectName, journalEntryTypeLabel, JOURNAL_ENTRY_TYPE_LABELS } from '../utils'
 
@@ -79,6 +79,23 @@ function InventoryOnHandTab({
   const filteredJournalEntries = journalTypeFilter
     ? journalEntries.filter((j) => j.entry_type === journalTypeFilter)
     : journalEntries
+
+  // Clicking a part in the single-entity view jumps to the All Entities view and
+  // flashes that part's row (scrolled into view), so you can see every entity
+  // that owns it and where it's kept -- the single-entity view deliberately
+  // doesn't show location, since Storage/Barn are tracked per part, not per entity.
+  const [focusPartId, setFocusPartId] = useState(null)
+  useEffect(() => {
+    if (focusPartId === null || stockViewProjectId !== 'all') return undefined
+    document.getElementById(`stock-row-${focusPartId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const timer = setTimeout(() => setFocusPartId(null), 2600)
+    return () => clearTimeout(timer)
+  }, [focusPartId, stockViewProjectId, stockLoading])
+
+  function jumpToAllEntities(gcsId) {
+    handleChangeStockViewProject('all')
+    setFocusPartId(gcsId)
+  }
 
   // Exports the Parts list as it's currently filtered: one row per part per
   // entity, for the selected entity or (on All Entities) every entity, grouped
@@ -623,6 +640,11 @@ function InventoryOnHandTab({
               </button>
             )}
           </div>
+          {!stockEditMode && !locationEditMode && !transferMode && !recordUseMode && stockViewProjectId !== 'all' && (
+            <p className="sub" style={{ margin: 0 }}>
+              Click a part to see every entity that owns it and where it&apos;s kept.
+            </p>
+          )}
           {stockEditMode && (
             <p className="sub" style={{ margin: 0 }}>
               Each cell shows the current on-hand quantity — edit it up or down directly. Saving
@@ -658,6 +680,14 @@ function InventoryOnHandTab({
               const singleProjectView =
                 !stockEditMode && !locationEditMode && !transferMode && stockViewProjectId !== 'all'
               const viewProject = singleProjectView ? projects.find((p) => p.id === stockViewProjectId) : null
+              // On Site / Storage / Barn only make sense across all entities:
+              // Storage and Barn are counted per part, not per entity, so a
+              // single entity can't be said to have any of them. The
+              // single-entity view shows ownership only; click a part to jump
+              // to its All Entities row for the location.
+              const showLocationCols = !singleProjectView
+              const hdrRowSpan = showLocationCols ? 2 : 1
+              const jumpable = singleProjectView && !recordUseMode
               // table-layout: fixed splits width strictly by each column's %,
               // so once every project + total column claims a fixed share,
               // GCS P/N and Description (the only two with no set width) get
@@ -685,9 +715,13 @@ function InventoryOnHandTab({
                 )}
                 <col style={{ width: '6%' }} />
                 <col style={{ width: '7%' }} />
-                <col style={{ width: '6%' }} />
-                <col style={{ width: '6%' }} />
-                <col style={{ width: '6%' }} />
+                {showLocationCols && (
+                  <>
+                    <col style={{ width: '6%' }} />
+                    <col style={{ width: '6%' }} />
+                    <col style={{ width: '6%' }} />
+                  </>
+                )}
                 {(recordUseMode || transferMode) && (
                   <>
                     <col style={{ width: '6%' }} />
@@ -697,10 +731,10 @@ function InventoryOnHandTab({
               </colgroup>
               <thead>
                 <tr className="header-row">
-                  <th className="row-head" rowSpan={2}>GCS P/N</th>
-                  <th rowSpan={2}>Description</th>
+                  <th className="row-head" rowSpan={hdrRowSpan}>GCS P/N</th>
+                  <th rowSpan={hdrRowSpan}>Description</th>
                   {singleProjectView ? (
-                    <th className="center-cell" rowSpan={2}>{shortProjectName(viewProject?.name || '')}</th>
+                    <th className="center-cell" rowSpan={hdrRowSpan}>{shortProjectName(viewProject?.name || '')}</th>
                   ) : (
                     projects.map((p) => {
                       const isFrom = transferMode && String(p.id) === String(stockViewProjectId)
@@ -709,7 +743,7 @@ function InventoryOnHandTab({
                         <th
                           className="center-cell"
                           key={p.id}
-                          rowSpan={2}
+                          rowSpan={hdrRowSpan}
                           title={p.name}
                           style={isFrom ? { background: '#fde2e2' } : isTo ? { background: '#dbeafe' } : undefined}
                         >
@@ -720,29 +754,33 @@ function InventoryOnHandTab({
                       )
                     })
                   )}
-                  <th className="center-cell total-col" rowSpan={2}>Target Stock</th>
-                  <th className="center-cell total-col" rowSpan={2}>
+                  <th className="center-cell total-col" rowSpan={hdrRowSpan}>Target Stock</th>
+                  <th className="center-cell total-col" rowSpan={hdrRowSpan}>
                     {singleProjectView ? 'Available - All Entities' : 'Available on Hand'}
                   </th>
-                  <th className="center-cell total-col" colSpan={3}>
-                    {singleProjectView ? 'Storage Location - This Entity' : 'Storage Location'}
-                  </th>
+                  {showLocationCols && (
+                    <th className="center-cell total-col" colSpan={3}>
+                      Storage Location
+                    </th>
+                  )}
                   {recordUseMode && (
-                    <th className="center-cell" colSpan={2} rowSpan={2}>
+                    <th className="center-cell" colSpan={2} rowSpan={hdrRowSpan}>
                       Record Use
                     </th>
                   )}
                   {transferMode && (
-                    <th className="center-cell" colSpan={2} rowSpan={2}>
+                    <th className="center-cell" colSpan={2} rowSpan={hdrRowSpan}>
                       Transfer
                     </th>
                   )}
                 </tr>
-                <tr className="header-row">
-                  <th className="center-cell total-col">On Site</th>
-                  <th className="center-cell">Storage</th>
-                  <th className="center-cell">Barn</th>
-                </tr>
+                {showLocationCols && (
+                  <tr className="header-row">
+                    <th className="center-cell total-col">On Site</th>
+                    <th className="center-cell">Storage</th>
+                    <th className="center-cell">Barn</th>
+                  </tr>
+                )}
                 {!stockEditMode && !locationEditMode && (
                   <tr className="filter-row">
                     <th className="row-head">
@@ -761,7 +799,7 @@ function InventoryOnHandTab({
                     <th
                       colSpan={
                         (singleProjectView ? 1 : projects.length) +
-                        6 +
+                        (showLocationCols ? 6 : 3) +
                         (recordUseMode || transferMode ? 2 : 0)
                       }
                     ></th>
@@ -873,7 +911,7 @@ function InventoryOnHandTab({
                       className="empty"
                       colSpan={
                         (singleProjectView ? 1 : projects.length) +
-                        7 +
+                        (showLocationCols ? 7 : 4) +
                         (recordUseMode || transferMode ? 2 : 0)
                       }
                     >
@@ -888,7 +926,25 @@ function InventoryOnHandTab({
                   visibleStockItems.map((item) => {
                     const viewEntry = singleProjectView ? item.perProject[stockViewProjectId] : null
                     return (
-                      <tr key={item.gcs_id}>
+                      <tr
+                        key={item.gcs_id}
+                        id={`stock-row-${item.gcs_id}`}
+                        className={
+                          [jumpable ? 'row-link' : '', focusPartId === item.gcs_id && !singleProjectView ? 'row-focus' : '']
+                            .filter(Boolean)
+                            .join(' ') || undefined
+                        }
+                        onClick={jumpable ? () => jumpToAllEntities(item.gcs_id) : undefined}
+                        onKeyDown={
+                          jumpable
+                            ? (e) => {
+                                if (e.key === 'Enter') jumpToAllEntities(item.gcs_id)
+                              }
+                            : undefined
+                        }
+                        tabIndex={jumpable ? 0 : undefined}
+                        title={jumpable ? 'Show every entity that owns this part, and where it is kept' : undefined}
+                      >
                         <td className="row-head">{item.gcs_id}</td>
                         <td>{item.part?.description || '—'}</td>
                         {singleProjectView ? (
@@ -935,8 +991,7 @@ function InventoryOnHandTab({
                         </td>
                         {(() => {
                           const all = incomingAcross(item)
-                          const here = singleProjectView ? incomingAt(stockViewProjectId, item.gcs_id) : null
-                          const onSiteInc = singleProjectView ? here : all.qty > 0 ? all : null
+                          const onSiteInc = all.qty > 0 ? all : null
                           return (
                             <>
                               <td
@@ -946,19 +1001,24 @@ function InventoryOnHandTab({
                               >
                                 {item.onHandSum + all.qty}
                               </td>
-                              <td
-                                className="center-cell total-col"
-                                style={onSiteInc ? { background: INCOMING_BG } : undefined}
-                                title={onSiteInc ? incomingTitle(onSiteInc.pos) : undefined}
-                              >
-                                {(singleProjectView ? (viewEntry ? viewEntry.onHand : 0) : item.projectQty) +
-                                  (onSiteInc ? onSiteInc.qty : 0)}
-                              </td>
+                              {showLocationCols && (
+                                <td
+                                  className="center-cell total-col"
+                                  style={onSiteInc ? { background: INCOMING_BG } : undefined}
+                                  title={onSiteInc ? incomingTitle(onSiteInc.pos) : undefined}
+                                >
+                                  {item.projectQty + (onSiteInc ? onSiteInc.qty : 0)}
+                                </td>
+                              )}
                             </>
                           )
                         })()}
-                        <td className="center-cell">{item.storageQty}</td>
-                        <td className="center-cell">{item.barnQty}</td>
+                        {showLocationCols && (
+                          <>
+                            <td className="center-cell">{item.storageQty}</td>
+                            <td className="center-cell">{item.barnQty}</td>
+                          </>
+                        )}
                         {recordUseMode && (
                           <>
                             <td className="center-cell">

@@ -401,6 +401,18 @@ table.sheet td {
   overflow-wrap: anywhere;
 }
 
+/* A row you can click to jump to the same part in another view. */
+table.sheet tr.row-link { cursor: pointer; }
+table.sheet tr.row-link:hover td { background: #eaf2ff; }
+table.sheet tr.row-link:focus-visible { outline: 2px solid #2f6fd6; outline-offset: -2px; }
+
+/* The row you just jumped to: a brief highlight that fades out. */
+@keyframes row-focus-flash {
+  from { background: #bcd8ff; }
+  to { background: transparent; }
+}
+table.sheet tr.row-focus td { animation: row-focus-flash 2.4s ease-out; }
+
 table.sheet thead {
   position: sticky;
   top: 0;

@@ -530,7 +530,14 @@ export function voidBlockReason(user, request) {
 // The PO Ledger is for accounting only: anyone holding invoice matching,
 // invoice approval or payment. Company-wide view -- the ledger isn't narrowed
 // by entity assignment, since accounting reconciles across every entity.
+//
+// Switched off for now (not yet known whether accounting wants it): the tab
+// button, the tab itself and the access guard in App.jsx all go through this,
+// so flipping PO_LEDGER_ENABLED back to true is all it takes to bring it back.
+export const PO_LEDGER_ENABLED = false
+
 export function canViewPoLedger(user) {
+  if (!PO_LEDGER_ENABLED) return false
   return (
     userHasRole(user, 'invoice_matching') ||
     userHasRole(user, 'invoice_approval') ||

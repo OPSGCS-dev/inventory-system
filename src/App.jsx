@@ -44,12 +44,16 @@ import {
   workStatusLabel,
   paymentStatusLabel,
   computePaymentStatus,
+  poStatusLabel,
+  voidBlockReason,
+  canViewPoLedger,
   TICKETING_URL,
 } from './utils'
 import MasterListTab from './tabs/MasterListTab'
 import RequiredInventoryTab from './tabs/RequiredInventoryTab'
 import InventoryOnHandTab from './tabs/InventoryOnHandTab'
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
+import PoLedgerTab from './tabs/PoLedgerTab'
 import UsersTab from './tabs/UsersTab'
 import SignatureCard from './tabs/SignatureCard'
 import GlobalSearch from './tabs/GlobalSearch'
@@ -2887,11 +2891,13 @@ function App() {
     }
   }
 
-  // Admin-only. Cascades to the request's own line items (on delete cascade),
-  // but doesn't remove any uploaded receipt/invoice PDF from Storage -- those
-  // just become unreferenced files there.
+  // Admin-only, and only for a draft that was never submitted -- anything
+  // past that is voided instead (handleVoidPurchaseRequest) so accounting
+  // keeps the row and its activity log. Cascades to the request's own line
+  // items (on delete cascade), but doesn't remove any uploaded receipt/invoice
+  // PDF from Storage -- those just become unreferenced files there.
   async function handleDeletePurchaseRequest(request) {
-    if (!isAdmin(loggedInUser)) return
+    if (!isAdmin(loggedInUser) || request.status !== 'draft') return
     if (
       !window.confirm(
         `Delete ${request.po_number || `purchase request #${request.id}`}? This cannot be undone.`
@@ -2915,6 +2921,47 @@ function App() {
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not delete — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // Admin-only. Keeps the PO, its lines and its activity log; just flips it to
+  // 'voided' with who/when/why (see voidBlockReason for what stops it).
+  async function handleVoidPurchaseRequest(request) {
+    if (!loggedInUser) return
+    const blocked = voidBlockReason(loggedInUser, request)
+    if (blocked) {
+      flashPoStatus(blocked, false)
+      return
+    }
+    const reason = window.prompt(
+      `Why is ${request.po_number || `request #${request.id}`} being voided? This is kept on the PO for accounting. (required)`
+    )
+    if (reason === null) return
+    if (!reason.trim()) {
+      flashPoStatus('A reason is required to void a PO.', false)
+      return
+    }
+    setPoActionBusyId(request.id)
+    try {
+      const { error } = await supabase
+        .from('purchase_requests')
+        .update({
+          status: 'voided',
+          voided_by: loggedInUser.id,
+          voided_at: new Date().toISOString(),
+          void_reason: reason.trim(),
+          on_hold: false,
+        })
+        .eq('id', request.id)
+      if (error) throw error
+      await logPoActivity(request.id, `Voided (was ${poStatusLabel(request.status)}): ${reason.trim()}`)
+      flashPoStatus('PO voided.', true)
+      await refreshPurchaseRequest(request.id)
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not void — check the console for details.', false)
     } finally {
       setPoActionBusyId(null)
     }
@@ -4350,6 +4397,13 @@ function App() {
     }
   }, [activeTab, loggedInUser])
 
+  // Same for the PO Ledger, which is accounting-only.
+  useEffect(() => {
+    if (activeTab === 'ledger' && !canViewPoLedger(loggedInUser)) {
+      setActiveTab('master')
+    }
+  }, [activeTab, loggedInUser])
+
   // A vendor-logon account only ever gets the Purchase Orders tab — guard
   // the content itself, not just the tab buttons, in case activeTab is
   // already on a hidden tab (e.g. right after logging in).
@@ -4469,6 +4523,8 @@ function App() {
           ? 'Inventory On Hand'
           : activeTab === 'users'
           ? 'Users'
+          : activeTab === 'ledger'
+          ? 'PO Ledger'
           : 'Purchase Orders'}
       </h1>
       <p className="sub">Backed by Supabase — data lives in the cloud, not just this page.</p>
@@ -4503,6 +4559,14 @@ function App() {
           Purchase Orders
           {poAttentionCounts.total > 0 && <span className="nav-badge">{poAttentionCounts.total}</span>}
         </button>
+        {canViewPoLedger(loggedInUser) && (
+          <button
+            className={'tab-btn' + (activeTab === 'ledger' ? ' active' : '')}
+            onClick={() => setActiveTab('ledger')}
+          >
+            PO Ledger
+          </button>
+        )}
         {isAdmin(loggedInUser) && (
           <button
             className={'tab-btn' + (activeTab === 'users' ? ' active' : '')}
@@ -4866,7 +4930,12 @@ function App() {
           handleClosePo={handleClosePo}
           poActionBusyId={poActionBusyId}
           handleDeletePurchaseRequest={handleDeletePurchaseRequest}
+          handleVoidPurchaseRequest={handleVoidPurchaseRequest}
         />
+      )}
+
+      {activeTab === 'ledger' && canViewPoLedger(loggedInUser) && (
+        <PoLedgerTab purchaseRequests={purchaseRequests} projects={projects} vendors={vendors} users={users} />
       )}
 
       {activeTab === 'users' && isAdmin(loggedInUser) && (

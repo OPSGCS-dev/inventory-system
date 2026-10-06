@@ -1,5 +1,5 @@
-import { Fragment } from 'react'
-import { computeTargetSum, shortProjectName, journalEntryTypeLabel } from '../utils'
+import { Fragment, useState } from 'react'
+import { computeTargetSum, shortProjectName, journalEntryTypeLabel, JOURNAL_ENTRY_TYPE_LABELS } from '../utils'
 
 function InventoryOnHandTab({
   canEditInventory,
@@ -73,6 +73,12 @@ function InventoryOnHandTab({
   draftLocationItems,
   updateLocationDraftField,
 }) {
+  // History tab filter -- '' shows every type of entry.
+  const [journalTypeFilter, setJournalTypeFilter] = useState('')
+  const filteredJournalEntries = journalTypeFilter
+    ? journalEntries.filter((j) => j.entry_type === journalTypeFilter)
+    : journalEntries
+
   // Spare parts on issued POs that haven't been received yet count toward the
   // numbers shown but are marked yellow: they aren't on the shelf. Only in the
   // plain view -- counting, moving and using stock work on what's physically here.
@@ -415,12 +421,24 @@ function InventoryOnHandTab({
       {stockPanel === 'history' && (
         <div className="card">
           <div className="card-header">
-            <h2>History {journalLoading ? '' : `(${journalEntries.length})`}</h2>
+            <h2>History {journalLoading ? '' : `(${filteredJournalEntries.length})`}</h2>
+            <div className="header-actions">
+              <select value={journalTypeFilter} onChange={(e) => setJournalTypeFilter(e.target.value)}>
+                <option value="">All Types</option>
+                {Object.entries(JOURNAL_ENTRY_TYPE_LABELS).map(([value, label]) => (
+                  <option value={value} key={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           {journalLoading ? (
             <div className="empty">Loading...</div>
-          ) : journalEntries.length === 0 ? (
-            <div className="empty">No changes logged yet.</div>
+          ) : filteredJournalEntries.length === 0 ? (
+            <div className="empty">
+              {journalEntries.length === 0 ? 'No changes logged yet.' : 'No entries of that type.'}
+            </div>
           ) : (
             <div className="sheet-wrap">
               <table className="sheet">
@@ -434,7 +452,7 @@ function InventoryOnHandTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {journalEntries.map((j) => {
+                  {filteredJournalEntries.map((j) => {
                     const lineCount = j.inventory_journal_lines?.[0]?.count ?? 0
                     const expanded = expandedJournalId === j.id
                     return (

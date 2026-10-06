@@ -14,14 +14,13 @@ import {
 } from '../utils'
 
 // Which POs the ledger lists by default: the ones that were actually issued to
-// a vendor (money committed), plus voided ones so a cancelled PO is still
-// accounted for. Drafts, requests and rejected requests never reached a vendor.
-const DEFAULT_STATUSES = ['issued', 'closed', 'voided']
+// a vendor (money committed).
+// Drafts, requests and rejected requests never reached a vendor.
+const DEFAULT_STATUSES = ['issued', 'closed']
 const STATUS_FILTER_OPTIONS = [
-  { value: '', label: 'Issued, Closed & Voided' },
+  { value: '', label: 'PO Issued & Closed' },
   { value: 'issued', label: 'PO Issued' },
   { value: 'closed', label: 'Closed' },
-  { value: 'voided', label: 'Voided' },
   { value: 'all', label: 'All (incl. drafts)' },
 ]
 
@@ -125,11 +124,10 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
   }, [purchaseRequests, statusFilter, entityFilter, vendorFilter, categoryFilter, fromDate, toDate, search])
 
   // Totals by category, line subtotals only (markup/tax/shipping live at PO level),
-  // and never counting voided POs -- a voided PO committed no money.
+  // across every PO listed.
   const summary = useMemo(() => {
     const sums = { inventory: 0, used: 0, consumable: 0, service: 0 }
     for (const row of rows) {
-      if (row.request.status === 'voided') continue
       sums[row.category] += row.lineTotal
     }
     return sums
@@ -184,7 +182,6 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
         'Invoice #s': row.invoiceNumbers,
         'Invoice Payment': row.paidState,
         'Payment Status (manual)': paymentStatusLabel(computePaymentStatus(r)),
-        'Voided Reason': r.status === 'voided' ? r.void_reason || '' : '',
       }
     })
     const csv = Papa.unparse(csvRows)
@@ -213,8 +210,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
       </div>
       <p className="sub" style={{ marginTop: 0 }}>
         What was purchased and what happened to it: kept in inventory as a spare, used on site, a consumable, or a service.
-        Line amounts are before markup, shipping and tax; those are shown once per PO. Voided POs stay listed but are left
-        out of the totals below.
+        Line amounts are before markup, shipping and tax; those are shown once per PO.
       </p>
 
       <div className="header-actions" style={{ flexWrap: 'wrap', marginBottom: 12 }}>
@@ -298,8 +294,6 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
             <tbody>
               {rows.map((row) => {
                 const r = row.request
-                const voided = r.status === 'voided'
-                const struck = voided ? { textDecoration: 'line-through', color: 'var(--muted)' } : undefined
                 return (
                   <Fragment key={row.key}>
                     <tr>
@@ -309,18 +303,18 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
                       <td>{row.first ? r.vendors?.name || '—' : ''}</td>
                       <td>{row.first ? fmtDate(row.issuedAt) || '—' : ''}</td>
                       <td>{row.first ? fmtDate(row.workDoneAt) || '—' : ''}</td>
-                      <td style={struck}>{row.lineText}</td>
-                      <td className="center-cell" style={struck}>
+                      <td>{row.lineText}</td>
+                      <td className="center-cell">
                         {Number(row.line.quantity) || 0}
                       </td>
-                      <td className="center-cell" style={struck}>
+                      <td className="center-cell">
                         {fmtMoney(row.line.unit_cost)}
                       </td>
-                      <td className="center-cell" style={struck}>
+                      <td className="center-cell">
                         {fmtMoney(row.lineTotal)}
                       </td>
                       <td>{LEDGER_CATEGORY_LABELS[row.category]}</td>
-                      <td className="center-cell" style={struck}>
+                      <td className="center-cell">
                         {row.poTotals ? fmtMoney(row.poTotals.grandTotal) : ''}
                       </td>
                       <td>
@@ -339,13 +333,6 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
                     {row.first && activityOpenId === r.id && (
                       <tr>
                         <td colSpan={COLS}>
-                          {voided && (
-                            <div className="status err" style={{ marginTop: 0 }}>
-                              Voided by {findUserName(users, r.voided_by)}
-                              {r.voided_at ? ` — ${new Date(r.voided_at).toLocaleString()}` : ''}
-                              {r.void_reason ? `: ${r.void_reason}` : ''}
-                            </div>
-                          )}
                           {!activity[r.id] ? (
                             <div className="empty">Loading…</div>
                           ) : activity[r.id].length === 0 ? (

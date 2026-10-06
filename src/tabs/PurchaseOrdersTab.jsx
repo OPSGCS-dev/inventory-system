@@ -57,7 +57,6 @@ import {
   canApproveVendors,
   vendorApprovalStatus,
   vendorBlockReason,
-  voidBlockReason,
 } from '../utils'
 import InvoicesPanel from './InvoicesPanel'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
@@ -86,13 +85,6 @@ const SHORT_WORK_LABELS = {
 const PO_PROGRESS_ALL_LABELS = PO_PROGRESS_STAGES.map((s) => PO_PROGRESS_STAGE_LABELS[s])
 
 function PoProgressStepper({ request }) {
-  if (request.status === 'voided') {
-    return (
-      <span className="po-badge po-badge-voided" title={request.void_reason || undefined}>
-        Voided
-      </span>
-    )
-  }
   if (request.status === 'rejected') {
     return (
       <span className="po-badge po-badge-rejected" title={request.rejection_reason || undefined}>
@@ -226,7 +218,6 @@ function PurchaseOrdersTab({
   handleClosePo,
   poActionBusyId,
   handleDeletePurchaseRequest,
-  handleVoidPurchaseRequest,
 }) {
   const canCreate = canCreatePurchaseRequests(loggedInUser)
   const isAdminUser = isAdmin(loggedInUser)
@@ -615,7 +606,7 @@ function PurchaseOrdersTab({
               {isOverSpendingCap(r) && (
                 <span className="po-badge po-badge-overcap">Over Spending Cap</span>
               )}
-              {isAdminUser && r.status === 'draft' && (
+              {isAdminUser && (
                 <button
                   className="btn-secondary"
                   style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
@@ -623,17 +614,6 @@ function PurchaseOrdersTab({
                   disabled={busy}
                 >
                   {busy ? 'Deleting…' : 'Delete'}
-                </button>
-              )}
-              {isAdminUser && !['draft', 'voided', 'closed'].includes(r.status) && (
-                <button
-                  className="btn-secondary"
-                  style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                  onClick={() => handleVoidPurchaseRequest(r)}
-                  disabled={busy}
-                  title={voidBlockReason(loggedInUser, r) || 'Void this PO — keeps it on file for accounting'}
-                >
-                  {busy ? 'Voiding…' : 'Void'}
                 </button>
               )}
             </div>
@@ -685,16 +665,6 @@ function PurchaseOrdersTab({
                   </span>
                 </div>
               </>
-            )}
-            {r.status === 'voided' && (
-              <div className="po-detail-meta-item">
-                <span className="po-detail-label">Voided</span>
-                <span className="po-detail-value" style={{ color: 'var(--danger)' }}>
-                  {findUserName(users, r.voided_by)}
-                  {r.voided_at ? ` — ${new Date(r.voided_at).toLocaleString()}` : ''}
-                  {r.void_reason ? `: ${r.void_reason}` : ''}
-                </span>
-              </div>
             )}
             {r.status === 'rejected' && (
               <div className="po-detail-meta-item">

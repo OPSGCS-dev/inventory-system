@@ -552,7 +552,6 @@ table.sheet td.total-col {
 .po-badge-overcap { background: #fdecea; color: var(--danger); }
 .po-badge-onhold { background: #fdf1d6; color: var(--warn); }
 .po-badge-rejected { background: #fde2e2; color: var(--danger); }
-.po-badge-voided { background: #e8e8e8; color: var(--muted); text-decoration: line-through; }
 
 .role-check {
   color: var(--success);

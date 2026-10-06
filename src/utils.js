@@ -66,7 +66,7 @@ export function normalizeHeader(h) {
 
 // --- Purchase Orders ---
 
-export const PO_STATUS_ORDER = ['draft', 'submitted', 'approved', 'issued', 'closed', 'rejected', 'voided']
+export const PO_STATUS_ORDER = ['draft', 'submitted', 'approved', 'issued', 'closed', 'rejected']
 
 export const PO_STATUS_LABELS = {
   draft: 'Draft',
@@ -75,7 +75,6 @@ export const PO_STATUS_LABELS = {
   issued: 'PO Issued',
   closed: 'Closed',
   rejected: 'Rejected',
-  voided: 'Voided',
 }
 
 export function poStatusLabel(status) {
@@ -510,23 +509,6 @@ export function canEditPurchaseRequest(user, request) {
   return false
 }
 
-// A PO past draft is never hard-deleted -- it's voided, so the row, its
-// activity log and its invoices stay on file for accounting. Admin-only, same
-// as delete was. Refused once stock or money has moved: parts received (stock
-// was already added) or any invoice/receipt on file -- those have to be
-// reversed first. A closed PO is finished, so it can't be voided either.
-export function voidBlockReason(user, request) {
-  if (!request || !isAdmin(user)) return 'Only an admin can void a PO.'
-  if (['draft', 'voided', 'closed'].includes(request.status)) return 'This PO cannot be voided.'
-  if (poHasParts(request) && request.received_at) {
-    return 'Its parts have been received into stock — reverse that with an inventory adjustment first.'
-  }
-  if ((request.invoices || []).length > 0 || (request.receipts || []).length > 0) {
-    return 'It has invoices or receipts on file — remove them first.'
-  }
-  return null
-}
-
 // The PO Ledger is for accounting only: anyone holding invoice matching,
 // invoice approval or payment. Company-wide view -- the ledger isn't narrowed
 // by entity assignment, since accounting reconciles across every entity.
@@ -716,8 +698,6 @@ export function nextStepInfo(request, users) {
       return { step: 'Done', who: null }
     case 'rejected':
       return { step: 'Revise or drop', who: findUserName(users, request.requested_by) }
-    case 'voided':
-      return { step: 'Voided', who: null }
     default:
       return { step: '—', who: null }
   }

@@ -152,9 +152,9 @@ export async function buildPoPdf(request, stamp = null) {
     ...(isNotToExceed(request)
       ? [
           [
-            'Spending Cap',
+            'Not to Exceed',
             `${request.spending_cap ? money(request.spending_cap) : '-'} - Invoiced ${money(computeInvoicedTotal(request))}${
-              isOverSpendingCap(request) ? ' (OVER CAP)' : ''
+              isOverSpendingCap(request) ? ' (OVER LIMIT)' : ''
             }`,
           ],
         ]

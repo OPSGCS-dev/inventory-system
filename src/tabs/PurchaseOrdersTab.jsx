@@ -1061,12 +1061,12 @@ function PurchaseOrdersTab({
                           </tr>
                           {isNotToExceed(r) && (
                             <tr>
-                              <th>Spending Cap</th>
+                              <th>Not to Exceed</th>
                               <td style={isOverSpendingCap(r) ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
                                 {r.spending_cap ? `$${Number(r.spending_cap).toFixed(2)}` : '—'}
                                 {' · Invoiced $'}
                                 {computeInvoicedTotal(r).toFixed(2)}
-                                {isOverSpendingCap(r) ? ' (OVER CAP)' : ''}
+                                {isOverSpendingCap(r) ? ' (OVER LIMIT)' : ''}
                               </td>
                             </tr>
                           )}

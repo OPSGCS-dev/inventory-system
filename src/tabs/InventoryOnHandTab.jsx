@@ -1,4 +1,5 @@
 import { Fragment, useState } from 'react'
+import Papa from 'papaparse'
 import { computeTargetSum, shortProjectName, journalEntryTypeLabel, JOURNAL_ENTRY_TYPE_LABELS } from '../utils'
 
 function InventoryOnHandTab({
@@ -78,6 +79,45 @@ function InventoryOnHandTab({
   const filteredJournalEntries = journalTypeFilter
     ? journalEntries.filter((j) => j.entry_type === journalTypeFilter)
     : journalEntries
+
+  // Exports the Parts list as it's currently filtered: one row per part per
+  // entity, for the selected entity or (on All Entities) every entity, grouped
+  // by entity so each site's list can be handed out on its own. Separate from
+  // handleExportInventory, which writes the Count upload template format.
+  function handleExportPartsList() {
+    const selected = stockViewProjectId === 'all' ? null : projects.find((p) => p.id === stockViewProjectId)
+    const sites = selected ? [selected] : projects
+    const rows = []
+    for (const p of sites) {
+      for (const item of visibleStockItems) {
+        const entry = item.perProject[p.id]
+        if (!entry) continue
+        const incoming = incomingByKey?.get(`${p.id}:${item.gcs_id}`)?.qty ?? 0
+        rows.push({
+          Entity: p.name,
+          'GCS P/N': item.gcs_id,
+          'Part ID': item.part?.gcs_part_id || '',
+          Manufacturer: item.part?.manufacturer || '',
+          'Manufacturer P/N': item.part?.manufacturer_part_number || '',
+          Description: item.part?.description || '',
+          'On Hand': entry.onHand ?? 0,
+          'Target Stock': entry.target ?? '',
+          'On Order (not received)': incoming,
+        })
+      }
+    }
+    const csv = Papa.unparse(rows)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const siteName = selected ? shortProjectName(selected.name).replace(/[^a-z0-9]+/gi, '-') : 'all-entities'
+    a.download = `inventory-${siteName}-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
 
   // Spare parts on issued POs that haven't been received yet count toward the
   // numbers shown but are marked yellow: they aren't on the shelf. Only in the
@@ -570,6 +610,17 @@ function InventoryOnHandTab({
                   ))}
                 </select>
               </div>
+            )}
+            {!stockEditMode && !locationEditMode && !transferMode && !recordUseMode && (
+              <button
+                className="btn-secondary"
+                style={{ whiteSpace: 'nowrap' }}
+                onClick={handleExportPartsList}
+                disabled={stockLoading || visibleStockItems.length === 0}
+                title="Download this list as a CSV — the selected entity, or every entity grouped by entity"
+              >
+                Export CSV
+              </button>
             )}
           </div>
           {stockEditMode && (

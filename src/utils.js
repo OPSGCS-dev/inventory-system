@@ -538,23 +538,21 @@ export function canViewPoLedger(user) {
   )
 }
 
-// How a PO line is treated for accounting, derived from how it was set up:
-//   spare       -> Inventory asset (held in stock; becomes an expense when used)
-//   used        -> Expense -- used on site
-//   consumable  -> Expense -- consumable
-//   service     -> Expense -- service
-export const LEDGER_TREATMENT_LABELS = {
-  asset: 'Inventory asset',
-  expense_used: 'Expense — used on site',
-  expense_consumable: 'Expense — consumable',
-  expense_service: 'Expense — service',
+// Which bucket a PO line falls in for the PO Ledger, derived from how it was
+// set up. Deliberately plain descriptions of what happened to the item, not
+// accounting classifications (asset vs expense) -- accounting decides that.
+export const LEDGER_CATEGORY_LABELS = {
+  inventory: 'Inventory (spare)',
+  used: 'Used on site',
+  consumable: 'Consumable',
+  service: 'Service',
 }
 
-export function lineLedgerTreatment(line) {
-  if (line.line_type === 'service') return 'expense_service'
-  if (line.inventory_action === 'used_immediately') return 'expense_used'
-  if (line.inventory_action === 'consumable') return 'expense_consumable'
-  return 'asset'
+export function lineLedgerCategory(line) {
+  if (line.line_type === 'service') return 'service'
+  if (line.inventory_action === 'used_immediately') return 'used'
+  if (line.inventory_action === 'consumable') return 'consumable'
+  return 'inventory'
 }
 
 // A rejected request is sent back to the person who submitted it (or an admin),

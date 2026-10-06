@@ -9,8 +9,8 @@ import {
   computePaymentStatus,
   paymentStatusLabel,
   lineTotal,
-  lineLedgerTreatment,
-  LEDGER_TREATMENT_LABELS,
+  lineLedgerCategory,
+  LEDGER_CATEGORY_LABELS,
 } from '../utils'
 
 // Which POs the ledger lists by default: the ones that were actually issued to
@@ -63,7 +63,7 @@ function buildRows(requests) {
         key: `${r.id}-${line.id}`,
         request: r,
         first: i === 0,
-        treatment: lineLedgerTreatment(line),
+        category: lineLedgerCategory(line),
         line,
         lineText: lineLabel(line),
         lineTotal: lineTotal(line),
@@ -83,7 +83,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
   const [statusFilter, setStatusFilter] = useState('')
   const [entityFilter, setEntityFilter] = useState('')
   const [vendorFilter, setVendorFilter] = useState('')
-  const [treatmentFilter, setTreatmentFilter] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [search, setSearch] = useState('')
@@ -115,22 +115,22 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
     const all = buildRows(requests)
     const q = search.trim().toLowerCase()
     return all.filter((row) => {
-      if (treatmentFilter && row.treatment !== treatmentFilter) return false
+      if (categoryFilter && row.category !== categoryFilter) return false
       if (!q) return true
       const r = row.request
       return [r.po_number, r.vendors?.name, r.projects?.name, row.lineText, row.invoiceNumbers]
         .filter(Boolean)
         .some((f) => String(f).toLowerCase().includes(q))
     })
-  }, [purchaseRequests, statusFilter, entityFilter, vendorFilter, treatmentFilter, fromDate, toDate, search])
+  }, [purchaseRequests, statusFilter, entityFilter, vendorFilter, categoryFilter, fromDate, toDate, search])
 
-  // Totals by treatment, line subtotals only (markup/tax/shipping live at PO level),
+  // Totals by category, line subtotals only (markup/tax/shipping live at PO level),
   // and never counting voided POs -- a voided PO committed no money.
   const summary = useMemo(() => {
-    const sums = { asset: 0, expense_used: 0, expense_consumable: 0, expense_service: 0 }
+    const sums = { inventory: 0, used: 0, consumable: 0, service: 0 }
     for (const row of rows) {
       if (row.request.status === 'voided') continue
-      sums[row.treatment] += row.lineTotal
+      sums[row.category] += row.lineTotal
     }
     return sums
   }, [rows])
@@ -171,7 +171,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
         Quantity: Number(row.line.quantity) || 0,
         'Unit Cost': Number(row.line.unit_cost) || 0,
         'Line Total': row.lineTotal.toFixed(2),
-        'Accounting Treatment': LEDGER_TREATMENT_LABELS[row.treatment],
+        'Category': LEDGER_CATEGORY_LABELS[row.category],
         Currency: r.currency || 'CAD',
         // PO-level columns: first line of each PO only, so a column sum is correct.
         'PO Subtotal': row.poTotals ? row.poTotals.subtotal.toFixed(2) : '',
@@ -212,9 +212,9 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
         </div>
       </div>
       <p className="sub" style={{ marginTop: 0 }}>
-        What was purchased and how it's treated for accounting: spare parts are an inventory asset until used, parts used on
-        site, consumables and services are expenses. Line amounts are before markup, shipping and tax; those are shown once
-        per PO. Voided POs stay listed but are left out of the totals below.
+        What was purchased and what happened to it: kept in inventory as a spare, used on site, a consumable, or a service.
+        Line amounts are before markup, shipping and tax; those are shown once per PO. Voided POs stay listed but are left
+        out of the totals below.
       </p>
 
       <div className="header-actions" style={{ flexWrap: 'wrap', marginBottom: 12 }}>
@@ -241,9 +241,9 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
             </option>
           ))}
         </select>
-        <select value={treatmentFilter} onChange={(e) => setTreatmentFilter(e.target.value)}>
-          <option value="">All Treatments</option>
-          {Object.entries(LEDGER_TREATMENT_LABELS).map(([value, label]) => (
+        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+          <option value="">All Categories</option>
+          {Object.entries(LEDGER_CATEGORY_LABELS).map(([value, label]) => (
             <option value={value} key={value}>
               {label}
             </option>
@@ -265,7 +265,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
       </div>
 
       <div className="header-actions" style={{ flexWrap: 'wrap', gap: 16, marginBottom: 12 }}>
-        {Object.entries(LEDGER_TREATMENT_LABELS).map(([value, label]) => (
+        {Object.entries(LEDGER_CATEGORY_LABELS).map(([value, label]) => (
           <span key={value}>
             <strong>{label}:</strong> {fmtMoney(summary[value])}
           </span>
@@ -289,7 +289,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
                 <th className="center-cell">Qty</th>
                 <th className="center-cell">Unit Cost</th>
                 <th className="center-cell">Line Total</th>
-                <th>Treatment</th>
+                <th>Category</th>
                 <th className="center-cell">PO Total</th>
                 <th>Invoices</th>
                 <th></th>
@@ -319,7 +319,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
                       <td className="center-cell" style={struck}>
                         {fmtMoney(row.lineTotal)}
                       </td>
-                      <td>{LEDGER_TREATMENT_LABELS[row.treatment]}</td>
+                      <td>{LEDGER_CATEGORY_LABELS[row.category]}</td>
                       <td className="center-cell" style={struck}>
                         {row.poTotals ? fmtMoney(row.poTotals.grandTotal) : ''}
                       </td>

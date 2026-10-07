@@ -30,3 +30,6 @@ dist-ssr
 # Source spreadsheets used for one-off data imports — not needed at runtime
 *.xlsm
 *.xlsx
+
+# Generated test database files (contain test logins)
+build/

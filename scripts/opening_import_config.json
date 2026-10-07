@@ -14,6 +14,8 @@
     "UNITY": ["%unity%"],
     "FLOPS": ["%flops%", "%firelight%"]
   },
+  "_skipSites": "Sheet sites to leave out of the import entirely (their stock is not imported). Use this instead of creating an entity for a site that isn't in the app.",
+  "skipSites": [],
   "_overrides": "Per part (GCS ID): decisions for rows the general rules can't place. moveOwnership moves all of one site's units to another site's ownership (the units then sit on the new owner's site). storage puts every owner's units in Storage.",
   "overrides": {
     "12": { "moveOwnership": { "from": "RUTLEY", "to": "UNITY" } },

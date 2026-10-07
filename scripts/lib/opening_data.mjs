@@ -28,6 +28,7 @@ export function loadOpeningData(xlsxPath, onProblems) {
     if (c && i >= 10) blocks.push({ col: i, key: String(c).replace(/^\d+\.\s*/, '').trim().toUpperCase() })
   })
   const SOH = 5
+  const skip = new Set(config.skipSites || [])
   for (const b of blocks) {
     if (!config.sites[b.key]) throw new Error(`Site "${b.key}" is in the sheet but not in opening_import_config.json -> sites`)
   }
@@ -48,6 +49,7 @@ export function loadOpeningData(xlsxPath, onProblems) {
     const ov = config.overrides[String(gcs)] || {}
     const owners = new Map()
     for (const b of blocks) {
+      if (skip.has(b.key)) continue
       const raw = r[b.col + SOH]
       if (raw === '' || raw === null || raw === undefined) continue
       let q = Number(raw)
@@ -119,4 +121,28 @@ export function loadOpeningData(xlsxPath, onProblems) {
   
   
   return { config, blocks, ownerRows, finalLoc, notes }
+}
+
+// The part master rows on the same sheet (GCS ID, part id, manufacturer, ... , min/max stock).
+export function loadPartsMaster(xlsxPath) {
+  const config = loadConfig()
+  const wb = XLSX.readFile(xlsxPath)
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[config.sheet], { header: 1, defval: '' })
+  const text = (v) => (v === '' || v === null || v === undefined ? null : String(v).replace(/\s+/g, ' ').trim() || null)
+  const int = (v) => (Number.isFinite(Number(v)) && v !== '' ? Math.trunc(Number(v)) : null)
+  return rows
+    .slice(5)
+    .filter((r) => r[0] !== '' && !Number.isNaN(Number(r[0])))
+    .map((r) => ({
+      gcs_id: Number(r[0]),
+      gcs_part_id: text(r[1]),
+      manufacturer_part_number: text(r[2]),
+      manufacturer: text(r[3]),
+      spare_category: text(r[4]),
+      description: text(r[5]),
+      primary_location: text(r[6]),
+      common_spare_part: String(r[7]).trim().toUpperCase() === 'Y',
+      max_stock: int(r[8]),
+      min_stock: int(r[9]),
+    }))
 }

@@ -51,7 +51,7 @@ begin;
 
 create temp table _site_map (site text primary key, patterns text[] not null) on commit drop;
 insert into _site_map (site, patterns) values
-${Object.entries(config.sites).map(([s, p]) => `  (${sqlStr(s)}, array[${p.map(sqlStr).join(', ')}])`).join(',\n')};
+${Object.entries(config.sites).filter(([s]) => !(config.skipSites || []).includes(s)).map(([s, p]) => `  (${sqlStr(s)}, array[${p.map(sqlStr).join(', ')}])`).join(',\n')};
 
 create temp table _proj on commit drop as
   select m.site, array(select p.id from public.projects p where p.name ilike any (m.patterns) order by p.id) as ids

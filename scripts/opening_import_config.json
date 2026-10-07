@@ -10,7 +10,7 @@
     "NORFOLK": ["%norfolk%"],
     "ODESSA": ["%odessa%"],
     "RAY (NB1)": ["%ray%"],
-    "BRUINING": ["%bruining%"],
+    "BRUINING": ["%stormont%", "%bruining%"],
     "UNITY": ["%unity%"],
     "FLOPS": ["%flops%", "%firelight%"]
   },

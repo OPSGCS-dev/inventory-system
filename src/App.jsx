@@ -7,7 +7,6 @@ import {
   emptyFilters,
   blankDraftRow,
   uniqueSorted,
-  shortProjectName,
   computeTargetSum,
   normalizeHeader,
   blankPurchaseRequestLine,
@@ -17,7 +16,6 @@ import {
   CONSUMABLE_MAX_UNIT_COST,
   INVENTORY_MODE_TO_ACTION,
   INVENTORY_ACTION_TO_MODE,
-  lineCountsInStock,
   linesHaveParts,
   incomingStockByKey,
   linesHaveServices,
@@ -49,7 +47,8 @@ import {
 } from './utils'
 import MasterListTab from './tabs/MasterListTab'
 import RequiredInventoryTab from './tabs/RequiredInventoryTab'
-import InventoryOnHandTab from './tabs/InventoryOnHandTab'
+import OwnershipTab from './tabs/OwnershipTab'
+import PhysicalLocationTab from './tabs/PhysicalLocationTab'
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import PoLedgerTab from './tabs/PoLedgerTab'
 import UsersTab from './tabs/UsersTab'
@@ -120,43 +119,14 @@ function App() {
   const [stockItems, setStockItems] = useState([])
   const [stockLoading, setStockLoading] = useState(true)
   const [stockStatus, setStockStatus] = useState(null)
-  const [stockViewProjectId, setStockViewProjectId] = useState('all')
-  const [stockViewFilter, setStockViewFilter] = useState('')
-  const [stockEditMode, setStockEditMode] = useState(false)
-  const [draftStockItems, setDraftStockItems] = useState([])
-  const [savingStockEdits, setSavingStockEdits] = useState(false)
-  const [stockEditFilter, setStockEditFilter] = useState('')
-  const [adjustNote, setAdjustNote] = useState('')
+  // set when a part is clicked on one stock tab, to scroll to and flash the same part on the other
+  const [focusPart, setFocusPart] = useState(null)
 
-  const [stockPanel, setStockPanel] = useState(null) // null | 'upload' | 'history'
 
-  const [locationEditMode, setLocationEditMode] = useState(false)
-  const [draftLocationItems, setDraftLocationItems] = useState([])
-  const [savingLocationEdits, setSavingLocationEdits] = useState(false)
-  const [locationEditFilter, setLocationEditFilter] = useState('')
-  const [locationNote, setLocationNote] = useState('')
 
-  const [uploadFileName, setUploadFileName] = useState('')
-  const [uploadPreview, setUploadPreview] = useState(null)
-  const [uploadErrors, setUploadErrors] = useState([])
-  const [uploading, setUploading] = useState(false)
-  const [uploadNote, setUploadNote] = useState('')
 
-  const [recordUseMode, setRecordUseMode] = useState(false)
-  const [useNote, setUseNote] = useState('')
-  const [useQtyByPart, setUseQtyByPart] = useState({})
-  const [savingUsePartId, setSavingUsePartId] = useState(null)
 
-  const [transferMode, setTransferMode] = useState(false)
-  const [transferToProjectId, setTransferToProjectId] = useState(null)
-  const [transferNote, setTransferNote] = useState('')
-  const [transferQtyByPart, setTransferQtyByPart] = useState({})
-  const [savingTransferPartId, setSavingTransferPartId] = useState(null)
 
-  const [journalEntries, setJournalEntries] = useState([])
-  const [journalLoading, setJournalLoading] = useState(false)
-  const [journalLines, setJournalLines] = useState({})
-  const [expandedJournalId, setExpandedJournalId] = useState(null)
 
   // --- Purchase Orders ---
   const [users, setUsers] = useState([])
@@ -172,7 +142,7 @@ function App() {
   const [poStatusFilter, setPoStatusFilter] = useState('')
   const [poProjectFilter, setPoProjectFilter] = useState('')
   // 'all' | 'my-approvals' | 'my-invoices' -- persistent sub-tabs within the
-  // Purchase Orders tab, same pattern as InventoryOnHandTab's stockPanel.
+  // Purchase Orders tab.
   const [poView, setPoView] = useState('all')
   const [expandedPoId, setExpandedPoId] = useState(null)
   const [poActivity, setPoActivity] = useState([])
@@ -368,16 +338,32 @@ function App() {
 
   async function loadStock() {
     setStockLoading(true)
-    const [ppRes, sohRes] = await Promise.all([
+    const [ppRes, sohRes, locRes] = await Promise.all([
       supabase.from('project_parts').select('project_id, part_gcs_id, target_stock, shared'),
       supabase.from('stock_on_hand').select('project_id, part_gcs_id, quantity'),
+      supabase.from('stock_location').select('part_gcs_id, location, project_id, quantity'),
     ])
 
-    if (ppRes.error || sohRes.error) {
-      console.error(ppRes.error || sohRes.error)
-      setStockStatus({ ok: false, msg: 'Could not load inventory — check the console for details.' })
+    if (ppRes.error || sohRes.error || locRes.error) {
+      console.error(ppRes.error || sohRes.error || locRes.error)
+      setStockStatus({
+        ok: false,
+        msg: locRes.error
+          ? "Could not load physical locations — run supabase/ownership_location_01_schema.sql (and the opening import) in this project's SQL editor."
+          : 'Could not load inventory — check the console for details.',
+      })
       setStockLoading(false)
       return
+    }
+    setStockStatus(null)
+
+    // where each part physically is: { storage, barn, site: { [entity id]: qty } }
+    const locByPart = new Map()
+    for (const row of locRes.data ?? []) {
+      if (!locByPart.has(row.part_gcs_id)) locByPart.set(row.part_gcs_id, { storage: 0, barn: 0, site: {} })
+      const entry = locByPart.get(row.part_gcs_id)
+      if (row.location === 'site') entry.site[row.project_id] = (entry.site[row.project_id] || 0) + row.quantity
+      else entry[row.location] += row.quantity
     }
 
     const sohMap = new Map(
@@ -402,17 +388,13 @@ function App() {
         const values = Object.values(entry.perProject)
         const part = parts.find((p) => p.gcs_id === entry.gcs_id)
         const onHandSum = values.reduce((sum, p) => sum + (p.onHand ?? 0), 0)
-        const storageQty = part?.storage_qty ?? 0
-        const barnQty = part?.barn_qty ?? 0
         return {
           gcs_id: entry.gcs_id,
           part,
           perProject: entry.perProject,
           targetSum: computeTargetSum(values),
           onHandSum,
-          storageQty,
-          barnQty,
-          projectQty: onHandSum - storageQty - barnQty,
+          loc: locByPart.get(entry.gcs_id) || { storage: 0, barn: 0, site: {} },
         }
       })
       .sort((a, b) => a.gcs_id - b.gcs_id)
@@ -840,40 +822,6 @@ function App() {
       setDraftProjectItems(draft)
       setProjectEditFilter('')
       setProjectEditMode(true)
-    }
-    if (action.type === 'stock-edit') {
-      const draft = stockItems.map((item) => ({
-        gcs_id: item.gcs_id,
-        part: item.part,
-        perProject: item.perProject,
-        qtyByProject: Object.fromEntries(
-          Object.entries(item.perProject).map(([pid, p]) => [pid, String(p.onHand ?? 0)])
-        ),
-      }))
-      setDraftStockItems(draft)
-      setStockEditFilter('')
-      setAdjustNote('')
-      setStockEditMode(true)
-    }
-    if (action.type === 'location-edit') {
-      const draft = stockItems.map((item) => ({
-        gcs_id: item.gcs_id,
-        part: item.part,
-        perProject: item.perProject,
-        onHandSum: item.onHandSum,
-        storage_qty: String(item.storageQty ?? 0),
-        barn_qty: String(item.barnQty ?? 0),
-      }))
-      setDraftLocationItems(draft)
-      setLocationEditFilter('')
-      setLocationNote('')
-      setLocationEditMode(true)
-    }
-    if (action.type === 'record-use') {
-      startRecordPartUse()
-    }
-    if (action.type === 'stock-transfer') {
-      startStockTransfer()
     }
   }
 
@@ -1563,629 +1511,6 @@ function App() {
     } finally {
       setSavingProjectEdits(false)
     }
-  }
-
-  function flashStockStatus(msg, ok) {
-    setStockStatus({ ok, msg })
-    setTimeout(() => setStockStatus(null), 3000)
-  }
-
-  function updateStockDraftField(index, projectId, value) {
-    setDraftStockItems((prev) =>
-      prev.map((r, i) =>
-        i === index ? { ...r, qtyByProject: { ...r.qtyByProject, [projectId]: value } } : r
-      )
-    )
-  }
-
-  function handleCancelStockEdits() {
-    setStockEditMode(false)
-    setDraftStockItems([])
-  }
-
-  const visibleStockItems = useMemo(() => {
-    let items = stockViewProjectId === 'all'
-      ? stockItems
-      : stockItems.filter((item) => Boolean(item.perProject[stockViewProjectId]))
-    if (stockViewFilter) items = items.filter((item) => String(item.gcs_id ?? '') === stockViewFilter)
-    return items
-  }, [stockItems, stockViewProjectId, stockViewFilter])
-
-  // The GCS P/N filter on Inventory On Hand should only offer parts
-  // applicable to whichever entity (or "All Entities") is currently
-  // selected, not every part in the system.
-  const stockGcsIdOptions = useMemo(() => {
-    const items = stockViewProjectId === 'all'
-      ? stockItems
-      : stockItems.filter((item) => Boolean(item.perProject[stockViewProjectId]))
-    return [...new Set(items.map((item) => item.gcs_id))].sort((a, b) => a - b)
-  }, [stockItems, stockViewProjectId])
-
-  const visibleDraftStockItems = useMemo(() => {
-    const q = stockEditFilter.trim().toLowerCase()
-    if (!q) return draftStockItems
-    return draftStockItems.filter((r) =>
-      [r.part?.gcs_part_id, r.part?.description].filter(Boolean).some((field) => field.toLowerCase().includes(q))
-    )
-  }, [draftStockItems, stockEditFilter])
-
-  async function handleSaveStockEdits() {
-    if (!adjustNote.trim()) {
-      flashStockStatus('A reason is required before saving.', false)
-      return
-    }
-    setSavingStockEdits(true)
-    try {
-      const updates = []
-      for (const row of draftStockItems) {
-        for (const [pidStr, valStr] of Object.entries(row.qtyByProject)) {
-          const pid = Number(pidStr)
-          const newVal = valStr === '' ? 0 : Number(valStr)
-          const orig = row.perProject[pid]?.onHand ?? 0
-          if (newVal !== orig) {
-            updates.push({ project_id: pid, part_gcs_id: row.gcs_id, quantity: newVal, previous: orig })
-          }
-        }
-      }
-
-      if (updates.length) {
-        const { error } = await supabase
-          .from('stock_on_hand')
-          .upsert(
-            updates.map((u) => ({ project_id: u.project_id, part_gcs_id: u.part_gcs_id, quantity: u.quantity })),
-            { onConflict: 'project_id,part_gcs_id' }
-          )
-        if (error) throw error
-
-        const { data: journalRow, error: journalError } = await supabase
-          .from('inventory_journal')
-          .insert({ entry_type: 'adjustment', note: adjustNote.trim() })
-          .select()
-          .single()
-        if (journalError) throw journalError
-
-        const { error: lineError } = await supabase.from('inventory_journal_lines').insert(
-          updates.map((u) => ({
-            journal_id: journalRow.id,
-            project_id: u.project_id,
-            part_gcs_id: u.part_gcs_id,
-            previous_quantity: u.previous,
-            new_quantity: u.quantity,
-          }))
-        )
-        if (lineError) throw lineError
-      }
-
-      setStockEditMode(false)
-      setDraftStockItems([])
-      setAdjustNote('')
-      flashStockStatus(updates.length ? 'Changes saved.' : 'No changes to save.', true)
-      await loadStock()
-    } catch (error) {
-      console.error(error)
-      flashStockStatus('Could not save changes — check the console for details.', false)
-    } finally {
-      setSavingStockEdits(false)
-    }
-  }
-
-  function updateLocationDraftField(index, field, value) {
-    setDraftLocationItems((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
-  }
-
-  function handleCancelLocationEdits() {
-    setLocationEditMode(false)
-    setDraftLocationItems([])
-    setLocationNote('')
-  }
-
-  const visibleDraftLocationItems = useMemo(() => {
-    const q = locationEditFilter.trim().toLowerCase()
-    if (!q) return draftLocationItems
-    return draftLocationItems.filter((r) =>
-      [r.part?.gcs_part_id, r.part?.description].filter(Boolean).some((field) => field.toLowerCase().includes(q))
-    )
-  }, [draftLocationItems, locationEditFilter])
-
-  async function handleSaveLocationEdits() {
-    if (!locationNote.trim()) {
-      flashStockStatus('A reason is required before saving.', false)
-      return
-    }
-    setSavingLocationEdits(true)
-    try {
-      const updates = []
-      const negativeErrors = []
-      for (const row of draftLocationItems) {
-        const newStorage = row.storage_qty === '' ? 0 : Number(row.storage_qty)
-        const newBarn = row.barn_qty === '' ? 0 : Number(row.barn_qty)
-        const origStorage = row.part?.storage_qty ?? 0
-        const origBarn = row.part?.barn_qty ?? 0
-        if (newStorage !== origStorage || newBarn !== origBarn) {
-          if (row.onHandSum - newStorage - newBarn < 0) {
-            negativeErrors.push(row.part?.gcs_part_id || row.gcs_id)
-            continue
-          }
-          updates.push({
-            gcs_id: row.gcs_id,
-            newStorage,
-            newBarn,
-            origStorage,
-            origBarn,
-          })
-        }
-      }
-
-      if (negativeErrors.length) {
-        flashStockStatus(
-          `Storage + Barn can't exceed Total On-Hand for: ${negativeErrors.join(', ')}`,
-          false
-        )
-        setSavingLocationEdits(false)
-        return
-      }
-
-      if (updates.length) {
-        for (const u of updates) {
-          const { error } = await supabase
-            .from('parts')
-            .update({ storage_qty: u.newStorage, barn_qty: u.newBarn })
-            .eq('gcs_id', u.gcs_id)
-          if (error) throw error
-        }
-
-        const { data: journalRow, error: journalError } = await supabase
-          .from('inventory_journal')
-          .insert({ entry_type: 'location_adjustment', note: locationNote.trim() })
-          .select()
-          .single()
-        if (journalError) throw journalError
-
-        const { error: lineError } = await supabase.from('inventory_journal_lines').insert(
-          updates.map((u) => ({
-            journal_id: journalRow.id,
-            part_gcs_id: u.gcs_id,
-            previous_storage_qty: u.origStorage,
-            new_storage_qty: u.newStorage,
-            previous_barn_qty: u.origBarn,
-            new_barn_qty: u.newBarn,
-          }))
-        )
-        if (lineError) throw lineError
-      }
-
-      setLocationEditMode(false)
-      setDraftLocationItems([])
-      setLocationNote('')
-      flashStockStatus(updates.length ? 'Locations saved.' : 'No changes to save.', true)
-      await loadParts()
-    } catch (error) {
-      console.error(error)
-      flashStockStatus('Could not save locations — check the console for details.', false)
-    } finally {
-      setSavingLocationEdits(false)
-    }
-  }
-
-  function resetStockPanel() {
-    setStockPanel(null)
-    setUploadFileName('')
-    setUploadPreview(null)
-    setUploadErrors([])
-    setUploadNote('')
-  }
-
-  // Also used as the explicit "From Project" selector while recording a use
-  // or a transfer -- switching it mid-mode clears any typed-but-unsubmitted
-  // quantities so a number meant for one entity's part row can't silently
-  // carry over and get applied to a different entity's row for that same
-  // part.
-  function handleChangeStockViewProject(value) {
-    setStockViewProjectId(value === 'all' ? 'all' : Number(value))
-    if (recordUseMode) setUseQtyByPart({})
-    if (transferMode) setTransferQtyByPart({})
-  }
-
-  function startRecordPartUse() {
-    if (stockViewProjectId === 'all') {
-      setStockViewProjectId(projects[0]?.id ?? 'all')
-    }
-    setUseNote('')
-    setUseQtyByPart({})
-    setRecordUseMode(true)
-  }
-
-  function cancelRecordPartUse() {
-    setRecordUseMode(false)
-    setUseNote('')
-    setUseQtyByPart({})
-  }
-
-  function updateUseQty(partId, value) {
-    setUseQtyByPart((prev) => ({ ...prev, [partId]: value }))
-  }
-
-  async function handleRecordPartUse(partId) {
-    if (stockViewProjectId === 'all') {
-      flashStockStatus('Select a specific entity first.', false)
-      return
-    }
-    if (!useNote.trim()) {
-      flashStockStatus('A reason is required before saving.', false)
-      return
-    }
-    const qty = Number(useQtyByPart[partId])
-    if (!qty || qty <= 0) {
-      flashStockStatus('Enter a quantity greater than zero.', false)
-      return
-    }
-
-    const item = stockItems.find((s) => s.gcs_id === partId)
-    const current = item?.perProject?.[stockViewProjectId]?.onHand ?? 0
-    const newQty = current - qty
-    if (newQty < 0) {
-      flashStockStatus(`Not enough on hand at this project (${current} available).`, false)
-      return
-    }
-
-    setSavingUsePartId(partId)
-    try {
-      const { data: journalRow, error: journalError } = await supabase
-        .from('inventory_journal')
-        .insert({ entry_type: 'use', note: useNote.trim() })
-        .select()
-        .single()
-      if (journalError) throw journalError
-
-      const { error } = await supabase
-        .from('stock_on_hand')
-        .upsert(
-          { project_id: stockViewProjectId, part_gcs_id: partId, quantity: newQty },
-          { onConflict: 'project_id,part_gcs_id' }
-        )
-      if (error) throw error
-
-      const { error: lineError } = await supabase.from('inventory_journal_lines').insert({
-        journal_id: journalRow.id,
-        project_id: stockViewProjectId,
-        part_gcs_id: partId,
-        previous_quantity: current,
-        new_quantity: newQty,
-      })
-      if (lineError) throw lineError
-
-      setUseQtyByPart((prev) => ({ ...prev, [partId]: '' }))
-      flashStockStatus('Part use recorded.', true)
-      await loadStock()
-    } catch (error) {
-      console.error(error)
-      flashStockStatus('Could not record part use — check the console for details.', false)
-    } finally {
-      setSavingUsePartId(null)
-    }
-  }
-
-  function startStockTransfer() {
-    if (stockViewProjectId === 'all') {
-      setStockViewProjectId(projects[0]?.id ?? 'all')
-    }
-    setTransferToProjectId(null)
-    setTransferNote('')
-    setTransferQtyByPart({})
-    setTransferMode(true)
-  }
-
-  function cancelStockTransfer() {
-    setTransferMode(false)
-    setTransferToProjectId(null)
-    setTransferNote('')
-    setTransferQtyByPart({})
-  }
-
-  function updateTransferQty(partId, value) {
-    setTransferQtyByPart((prev) => ({ ...prev, [partId]: value }))
-  }
-
-  // A transfer is one journal entry with two lines — the source project's
-  // decrease and the destination's matching increase — so the net change
-  // across the system is always zero and both sides show up together in
-  // history.
-  async function handleStockTransfer(partId) {
-    if (stockViewProjectId === 'all') {
-      flashStockStatus('Select a specific entity first.', false)
-      return
-    }
-    if (!transferToProjectId) {
-      flashStockStatus('Select a destination entity.', false)
-      return
-    }
-    if (String(transferToProjectId) === String(stockViewProjectId)) {
-      flashStockStatus('Destination must be a different entity.', false)
-      return
-    }
-    if (!transferNote.trim()) {
-      flashStockStatus('A reason is required before saving.', false)
-      return
-    }
-    const qty = Number(transferQtyByPart[partId])
-    if (!qty || qty <= 0) {
-      flashStockStatus('Enter a quantity greater than zero.', false)
-      return
-    }
-
-    const item = stockItems.find((s) => s.gcs_id === partId)
-    const fromCurrent = item?.perProject?.[stockViewProjectId]?.onHand ?? 0
-    const fromNew = fromCurrent - qty
-    if (fromNew < 0) {
-      flashStockStatus(`Not enough on hand at this project (${fromCurrent} available).`, false)
-      return
-    }
-    const toEntry = item?.perProject?.[transferToProjectId]
-    if (!toEntry) {
-      const toName = projects.find((p) => String(p.id) === String(transferToProjectId))?.name || 'That entity'
-      flashStockStatus(`${toName} doesn't use this part — add it on Required Inventory first.`, false)
-      return
-    }
-    const toCurrent = toEntry.onHand ?? 0
-    const toNew = toCurrent + qty
-
-    const fromProjectName =
-      projects.find((p) => String(p.id) === String(stockViewProjectId))?.name || 'entity'
-    const toProjectName =
-      projects.find((p) => String(p.id) === String(transferToProjectId))?.name || 'entity'
-
-    setSavingTransferPartId(partId)
-    try {
-      const { data: journalRow, error: journalError } = await supabase
-        .from('inventory_journal')
-        .insert({
-          entry_type: 'transfer',
-          note: `${transferNote.trim()} (${fromProjectName} → ${toProjectName})`,
-        })
-        .select()
-        .single()
-      if (journalError) throw journalError
-
-      const { error: fromError } = await supabase
-        .from('stock_on_hand')
-        .upsert(
-          { project_id: stockViewProjectId, part_gcs_id: partId, quantity: fromNew },
-          { onConflict: 'project_id,part_gcs_id' }
-        )
-      if (fromError) throw fromError
-
-      const { error: toError } = await supabase
-        .from('stock_on_hand')
-        .upsert(
-          { project_id: transferToProjectId, part_gcs_id: partId, quantity: toNew },
-          { onConflict: 'project_id,part_gcs_id' }
-        )
-      if (toError) throw toError
-
-      const { error: lineError } = await supabase.from('inventory_journal_lines').insert([
-        {
-          journal_id: journalRow.id,
-          project_id: stockViewProjectId,
-          part_gcs_id: partId,
-          previous_quantity: fromCurrent,
-          new_quantity: fromNew,
-        },
-        {
-          journal_id: journalRow.id,
-          project_id: transferToProjectId,
-          part_gcs_id: partId,
-          previous_quantity: toCurrent,
-          new_quantity: toNew,
-        },
-      ])
-      if (lineError) throw lineError
-
-      setTransferQtyByPart((prev) => ({ ...prev, [partId]: '' }))
-      flashStockStatus('Stock transfer recorded.', true)
-      await loadStock()
-    } catch (error) {
-      console.error(error)
-      flashStockStatus('Could not record stock transfer — check the console for details.', false)
-    } finally {
-      setSavingTransferPartId(null)
-    }
-  }
-
-  function findProjectByName(name) {
-    const q = (name || '').trim().toLowerCase()
-    if (!q) return null
-    return (
-      projects.find((p) => p.name.toLowerCase() === q) ||
-      projects.find((p) => shortProjectName(p.name).toLowerCase() === q) ||
-      null
-    )
-  }
-
-  function handleExportInventory() {
-    const rows = []
-    for (const item of stockItems) {
-      for (const p of projects) {
-        const entry = item.perProject[p.id]
-        if (entry) {
-          rows.push({ 'GCS P/N': item.gcs_id, Entity: p.name, Quantity: entry.onHand ?? 0 })
-        }
-      }
-    }
-    const csv = Papa.unparse(rows)
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `inventory-on-hand-${new Date().toISOString().slice(0, 10)}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
-
-  async function handleUploadFileChange(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploadFileName(file.name)
-    setUploadPreview(null)
-    setUploadErrors([])
-
-    const text = await file.text()
-    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true })
-
-    const fields = parsed.meta.fields || []
-    const fieldMap = {}
-    for (const f of fields) fieldMap[normalizeHeader(f)] = f
-
-    const gcsKey = fieldMap['gcspn'] || fieldMap['gcsid'] || fieldMap['gcs']
-    const projectKey = fieldMap['entity'] || fieldMap['project'] || fieldMap['site']
-    const qtyKey = fieldMap['quantity'] || fieldMap['qty'] || fieldMap['stockonhand']
-
-    if (!gcsKey || !projectKey || !qtyKey) {
-      setUploadErrors([
-        'CSV must have columns for GCS P/N, Entity, and Quantity (column names not recognized).',
-      ])
-      return
-    }
-
-    const errors = []
-    const validRows = []
-    parsed.data.forEach((row, i) => {
-      const rowNum = i + 2 // account for header row, 1-indexed
-      const gcsId = parseInt(row[gcsKey], 10)
-      const part = parts.find((p) => p.gcs_id === gcsId)
-      const project = findProjectByName(row[projectKey])
-      const qty = parseInt(row[qtyKey], 10)
-
-      if (!part) {
-        errors.push(`Row ${rowNum}: GCS P/N "${row[gcsKey]}" not found in Master List.`)
-        return
-      }
-      if (!project) {
-        errors.push(`Row ${rowNum}: Entity "${row[projectKey]}" does not match any entity.`)
-        return
-      }
-      if (Number.isNaN(qty) || qty < 0) {
-        errors.push(`Row ${rowNum}: Quantity "${row[qtyKey]}" is not a valid number.`)
-        return
-      }
-      validRows.push({ gcs_id: gcsId, part, project_id: project.id, project_name: project.name, quantity: qty })
-    })
-
-    setUploadErrors(errors)
-
-    if (validRows.length === 0) {
-      setUploadPreview(null)
-      return
-    }
-
-    const uniqueGcsIds = [...new Set(validRows.map((r) => r.gcs_id))]
-    const { data: existing, error } = await supabase
-      .from('stock_on_hand')
-      .select('project_id, part_gcs_id, quantity')
-      .in('part_gcs_id', uniqueGcsIds)
-
-    if (error) {
-      setUploadErrors((prev) => [...prev, 'Could not look up current stock — check the console.'])
-      console.error(error)
-      return
-    }
-
-    const prevMap = new Map((existing ?? []).map((r) => [`${r.project_id}:${r.part_gcs_id}`, r.quantity]))
-    const rows = validRows.map((r) => ({
-      ...r,
-      previous: prevMap.get(`${r.project_id}:${r.gcs_id}`) ?? null,
-    }))
-
-    setUploadPreview({ rows })
-  }
-
-  async function handleConfirmUpload() {
-    if (!uploadPreview || uploadPreview.rows.length === 0) return
-    if (!uploadNote.trim()) {
-      flashStockStatus('A reason is required before uploading.', false)
-      return
-    }
-    setUploading(true)
-    try {
-      const { rows } = uploadPreview
-      const { data: journalRow, error: journalError } = await supabase
-        .from('inventory_journal')
-        .insert({
-          entry_type: 'count',
-          note: `${uploadNote.trim()} — ${uploadFileName} (${rows.length} rows)`,
-        })
-        .select()
-        .single()
-      if (journalError) throw journalError
-
-      const batchSize = 500
-      for (let i = 0; i < rows.length; i += batchSize) {
-        const batch = rows.slice(i, i + batchSize)
-        const { error: upsertError } = await supabase
-          .from('stock_on_hand')
-          .upsert(
-            batch.map((r) => ({ project_id: r.project_id, part_gcs_id: r.gcs_id, quantity: r.quantity })),
-            { onConflict: 'project_id,part_gcs_id' }
-          )
-        if (upsertError) throw upsertError
-
-        const { error: lineError } = await supabase.from('inventory_journal_lines').insert(
-          batch.map((r) => ({
-            journal_id: journalRow.id,
-            project_id: r.project_id,
-            part_gcs_id: r.gcs_id,
-            previous_quantity: r.previous,
-            new_quantity: r.quantity,
-          }))
-        )
-        if (lineError) throw lineError
-      }
-
-      resetStockPanel()
-      flashStockStatus(`Inventory count uploaded — ${rows.length} rows updated.`, true)
-      await loadStock()
-    } catch (error) {
-      console.error(error)
-      flashStockStatus('Could not upload inventory count — check the console for details.', false)
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  async function loadJournalEntries() {
-    setJournalLoading(true)
-    const { data, error } = await supabase
-      .from('inventory_journal')
-      .select('*, inventory_journal_lines(count)')
-      .order('created_at', { ascending: false })
-      .limit(200)
-    if (error) {
-      console.error(error)
-      flashStockStatus('Could not load history — check the console for details.', false)
-    } else {
-      setJournalEntries(data ?? [])
-    }
-    setJournalLoading(false)
-  }
-
-  async function toggleJournalExpand(id) {
-    if (expandedJournalId === id) {
-      setExpandedJournalId(null)
-      return
-    }
-    setExpandedJournalId(id)
-    if (journalLines[id]) return
-    const { data, error } = await supabase
-      .from('inventory_journal_lines')
-      .select('*')
-      .eq('journal_id', id)
-      .order('id', { ascending: true })
-    if (error) {
-      console.error(error)
-      return
-    }
-    setJournalLines((prev) => ({ ...prev, [id]: data ?? [] }))
   }
 
   function flashPoStatus(msg, ok) {
@@ -3292,61 +2617,11 @@ function App() {
     setPoActionBusyId(request.id)
     try {
       if (enteringDone && isParts) {
-        const partLines = (request.purchase_request_lines || []).filter(lineCountsInStock)
-        if (partLines.length > 0) {
-          const gcsIds = [...new Set(partLines.map((l) => l.part_gcs_id))]
-          const { data: existingStock, error: stockError } = await supabase
-            .from('stock_on_hand')
-            .select('project_id, part_gcs_id, quantity')
-            .eq('project_id', request.project_id)
-            .in('part_gcs_id', gcsIds)
-          if (stockError) throw stockError
-
-          const prevMap = new Map((existingStock ?? []).map((s) => [s.part_gcs_id, s.quantity]))
-          const byPart = new Map()
-          for (const line of partLines) {
-            byPart.set(line.part_gcs_id, (byPart.get(line.part_gcs_id) ?? 0) + (Number(line.quantity) || 0))
-          }
-
-          const stockUpdates = [...byPart.entries()].map(([gcsId, qty]) => {
-            const before = prevMap.get(gcsId) ?? 0
-            return { part_gcs_id: gcsId, previous: before, next: before + qty }
-          })
-
-          const { error: upsertError } = await supabase
-            .from('stock_on_hand')
-            .upsert(
-              stockUpdates.map((u) => ({
-                project_id: request.project_id,
-                part_gcs_id: u.part_gcs_id,
-                quantity: u.next,
-              })),
-              { onConflict: 'project_id,part_gcs_id' }
-            )
-          if (upsertError) throw upsertError
-
-          const vendorName = request.vendors?.name || 'Unknown Vendor'
-          const { data: journalRow, error: journalError } = await supabase
-            .from('inventory_journal')
-            .insert({
-              entry_type: 'po_received',
-              note: `PO ${request.po_number || '#' + request.id} received from ${vendorName}`,
-            })
-            .select()
-            .single()
-          if (journalError) throw journalError
-
-          const { error: lineError } = await supabase.from('inventory_journal_lines').insert(
-            stockUpdates.map((u) => ({
-              journal_id: journalRow.id,
-              project_id: request.project_id,
-              part_gcs_id: u.part_gcs_id,
-              previous_quantity: u.previous,
-              new_quantity: u.next,
-            }))
-          )
-          if (lineError) throw lineError
-        }
+        // Spare lines add to this entity's count and land on its own site. One database
+        // function applies the rules and writes the History entry (does nothing if the PO
+        // has no spare lines).
+        const { error: receiveError } = await supabase.rpc('fn_receive_po_parts', { p_request_id: request.id })
+        if (receiveError) throw receiveError
       }
 
       const payload = isParts ? { parts_status: status } : { service_status: status }
@@ -4497,8 +3772,10 @@ function App() {
           ? 'Parts Master List'
           : activeTab === 'projects'
           ? `Required Inventory — ${selectedProject?.name ?? ''}`
-          : activeTab === 'stock'
-          ? 'Inventory On Hand'
+          : activeTab === 'ownership'
+          ? 'Ownership'
+          : activeTab === 'location'
+          ? 'Physical Location'
           : activeTab === 'users'
           ? 'Users'
           : activeTab === 'ledger'
@@ -4523,10 +3800,16 @@ function App() {
               Required Inventory
             </button>
             <button
-              className={'tab-btn' + (activeTab === 'stock' ? ' active' : '')}
-              onClick={() => setActiveTab('stock')}
+              className={'tab-btn' + (activeTab === 'ownership' ? ' active' : '')}
+              onClick={() => setActiveTab('ownership')}
             >
-              Inventory On Hand
+              Ownership
+            </button>
+            <button
+              className={'tab-btn' + (activeTab === 'location' ? ' active' : '')}
+              onClick={() => setActiveTab('location')}
+            >
+              Physical Location
             </button>
           </>
         )}
@@ -4718,78 +4001,42 @@ function App() {
         />
       )}
 
-      {activeTab === 'stock' && (
-        <InventoryOnHandTab
-          incomingByKey={incomingByKey}
-          canEditInventory={canEditInventory(loggedInUser)}
-          stockPanel={stockPanel}
-          resetStockPanel={resetStockPanel}
-          stockEditMode={stockEditMode}
-          locationEditMode={locationEditMode}
-          setStockPanel={setStockPanel}
-          runAction={runAction}
-          loadJournalEntries={loadJournalEntries}
-          savingStockEdits={savingStockEdits}
-          handleSaveStockEdits={handleSaveStockEdits}
-          adjustNote={adjustNote}
-          setAdjustNote={setAdjustNote}
-          stockEditFilter={stockEditFilter}
-          setStockEditFilter={setStockEditFilter}
-          handleCancelStockEdits={handleCancelStockEdits}
-          savingLocationEdits={savingLocationEdits}
-          handleSaveLocationEdits={handleSaveLocationEdits}
-          locationEditFilter={locationEditFilter}
-          setLocationEditFilter={setLocationEditFilter}
-          locationNote={locationNote}
-          setLocationNote={setLocationNote}
-          handleCancelLocationEdits={handleCancelLocationEdits}
-          stockStatus={stockStatus}
-          handleExportInventory={handleExportInventory}
-          handleUploadFileChange={handleUploadFileChange}
-          uploadErrors={uploadErrors}
-          uploadPreview={uploadPreview}
-          uploadNote={uploadNote}
-          setUploadNote={setUploadNote}
-          uploading={uploading}
-          handleConfirmUpload={handleConfirmUpload}
-          recordUseMode={recordUseMode}
-          cancelRecordPartUse={cancelRecordPartUse}
-          useNote={useNote}
-          setUseNote={setUseNote}
-          useQtyByPart={useQtyByPart}
-          updateUseQty={updateUseQty}
-          savingUsePartId={savingUsePartId}
-          handleRecordPartUse={handleRecordPartUse}
-          transferMode={transferMode}
-          cancelStockTransfer={cancelStockTransfer}
-          transferToProjectId={transferToProjectId}
-          setTransferToProjectId={setTransferToProjectId}
-          transferNote={transferNote}
-          setTransferNote={setTransferNote}
-          transferQtyByPart={transferQtyByPart}
-          updateTransferQty={updateTransferQty}
-          savingTransferPartId={savingTransferPartId}
-          handleStockTransfer={handleStockTransfer}
-          journalLoading={journalLoading}
-          journalEntries={journalEntries}
-          expandedJournalId={expandedJournalId}
-          toggleJournalExpand={toggleJournalExpand}
-          journalLines={journalLines}
+      {activeTab === 'ownership' && (
+        <OwnershipTab
+          canEdit={canEditInventory(loggedInUser)}
           projects={projects}
           parts={parts}
+          users={users}
+          stockItems={stockItems}
           stockLoading={stockLoading}
-          visibleDraftStockItems={visibleDraftStockItems}
-          visibleDraftLocationItems={visibleDraftLocationItems}
-          visibleStockItems={visibleStockItems}
-          stockViewProjectId={stockViewProjectId}
-          handleChangeStockViewProject={handleChangeStockViewProject}
-          stockViewFilter={stockViewFilter}
-          setStockViewFilter={setStockViewFilter}
-          gcsIdOptions={stockGcsIdOptions}
-          draftStockItems={draftStockItems}
-          updateStockDraftField={updateStockDraftField}
-          draftLocationItems={draftLocationItems}
-          updateLocationDraftField={updateLocationDraftField}
+          loadError={stockStatus && !stockStatus.ok ? stockStatus.msg : null}
+          incomingByKey={incomingByKey}
+          reloadStock={loadStock}
+          focusGcsId={focusPart?.tab === 'ownership' ? focusPart.gcsId : null}
+          onFocusDone={() => setFocusPart(null)}
+          onShowLocation={(gcsId) => {
+            setFocusPart({ tab: 'location', gcsId })
+            setActiveTab('location')
+          }}
+        />
+      )}
+
+      {activeTab === 'location' && (
+        <PhysicalLocationTab
+          canEdit={canEditInventory(loggedInUser)}
+          projects={projects}
+          parts={parts}
+          users={users}
+          stockItems={stockItems}
+          stockLoading={stockLoading}
+          loadError={stockStatus && !stockStatus.ok ? stockStatus.msg : null}
+          reloadStock={loadStock}
+          focusGcsId={focusPart?.tab === 'location' ? focusPart.gcsId : null}
+          onFocusDone={() => setFocusPart(null)}
+          onShowOwnership={(gcsId) => {
+            setFocusPart({ tab: 'ownership', gcsId })
+            setActiveTab('ownership')
+          }}
         />
       )}
 

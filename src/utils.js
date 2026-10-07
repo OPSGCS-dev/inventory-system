@@ -10,6 +10,8 @@ export const JOURNAL_ENTRY_TYPE_LABELS = {
   transfer: 'Transfer',
   count: 'Inventory Count',
   po_received: 'PO Received',
+  location_move: 'Location Move',
+  opening: 'Opening Balance',
 }
 
 export function journalEntryTypeLabel(entryType) {

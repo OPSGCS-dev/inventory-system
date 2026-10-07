@@ -43,6 +43,7 @@ import {
   paymentStatusLabel,
   computePaymentStatus,
   canViewPoLedger,
+  canViewAudit,
   TICKETING_URL,
 } from './utils'
 import MasterListTab from './tabs/MasterListTab'
@@ -53,6 +54,7 @@ import HistoryPanel from './tabs/HistoryPanel'
 import { fetchAllRows } from './stockUtils'
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import PoLedgerTab from './tabs/PoLedgerTab'
+import AuditTab from './tabs/AuditTab'
 import UsersTab from './tabs/UsersTab'
 import SignatureCard from './tabs/SignatureCard'
 import GlobalSearch from './tabs/GlobalSearch'
@@ -3790,6 +3792,8 @@ function App() {
           ? 'Users'
           : activeTab === 'ledger'
           ? 'PO Ledger'
+          : activeTab === 'audit'
+          ? 'Accounting Audit'
           : 'Purchase Orders'}
       </h1>
       <p className="sub">Backed by Supabase — data lives in the cloud, not just this page.</p>
@@ -3824,6 +3828,14 @@ function App() {
           Purchase Orders
           {poAttentionCounts.total > 0 && <span className="nav-badge">{poAttentionCounts.total}</span>}
         </button>
+        {canViewAudit(loggedInUser) && !isVendorUser(loggedInUser) && (
+          <button
+            className={'tab-btn' + (activeTab === 'audit' ? ' active' : '')}
+            onClick={() => setActiveTab('audit')}
+          >
+            Audit
+          </button>
+        )}
         {canViewPoLedger(loggedInUser) && (
           <button
             className={'tab-btn' + (activeTab === 'ledger' ? ' active' : '')}
@@ -4184,6 +4196,10 @@ function App() {
           handleClosePo={handleClosePo}
           poActionBusyId={poActionBusyId}
           handleDeletePurchaseRequest={handleDeletePurchaseRequest}        />
+      )}
+
+      {activeTab === 'audit' && canViewAudit(loggedInUser) && (
+        <AuditTab stockItems={stockItems} stockLoading={stockLoading} parts={parts} userName={userDisplayName(loggedInUser)} />
       )}
 
       {activeTab === 'ledger' && canViewPoLedger(loggedInUser) && (

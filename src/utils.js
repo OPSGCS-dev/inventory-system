@@ -511,6 +511,16 @@ export function canEditPurchaseRequest(user, request) {
   return false
 }
 
+// Accounting Audit (inventory vs accounting's books): admins and the accounting roles.
+export function canViewAudit(user) {
+  return (
+    isAdmin(user) ||
+    userHasRole(user, 'invoice_matching') ||
+    userHasRole(user, 'invoice_approval') ||
+    userHasRole(user, 'payment')
+  )
+}
+
 // The PO Ledger is for accounting only: anyone holding invoice matching,
 // invoice approval or payment. Company-wide view -- the ledger isn't narrowed
 // by entity assignment, since accounting reconciles across every entity.

@@ -23,7 +23,8 @@ function PhysicalLocationTab({
   onFocusDone,
   onShowOwnership,
 }) {
-  const [view, setView] = useState('places')  const [mode, setMode] = useState(null) // null | 'move' | 'use'
+  const [view, setView] = useState('places')
+  const [mode, setMode] = useState(null) // null | 'move' | 'use'
   const [status, setStatus] = useState(null)
   const [gcsFilter, setGcsFilter] = useState('')
   const [placeFilter, setPlaceFilter] = useState('')

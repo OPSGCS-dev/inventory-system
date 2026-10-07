@@ -4,6 +4,19 @@
 // (the site that entity owns). It's what the location dropdowns hold.
 import { shortProjectName } from './utils'
 
+// PostgREST returns at most 1,000 rows per request, silently. Read a table in pages so a
+// list that grows past that is never cut off. `build` makes a fresh query each call;
+// order by a unique key so pages don't overlap.
+export async function fetchAllRows(build, pageSize = 1000) {
+  const rows = []
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await build().range(from, from + pageSize - 1)
+    if (error) return { data: null, error }
+    rows.push(...(data ?? []))
+    if (!data || data.length < pageSize) return { data: rows, error: null }
+  }
+}
+
 export const STORAGE = 'storage'
 export const BARN = 'barn'
 export const siteKey = (projectId) => `site:${projectId}`

@@ -50,6 +50,7 @@ import RequiredInventoryTab from './tabs/RequiredInventoryTab'
 import OwnershipTab from './tabs/OwnershipTab'
 import PhysicalLocationTab from './tabs/PhysicalLocationTab'
 import HistoryPanel from './tabs/HistoryPanel'
+import { fetchAllRows } from './stockUtils'
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import PoLedgerTab from './tabs/PoLedgerTab'
 import UsersTab from './tabs/UsersTab'
@@ -346,9 +347,9 @@ function App() {
   async function loadStock() {
     setStockLoading(true)
     const [ppRes, sohRes, locRes] = await Promise.all([
-      supabase.from('project_parts').select('project_id, part_gcs_id, target_stock, shared'),
-      supabase.from('stock_on_hand').select('project_id, part_gcs_id, quantity'),
-      supabase.from('stock_location').select('part_gcs_id, location, project_id, quantity'),
+      fetchAllRows(() => supabase.from('project_parts').select('project_id, part_gcs_id, target_stock, shared').order('project_id').order('part_gcs_id')),
+      fetchAllRows(() => supabase.from('stock_on_hand').select('project_id, part_gcs_id, quantity').order('project_id').order('part_gcs_id')),
+      fetchAllRows(() => supabase.from('stock_location').select('part_gcs_id, location, project_id, quantity').order('part_gcs_id').order('location').order('project_id')),
     ])
 
     if (ppRes.error || sohRes.error || locRes.error) {

@@ -47,7 +47,11 @@ let sql = `-- Ownership and Physical Location, part 2 of 3: opening balances.
 -- "opening" entry. It aborts, changing nothing, if an entity name can't be matched to exactly one entity,
 -- a part isn't in the Master List, or ownership and locations don't add up.
 
-begin;
+-- The whole import is ONE statement (a single DO block), so it behaves the same whether the SQL editor
+-- runs it as a script or statement by statement, and it is all-or-nothing.
+do $import$
+declare r record; missing integer[]; jid bigint; n_changed integer; n_new_pp integer;
+begin
 
 create temp table _site_map (site text primary key, patterns text[] not null) on commit drop;
 insert into _site_map (site, patterns) values
@@ -57,14 +61,10 @@ create temp table _proj on commit drop as
   select m.site, array(select p.id from public.projects p where p.name ilike any (m.patterns) order by p.id) as ids
   from _site_map m;
 
-do $$
-declare r record;
-begin
-  for r in select site, ids from _proj where coalesce(cardinality(ids), 0) <> 1 loop
-    raise exception 'Entity mapping failed for sheet site "%": matched % entities (%). Fix opening_import_config.json -> sites.',
-      r.site, coalesce(cardinality(r.ids), 0), r.ids;
-  end loop;
-end $$;
+for r in select p.site, p.ids from _proj p where coalesce(cardinality(p.ids), 0) <> 1 loop
+  raise exception 'Entity mapping failed for sheet site "%": matched % entities (%). Fix opening_import_config.json -> sites.',
+    r.site, coalesce(cardinality(r.ids), 0), r.ids;
+end loop;
 
 create temp table _owner (site text not null, gcs integer not null, qty integer not null) on commit drop;
 ${chunk(ownerRows, 400).map((c) => `insert into _owner (site, gcs, qty) values\n${c.map((o) => `  (${sqlStr(o.site)}, ${o.gcs}, ${o.qty})`).join(',\n')};`).join('\n')}
@@ -72,9 +72,6 @@ ${chunk(ownerRows, 400).map((c) => `insert into _owner (site, gcs, qty) values\n
 create temp table _loc (location text not null, site text, gcs integer not null, qty integer not null) on commit drop;
 ${chunk(finalLoc, 400).map((c) => `insert into _loc (location, site, gcs, qty) values\n${c.map((l) => `  (${sqlStr(l.location)}, ${l.site ? sqlStr(l.site) : 'null'}, ${l.gcs}, ${l.qty})`).join(',\n')};`).join('\n')}
 
-do $$
-declare missing integer[]; jid bigint; n_before integer; n_changed integer; n_new_pp integer;
-begin
   select array_agg(distinct o.gcs order by o.gcs) into missing
   from _owner o where not exists (select 1 from public.parts p where p.gcs_id = o.gcs);
   if missing is not null then
@@ -123,9 +120,8 @@ begin
   perform inv_private.assert_part_ok(g) from (select distinct part_gcs_id as g from public.stock_on_hand union select distinct part_gcs_id from public.stock_location) x;
 
   raise notice 'opening import ok: % ownership changes recorded, % Required Inventory rows added', n_changed, n_new_pp;
-end $$;
-
-commit;
+end
+$import$;
 `
 
 writeFileSync(outPath, sql)

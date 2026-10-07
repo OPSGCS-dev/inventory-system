@@ -12,7 +12,7 @@
     "RAY (NB1)": ["%ray%"],
     "BRUINING": ["%stormont%", "%bruining%"],
     "UNITY": ["%unity%"],
-    "FLOPS": ["%flops%", "%firelight%"]
+    "FLOPS": ["FLOPS"]
   },
   "_skipSites": "Sheet sites to leave out of the import entirely (their stock is not imported). Use this instead of creating an entity for a site that isn't in the app.",
   "skipSites": [],

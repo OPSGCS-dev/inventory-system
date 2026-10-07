@@ -58,7 +58,7 @@ if (!gcsKey || !entKey || !qtyKey) throw new Error('The CSV needs GCS P/N, Entit
 const stock = parsed.data
   .map((r) => ({ gcs: parseInt(r[gcsKey], 10), entity: String(r[entKey]).trim(), qty: parseInt(r[qtyKey], 10) }))
   .filter((r) => !Number.isNaN(r.gcs) && !Number.isNaN(r.qty) && r.entity)
-const entities = [...new Set(stock.map((s) => s.entity))].sort()
+const entities = [...new Set([...stock.map((s) => s.entity), ...(order.extraEntities || [])])].sort()
 
 // parts: the sheet's master data, plus a placeholder for any P/N that's in the app but not the sheet
 const master = loadPartsMaster(xlsxPath)

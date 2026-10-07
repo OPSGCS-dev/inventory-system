@@ -1,0 +1,26 @@
+{
+  "sheet": "OPS - GM SPARE PART LIST",
+  "sheetDate": "2026-09-08",
+  "_sites": "Sheet site column name -> patterns (ILIKE) used to find that entity's row in the database 'projects' table. The import stops if a pattern matches zero or more than one entity, so check these against your entity names.",
+  "sites": {
+    "RUTLEY": ["%rutley%"],
+    "SANDHURST": ["%sandhurst%"],
+    "ALFRED": ["%alfred%"],
+    "HWY 2S": ["%hwy%2s%"],
+    "NORFOLK": ["%norfolk%"],
+    "ODESSA": ["%odessa%"],
+    "RAY (NB1)": ["%ray%"],
+    "BRUINING": ["%bruining%"],
+    "UNITY": ["%unity%"],
+    "FLOPS": ["%flops%", "%firelight%"]
+  },
+  "_overrides": "Per part (GCS ID): decisions for rows the general rules can't place. moveOwnership moves all of one site's units to another site's ownership (the units then sit on the new owner's site). storage puts every owner's units in Storage.",
+  "overrides": {
+    "12": { "moveOwnership": { "from": "RUTLEY", "to": "UNITY" } },
+    "14": { "moveOwnership": { "from": "RUTLEY", "to": "UNITY" } },
+    "20": { "moveOwnership": { "from": "RUTLEY", "to": "RAY (NB1)" } },
+    "26": { "moveOwnership": { "from": "RUTLEY", "to": "HWY 2S" } },
+    "27": { "moveOwnership": { "from": "RUTLEY", "to": "HWY 2S" } },
+    "376": { "storage": true }
+  }
+}

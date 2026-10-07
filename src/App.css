@@ -50,6 +50,31 @@ p.sub { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
   background: #f2ece2;
 }
 
+.sub-tab-row {
+  display: flex;
+  gap: 4px;
+  margin: -4px 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+.sub-tab-btn {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  padding: 8px 14px;
+  font-size: 14px;
+  margin-bottom: -1px;
+}
+.sub-tab-btn.active {
+  color: var(--accent-dark);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.sub-tab-btn:not(.active):hover {
+  background: #f2ece2;
+}
+
 .nav-badge {
   display: inline-block;
   margin-left: 6px;

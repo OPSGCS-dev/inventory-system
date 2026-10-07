@@ -121,6 +121,12 @@ function App() {
   const [stockStatus, setStockStatus] = useState(null)
   // set when a part is clicked on one stock tab, to scroll to and flash the same part on the other
   const [focusPart, setFocusPart] = useState(null)
+  // Inventory On Hand has two sub-tabs; remember the last one used so the main tab reopens on it
+  const [stockSubTab, setStockSubTab] = useState('ownership')
+  const inStockTab = activeTab === 'ownership' || activeTab === 'location'
+  useEffect(() => {
+    if (activeTab === 'ownership' || activeTab === 'location') setStockSubTab(activeTab)
+  }, [activeTab])
 
 
 
@@ -3773,9 +3779,9 @@ function App() {
           : activeTab === 'projects'
           ? `Required Inventory — ${selectedProject?.name ?? ''}`
           : activeTab === 'ownership'
-          ? 'Ownership'
+          ? 'Inventory On Hand — Ownership'
           : activeTab === 'location'
-          ? 'Physical Location'
+          ? 'Inventory On Hand — Physical Location'
           : activeTab === 'users'
           ? 'Users'
           : activeTab === 'ledger'
@@ -3800,16 +3806,10 @@ function App() {
               Required Inventory
             </button>
             <button
-              className={'tab-btn' + (activeTab === 'ownership' ? ' active' : '')}
-              onClick={() => setActiveTab('ownership')}
+              className={'tab-btn' + (inStockTab ? ' active' : '')}
+              onClick={() => setActiveTab(stockSubTab)}
             >
-              Ownership
-            </button>
-            <button
-              className={'tab-btn' + (activeTab === 'location' ? ' active' : '')}
-              onClick={() => setActiveTab('location')}
-            >
-              Physical Location
+              Inventory On Hand
             </button>
           </>
         )}
@@ -3999,6 +3999,23 @@ function App() {
           updateProjectRequired={updateProjectRequired}
           updateProjectDraftField={updateProjectDraftField}
         />
+      )}
+
+      {inStockTab && (
+        <div className="sub-tab-row">
+          <button
+            className={'sub-tab-btn' + (activeTab === 'ownership' ? ' active' : '')}
+            onClick={() => setActiveTab('ownership')}
+          >
+            Ownership
+          </button>
+          <button
+            className={'sub-tab-btn' + (activeTab === 'location' ? ' active' : '')}
+            onClick={() => setActiveTab('location')}
+          >
+            Physical Location
+          </button>
+        </div>
       )}
 
       {activeTab === 'ownership' && (

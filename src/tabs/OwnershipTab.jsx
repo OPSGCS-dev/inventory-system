@@ -3,7 +3,6 @@ import Papa from 'papaparse'
 import { supabase } from '../supabaseClient'
 import { computeTargetSum, shortProjectName, normalizeHeader } from '../utils'
 import { downloadCsv, offSiteUnits, ownedBy, rpcErrorText, totalOwned } from '../stockUtils'
-import HistoryPanel from './HistoryPanel'
 
 const INCOMING_BG = '#fff3a8'
 
@@ -24,7 +23,7 @@ function OwnershipTab({
   onFocusDone,
   onShowLocation,
 }) {
-  const [view, setView] = useState('parts') // 'parts' | 'count' | 'history'
+  const [view, setView] = useState('parts') // 'parts' | 'count'
   const [status, setStatus] = useState(null)
   const [entityFilter, setEntityFilter] = useState('all')
   const [gcsFilter, setGcsFilter] = useState('')
@@ -343,9 +342,6 @@ function OwnershipTab({
               </button>
             </>
           )}
-          <button className={view === 'history' ? 'btn-primary' : 'btn-secondary'} onClick={() => showView('history')}>
-            History
-          </button>
         </div>
 
         {editMode && (
@@ -471,8 +467,6 @@ function OwnershipTab({
           )}
         </div>
       )}
-
-      {view === 'history' && <HistoryPanel projects={projects} parts={parts} users={users} />}
 
       {(view === 'parts' || editMode) && (
         <div className="card">

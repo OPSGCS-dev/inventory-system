@@ -5,7 +5,6 @@ import { shortProjectName } from '../utils'
 import {
   BARN, STORAGE, allLocationKeys, downloadCsv, locLabel, offSiteUnits, parseLocKey, qtyAt, rpcErrorText, siteKey,
 } from '../stockUtils'
-import HistoryPanel from './HistoryPanel'
 
 // Where every part physically sits: Storage, the Barn, or on an entity's own site.
 // A site can only hold parts that entity owns, so moving a part between sites means
@@ -24,8 +23,7 @@ function PhysicalLocationTab({
   onFocusDone,
   onShowOwnership,
 }) {
-  const [view, setView] = useState('places') // 'places' | 'history'
-  const [mode, setMode] = useState(null) // null | 'move' | 'use'
+  const [view, setView] = useState('places')  const [mode, setMode] = useState(null) // null | 'move' | 'use'
   const [status, setStatus] = useState(null)
   const [gcsFilter, setGcsFilter] = useState('')
   const [placeFilter, setPlaceFilter] = useState('')
@@ -191,9 +189,6 @@ function PhysicalLocationTab({
               </button>
             </>
           )}
-          <button className={view === 'history' ? 'btn-primary' : 'btn-secondary'} onClick={() => showView('history')}>
-            History
-          </button>
         </div>
         {mode && (
           <div className="edit-toolbar" style={{ marginTop: 8 }}>
@@ -203,8 +198,6 @@ function PhysicalLocationTab({
         )}
         {(status || loadError) && <div className={'status ' + (status && status.ok ? 'ok' : 'err')}>{status ? status.msg : loadError}</div>}
       </div>
-
-      {view === 'history' && <HistoryPanel projects={projects} parts={parts} users={users} />}
 
       {view === 'places' && (
         <div className="card">

@@ -49,6 +49,7 @@ import MasterListTab from './tabs/MasterListTab'
 import RequiredInventoryTab from './tabs/RequiredInventoryTab'
 import OwnershipTab from './tabs/OwnershipTab'
 import PhysicalLocationTab from './tabs/PhysicalLocationTab'
+import HistoryPanel from './tabs/HistoryPanel'
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import PoLedgerTab from './tabs/PoLedgerTab'
 import UsersTab from './tabs/UsersTab'
@@ -123,9 +124,9 @@ function App() {
   const [focusPart, setFocusPart] = useState(null)
   // Inventory On Hand has two sub-tabs; remember the last one used so the main tab reopens on it
   const [stockSubTab, setStockSubTab] = useState('ownership')
-  const inStockTab = activeTab === 'ownership' || activeTab === 'location'
+  const inStockTab = activeTab === 'ownership' || activeTab === 'location' || activeTab === 'stockHistory'
   useEffect(() => {
-    if (activeTab === 'ownership' || activeTab === 'location') setStockSubTab(activeTab)
+    if (activeTab === 'ownership' || activeTab === 'location' || activeTab === 'stockHistory') setStockSubTab(activeTab)
   }, [activeTab])
 
 
@@ -3782,6 +3783,8 @@ function App() {
           ? 'Inventory On Hand — Ownership'
           : activeTab === 'location'
           ? 'Inventory On Hand — Physical Location'
+          : activeTab === 'stockHistory'
+          ? 'Inventory On Hand — History'
           : activeTab === 'users'
           ? 'Users'
           : activeTab === 'ledger'
@@ -4015,8 +4018,16 @@ function App() {
           >
             Physical Location
           </button>
+          <button
+            className={'sub-tab-btn' + (activeTab === 'stockHistory' ? ' active' : '')}
+            onClick={() => setActiveTab('stockHistory')}
+          >
+            History
+          </button>
         </div>
       )}
+
+      {activeTab === 'stockHistory' && <HistoryPanel projects={projects} parts={parts} users={users} />}
 
       {activeTab === 'ownership' && (
         <OwnershipTab

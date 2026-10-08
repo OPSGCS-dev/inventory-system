@@ -91,15 +91,29 @@ SQL added in this round (run in this order if not already run): `add_part_images
 
 ## What to build next
 
-Nothing is written down as "next" in the repo, so this is my reading of what is unfinished. Confirm with the user:
+**The next big builds are on the payment / accounting side.** The user has said so but has not yet specified the
+features, so ask what the first piece is before designing anything. Don't start the Accounting Audit tab yet; the user
+has put it after this.
 
-1. **Make the Accounting Audit tab real.** `AuditTab` opens with made-up books data and keeps resolutions and the
-   sign-off in browser memory only. It needs tables for uploaded books data, per-part resolutions with reasons, and
-   sign-off, plus entries in History. This is the likeliest next feature.
-2. **Finish the ownership/location cutover.** After the recount: regenerate the opening import, back up, run schema +
-   import, deploy, then `ownership_location_03_lock_stock_writes.sql`. PO receiving through the Purchase Orders screen
-   has not been exercised end to end. Check whether this has already happened before touching it.
-3. **Docs:** the presenter guide and handout (`Projects/ticket-system/.claude/scratch/gcs-*.html`) don't cover the new tabs.
-4. **Small follow-ups seen along the way:** draft POs have no "View PO" preview (so no watermark to see); transfer POs
-   have no budget category; POs created from a ticket show the old `TK-00042` label; Change History is visible only to
-   inventory editors; this README should be replaced.
+What exists today on that side, so new work extends it rather than duplicating it:
+
+- **Invoices and receipts** are tables (`invoices`, `receipts`) hanging off a PO; an invoice is matched to a receipt
+  (`InvoiceMatchChip`, `allInvoicesFullyResolved`), then approved (`invoice_approval` role), then marked paid
+  (`payment` role). `payment_status` on the PO is a manual label; closing a PO (`canClosePo`) requires every
+  receipt/invoice matched, approved and paid. Views: **My Invoices for Approval**, **My Invoices to Pay**
+  (`MyInvoicesForApprovalTable`, `MyInvoicesToPayTable`, both with date sort/filter and totals).
+- **Money on a PO:** line items, markup, shipping, credit, tax and currency (`computePoTotals`); Not to Exceed
+  spending cap with `compareInvoicesToPo`; `chargeable_expense`; budget categories and sub-categories (a category is now
+  required to save a draft); the invoice email address a PO tells vendors to use.
+- **Reporting:** `PoLedgerTab` lists issued/closed POs with totals, ledger categories and CSV export.
+- **Inter-entity charges:** stock transfers now create closed POs (sender as vendor, part Last Cost as price, payment left
+  Unpaid). Nothing yet settles or reports on those.
+- Open edges worth knowing: payment is recorded per invoice but there is no payment record (date, method, reference),
+  no batch payment, no accounting export, and the transfer POs have no budget category.
+
+Other unfinished items, lower priority: the Accounting Audit tab (`AuditTab`) still runs on made-up data held in browser
+memory, and is next after payments; the ownership/location cutover after the recount (check whether it has already
+happened before touching it; PO receiving through the screen has not been exercised end to end); the presenter guide and
+handout (`Projects/ticket-system/.claude/scratch/gcs-*.html`) don't cover the new tabs; draft POs have no "View PO"
+preview; POs created from a ticket show the old `TK-00042` label; Change History is visible only to inventory editors;
+this README should be replaced.

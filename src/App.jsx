@@ -47,6 +47,8 @@ import {
   workStatusLabel,
   paymentStatusLabel,
   computePaymentStatus,
+  poStatusLabel,
+  voidBlockReason,
   canViewPoLedger,
   canViewAudit,
   TICKETING_URL,
@@ -2371,9 +2373,12 @@ function App() {
     }
   }
 
-  // Admin-only. Cascades to the request's own line items (on delete cascade),
-  // but doesn't remove any uploaded receipt/invoice PDF from Storage -- those
-  // just become unreferenced files there.
+  // Admin-only. TEMPORARY, while testing: delete works at any status, alongside Void
+  // (handleVoidPurchaseRequest), which is what keeps the row and its activity log for
+  // accounting. Once testing is over this should go back to drafts only (the guard here
+  // and the button in PurchaseOrdersTab). Cascades to the request's own line items
+  // (on delete cascade), but doesn't remove any uploaded receipt/invoice PDF from
+  // Storage -- those just become unreferenced files there.
   async function handleDeletePurchaseRequest(request) {
     if (!isAdmin(loggedInUser)) return
     if (
@@ -2399,6 +2404,47 @@ function App() {
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not delete — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // Admin-only. Keeps the PO, its lines and its activity log; just flips it to
+  // 'voided' with who/when/why (see voidBlockReason for what stops it).
+  async function handleVoidPurchaseRequest(request) {
+    if (!loggedInUser) return
+    const blocked = voidBlockReason(loggedInUser, request)
+    if (blocked) {
+      flashPoStatus(blocked, false)
+      return
+    }
+    const reason = window.prompt(
+      `Why is ${request.po_number || `request #${request.id}`} being voided? This is kept on the PO for accounting. (required)`
+    )
+    if (reason === null) return
+    if (!reason.trim()) {
+      flashPoStatus('A reason is required to void a PO.', false)
+      return
+    }
+    setPoActionBusyId(request.id)
+    try {
+      const { error } = await supabase
+        .from('purchase_requests')
+        .update({
+          status: 'voided',
+          voided_by: loggedInUser.id,
+          voided_at: new Date().toISOString(),
+          void_reason: reason.trim(),
+          on_hold: false,
+        })
+        .eq('id', request.id)
+      if (error) throw error
+      await logPoActivity(request.id, `Voided (was ${poStatusLabel(request.status)}): ${reason.trim()}`)
+      flashPoStatus('PO voided.', true)
+      await refreshPurchaseRequest(request.id)
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not void — check the console for details.', false)
     } finally {
       setPoActionBusyId(null)
     }
@@ -4388,7 +4434,9 @@ function App() {
           handleMatchInvoiceReceipt={handleMatchInvoiceReceipt}
           handleClosePo={handleClosePo}
           poActionBusyId={poActionBusyId}
-          handleDeletePurchaseRequest={handleDeletePurchaseRequest}        />
+          handleDeletePurchaseRequest={handleDeletePurchaseRequest}
+          handleVoidPurchaseRequest={handleVoidPurchaseRequest}
+        />
       )}
 
       {activeTab === 'audit' && canViewAudit(loggedInUser) && (

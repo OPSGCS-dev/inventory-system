@@ -1105,11 +1105,6 @@ function PurchaseOrdersTab({
               </ol>
 
               <div className="po-print-bottom">
-                <div className="po-print-address po-print-address-small">
-                  {COMPANY_ADDRESS_BLOCK.map((line, idx) => (
-                    <div key={idx}>{line}</div>
-                  ))}
-                </div>
                 <div className="po-print-reference">
                   Additional Reference: Vendor Quote # {r.vendor_quote_number || '—'}
                 </div>

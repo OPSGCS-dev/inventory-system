@@ -786,7 +786,6 @@ table.po-summary-table {
 }
 .po-print-project-name { font-weight: 700; font-size: 15px; margin: 0 0 6px; }
 .po-print-address { font-size: 12px; color: var(--muted); line-height: 1.5; }
-.po-print-address-small { font-size: 11px; }
 .po-print-header-right { text-align: right; }
 .po-print-title { font-size: 26px; margin: 0 0 10px; color: var(--ink); }
 .po-print-meta { margin-left: auto; border-collapse: collapse; }
@@ -846,7 +845,7 @@ table.po-summary-table {
 
 .po-print-bottom {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: flex-end;
   gap: 24px;
   margin-bottom: 20px;

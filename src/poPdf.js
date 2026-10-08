@@ -215,11 +215,9 @@ export async function buildPoPdf(request, stamp = null) {
   })
   y += 10
   needRoom(100)
-  doc.setFontSize(8).setTextColor(MUTED)
-  COMPANY_ADDRESS_BLOCK.forEach((line, i) => text(line, M, y + i * 11))
   doc.setFontSize(9).setTextColor(INK)
   text(`Additional Reference: Vendor Quote # ${request.vendor_quote_number || '-'}`, pageW - M, y + 8, { align: 'right' })
-  y += COMPANY_ADDRESS_BLOCK.length * 11 + 28
+  y += 28
   if (!stamp) {
     text('Authorized by: ____________________     Date: ____________________', M, y)
   } else {

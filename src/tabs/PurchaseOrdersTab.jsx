@@ -59,6 +59,7 @@ import {
   TICKETING_URL,
   isAdmin,
   isNotToExceed,
+  isPrepaid,
   computeInvoicedTotal,
   isOverSpendingCap,
   canApproveVendors,
@@ -268,6 +269,9 @@ function PurchaseOrdersTab({
   poDraftCredit,
   setPoDraftCredit,
   poDraftNotToExceed,
+  poDraftPrepaid,
+  setPoDraftPrepaid,
+  handleSetPrepaid,
   setPoDraftNotToExceed,
   poDraftSpendingCap,
   setPoDraftSpendingCap,
@@ -709,6 +713,7 @@ function PurchaseOrdersTab({
             </h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {isNotToExceed(r) && <span className="po-badge po-category-badge-nte">Not to Exceed</span>}
+              {isPrepaid(r) && <span className="po-badge po-category-badge-prepaid">Pre-paid</span>}
               <span className={`po-badge po-badge-${computePoProgressStage(r)}`}>
                 {PO_PROGRESS_STAGE_LABELS[computePoProgressStage(r)] || poStatusLabel(r.status)}
               </span>
@@ -1527,6 +1532,7 @@ function PurchaseOrdersTab({
               handleAddReceipt={handleAddReceipt}
               handleDeleteReceipt={handleDeleteReceipt}
               handleMatchInvoiceReceipt={handleMatchInvoiceReceipt}
+              handleSetPrepaid={handleSetPrepaid}
               poPdfRequest={withShownPoNumber(r)}
               poStamp={approvalStamp(users, r)}
             />
@@ -1923,6 +1929,26 @@ function PurchaseOrdersTab({
                   value={poDraftShippingHandling}
                   onChange={(e) => setPoDraftShippingHandling(e.target.value)}
                 />
+              </div>
+            </div>
+          )}
+
+          {formHasParts && (
+            <div className="field-row" style={{ marginTop: 12 }}>
+              <div>
+                <label htmlFor="po_draft_prepaid" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    id="po_draft_prepaid"
+                    type="checkbox"
+                    checked={poDraftPrepaid}
+                    onChange={(e) => setPoDraftPrepaid(e.target.checked)}
+                  />
+                  Pre-paid
+                </label>
+                <p className="sub" style={{ margin: '4px 0 0' }}>
+                  The vendor is paid up front, so there won't be a receipt: its invoices go to Invoice Approval
+                  without one being matched.
+                </p>
               </div>
             </div>
           )}

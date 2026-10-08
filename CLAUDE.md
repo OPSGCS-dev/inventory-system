@@ -72,6 +72,11 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **Pre-paid parts POs:** `purchase_requests.prepaid` (`add_po_prepaid.sql`). A checkbox on a parts request (or, for an issued PO,
+  a toggle in the Receipts & Invoices panel for accounting/admin) means there will be no receipts: `isPrepaid` /
+  `canApproveInvoice` let an invoice go straight to Invoice Approval without a matched receipt, and `allInvoicesFullyResolved`
+  needs only every invoice approved and paid (parts must still be received to close). Ignored on services-only POs. The save only
+  sends `prepaid` when it changes, so requests still save before the SQL has been run.
 - **Vendor approval guard:** a vendor that is still pending/rejected must not get a request approved or a PO issued. That
   rule used to live only in the browser, and failed open when the vendor row was missing. Now a trigger on
   `purchase_requests` enforces it (`add_vendor_approval_guard.sql`; needs `add_vendor_approval.sql`), and
@@ -100,7 +105,7 @@ Most recent first, all on `main`:
   Audit tab (demo); security hardening (`security_0*.sql`).
 
 SQL added in this round (run in this order if not already run): `add_part_images`, `add_app_settings`, `add_transfer_pos`
-(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`.
+(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`.
 
 ## What to build next
 

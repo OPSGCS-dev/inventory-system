@@ -190,6 +190,7 @@ function App() {
   const [poDraftShippingHandling, setPoDraftShippingHandling] = useState('0')
   const [poDraftCredit, setPoDraftCredit] = useState('0')
   const [poDraftNotToExceed, setPoDraftNotToExceed] = useState(false)
+  const [poDraftPrepaid, setPoDraftPrepaid] = useState(false)
   const [poDraftSpendingCap, setPoDraftSpendingCap] = useState('')
   const [poDraftCurrency, setPoDraftCurrency] = useState('CAD')
   const [poDraftLines, setPoDraftLines] = useState([])
@@ -1704,8 +1705,9 @@ function App() {
     const pairs = []
     for (const r of purchaseRequests) {
       for (const invoice of r.invoices || []) {
-        // Invoice Approval can be limited to certain entities, like the other steps.
-        if (!invoice.approved && invoice.matched_receipt_id && canApproveInvoice(loggedInUserWithScopes, invoice, r)) {
+        // Invoice Approval can be limited to certain entities, like the other steps. An invoice
+        // needs its receipt matched first, except on a pre-paid PO (canApproveInvoice knows).
+        if (!invoice.approved && canApproveInvoice(loggedInUserWithScopes, invoice, r)) {
           pairs.push({ request: r, invoice })
         }
       }
@@ -1803,6 +1805,7 @@ function App() {
         existing.credit === null || existing.credit === undefined ? '0' : String(existing.credit)
       )
       setPoDraftNotToExceed(Boolean(existing.not_to_exceed))
+      setPoDraftPrepaid(Boolean(existing.prepaid))
       setPoDraftSpendingCap(
         existing.spending_cap === null || existing.spending_cap === undefined
           ? ''
@@ -1855,6 +1858,7 @@ function App() {
       setPoDraftShippingHandling('0')
       setPoDraftCredit('0')
       setPoDraftNotToExceed(false)
+      setPoDraftPrepaid(false)
       setPoDraftSpendingCap('')
       setPoDraftCurrency('CAD')
       // Starts with no lines: the person adds the parts and/or services it needs.
@@ -2150,6 +2154,12 @@ function App() {
     const notToExceedToSave = hasServiceLines && poDraftNotToExceed
     const spendingCapToSave = notToExceedToSave && poDraftSpendingCap !== '' ? Number(poDraftSpendingCap) : null
 
+    // Pre-paid only applies to a PO with parts. It's only sent when it changes, so requests keep
+    // saving before add_po_prepaid.sql has been run (until then it simply can't be turned on).
+    const priorPrepaid = poDraftId ? Boolean(purchaseRequests.find((r) => r.id === poDraftId)?.prepaid) : false
+    const prepaidToSave = hasPartLines && poDraftPrepaid
+    const prepaidFields = prepaidToSave !== priorPrepaid ? { prepaid: prepaidToSave } : {}
+
     // The invoice address is only sent when it isn't the default (or is being put back to it from
     // something else), so POs on the default keep saving even before add_po_invoice_email.sql has been run.
     const priorInvoiceEmail = poDraftId ? purchaseRequests.find((r) => r.id === poDraftId)?.invoice_email : null
@@ -2202,6 +2212,7 @@ function App() {
             budget_subcategory_id: poDraftBudgetSubcategoryId,
             chargeable_expense: poDraftChargeableExpense,
             ...invoiceEmailFields,
+            ...prepaidFields,
             quote_file_url: quoteFileUrl,
             quote_file_name: quoteFileName,
             currency: poDraftCurrency.trim() || 'CAD',
@@ -2286,6 +2297,7 @@ function App() {
             budget_subcategory_id: poDraftBudgetSubcategoryId,
             chargeable_expense: poDraftChargeableExpense,
             ...invoiceEmailFields,
+            ...prepaidFields,
             vendor_quote_number: poDraftVendorQuoteNumber.trim() || null,
             quote_file_url: quoteFileUrl,
             quote_file_name: quoteFileName,
@@ -3026,6 +3038,33 @@ function App() {
       console.error(error)
       flashPoStatus('Could not add the invoice — check the console for details.', false)
       return false
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // Pre-paid is normally chosen on the request, but accounting can also set it on an
+  // issued PO -- a vendor often asks to be paid up front after the PO is already out.
+  async function handleSetPrepaid(request, checked) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    setPoActionBusyId(request.id)
+    try {
+      const { data, error } = await supabase.from('purchase_requests').update({ prepaid: checked }).eq('id', request.id).select('id')
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error('The database did not apply the change (no rows were updated).')
+      await logPoActivity(request.id, checked ? 'Marked pre-paid' : 'Pre-paid cleared')
+      flashPoStatus(checked ? 'Marked pre-paid — invoices no longer need a receipt matched.' : 'Pre-paid cleared.', true)
+      await refreshPurchaseRequest(request.id)
+    } catch (error) {
+      console.error(error)
+      const missing = error?.code === '42703' || /prepaid/i.test(error?.message || '')
+      flashPoStatus(
+        missing ? "Pre-paid isn't set up in the database yet — run add_po_prepaid.sql." : 'Could not update pre-paid — check the console for details.',
+        false
+      )
     } finally {
       setPoActionBusyId(null)
     }
@@ -4417,6 +4456,8 @@ function App() {
           poDraftCredit={poDraftCredit}
           setPoDraftCredit={setPoDraftCredit}
           poDraftNotToExceed={poDraftNotToExceed}
+          poDraftPrepaid={poDraftPrepaid}
+          setPoDraftPrepaid={setPoDraftPrepaid}
           setPoDraftNotToExceed={setPoDraftNotToExceed}
           poDraftSpendingCap={poDraftSpendingCap}
           setPoDraftSpendingCap={setPoDraftSpendingCap}
@@ -4452,6 +4493,7 @@ function App() {
           handleAddReceipt={handleAddReceipt}
           handleDeleteReceipt={handleDeleteReceipt}
           handleMatchInvoiceReceipt={handleMatchInvoiceReceipt}
+          handleSetPrepaid={handleSetPrepaid}
           handleClosePo={handleClosePo}
           poActionBusyId={poActionBusyId}
           handleDeletePurchaseRequest={handleDeletePurchaseRequest}

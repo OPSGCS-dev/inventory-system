@@ -177,13 +177,28 @@ export function canMarkPaymentPaid(request) {
   return invoices.length > 0 && invoices.every((inv) => inv.paid)
 }
 
+// A parts PO the vendor is paid for up front. There is no receipt for its
+// invoices to be matched to, so they skip that step: they go to Invoice
+// Approval as soon as they're uploaded. Only means anything on a PO with parts.
+export function isPrepaid(request) {
+  return poHasParts(request) && Boolean(request?.prepaid)
+}
+
+// Who can mark an already-issued PO pre-paid (or take it off): accounting adding
+// the invoices, or an admin. It is normally chosen on the request itself.
+export function canSetPrepaid(user, request) {
+  return request?.status === 'issued' && poHasParts(request) && (isAdmin(user) || canMatchInvoices(user, request))
+}
+
 // Every receipt has been matched to an invoice, every invoice has been
 // matched to a receipt, and every invoice has been approved and paid -- i.e.
 // nothing is left dangling. Requires at least one of each so an empty PO
-// can't be closed with nothing on file.
+// can't be closed with nothing on file. A pre-paid PO has no receipts to
+// match, so there it's just every invoice approved and paid (and at least one).
 export function allInvoicesFullyResolved(request) {
   const invoices = request?.invoices || []
   const receipts = request?.receipts || []
+  if (isPrepaid(request)) return invoices.length > 0 && invoices.every((inv) => inv.approved && inv.paid)
   if (invoices.length === 0 || receipts.length === 0) return false
   const matchedReceiptIds = new Set(invoices.filter((inv) => inv.matched_receipt_id).map((inv) => inv.matched_receipt_id))
   const allReceiptsMatched = receipts.every((r) => matchedReceiptIds.has(r.id))
@@ -677,9 +692,10 @@ export function canMatchInvoices(user, request) {
 // Approving a matched invoice/receipt pair -- company-wide, not scoped to
 // whoever happened to approve that PO's original requisition. Only matters
 // once accounting has actually paired an invoice with a receipt (an
-// unmatched invoice has nothing to approve yet).
+// unmatched invoice has nothing to approve yet) -- unless the PO is pre-paid,
+// where there is no receipt and an invoice can be approved as soon as it's on file.
 export function canApproveInvoice(user, invoice, request) {
-  if (!invoice?.matched_receipt_id) return false
+  if (!invoice?.matched_receipt_id && !isPrepaid(request)) return false
   if (!userHasRole(user, 'invoice_approval')) return false
   return !request || isEntityAllowed(user, 'invoice_approval', request.project_id)
 }

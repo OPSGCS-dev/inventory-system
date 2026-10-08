@@ -9,6 +9,8 @@ import {
   findUserName,
   isAdmin,
   formatMoney,
+  isPrepaid,
+  canSetPrepaid,
 } from '../utils'
 
 // Receipts & Invoices table for a PO's detail view. The requisitioner
@@ -29,6 +31,7 @@ function InvoicesPanel({
   handleAddReceipt,
   handleDeleteReceipt,
   handleMatchInvoiceReceipt,
+  handleSetPrepaid,
   poPdfRequest,
   poStamp,
 }) {
@@ -38,6 +41,9 @@ function InvoicesPanel({
   const canDelete = isAdmin(loggedInUser)
   const invoices = request.invoices || []
   const receipts = request.receipts || []
+  // Pre-paid: no receipt to match, so invoices go straight to approval.
+  const prepaid = isPrepaid(request)
+  const canTogglePrepaid = canSetPrepaid(loggedInUser, request)
 
   // The invoice being added: choosing a PDF reads it (number, amount, how it
   // compares with the PO) and shows that for review before anything is saved.
@@ -129,7 +135,25 @@ function InvoicesPanel({
     <div className="card" style={{ marginTop: 12 }}>
       <div className="card-header">
         <h2>Receipts &amp; Invoices</h2>
+        {canTogglePrepaid ? (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }} title="The vendor is paid up front: invoices skip receipt matching and go straight to approval">
+            <input
+              type="checkbox"
+              checked={Boolean(request.prepaid)}
+              disabled={busy}
+              onChange={(e) => handleSetPrepaid(request, e.target.checked)}
+            />
+            Pre-paid
+          </label>
+        ) : (
+          prepaid && <span className="po-badge po-category-badge-prepaid">Pre-paid</span>
+        )}
       </div>
+      {prepaid && (
+        <p className="sub" style={{ margin: '0 0 8px' }}>
+          Pre-paid: invoices don't need a receipt matched — they go straight to Invoice Approval.
+        </p>
+      )}
 
       {rows.length === 0 ? (
         <div className="empty">No receipts or invoices yet.</div>
@@ -156,6 +180,8 @@ function InvoicesPanel({
               {rows.map((row) => {
                 const key = `${row.invoice?.id ?? 'x'}-${row.receipt?.id ?? 'x'}`
                 const matched = Boolean(row.invoice && row.receipt)
+                // Ready for approval: matched to a receipt, or pre-paid (no receipt to match).
+                const approvable = Boolean(row.invoice) && (matched || prepaid)
                 return (
                   <tr key={key}>
                     <td>
@@ -174,6 +200,11 @@ function InvoicesPanel({
                         </>
                       ) : canManage || canAddReceipt ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {prepaid && row.invoice && (
+                            <span className="sub" style={{ margin: 0 }}>
+                              Pre-paid — no receipt needed
+                            </span>
+                          )}
                           {canManage && unmatchedReceipts.length > 0 && (
                             <select
                               defaultValue=""
@@ -209,7 +240,7 @@ function InvoicesPanel({
                         </div>
                       ) : (
                         <span className="sub" style={{ margin: 0 }}>
-                          Unmatched
+                          {prepaid && row.invoice ? 'Pre-paid — no receipt needed' : 'Unmatched'}
                         </span>
                       )}
                     </td>
@@ -273,7 +304,7 @@ function InvoicesPanel({
                       )}
                     </td>
                     <td className="center-cell">
-                      {matched ? (
+                      {approvable ? (
                         canApproveInvoice(loggedInUser, row.invoice, request) ? (
                           <input
                             type="checkbox"

@@ -3,7 +3,7 @@ import Papa from 'papaparse'
 import { supabase } from '../supabaseClient'
 import { shortProjectName } from '../utils'
 import {
-  BARN, STORAGE, allLocationKeys, downloadCsv, locLabel, offSiteUnits, ownedBy, parseLocKey, qtyAt, rpcErrorText, siteKey,
+  BARN, STORAGE, allLocationKeys, downloadCsv, locLabel, offSiteUnits, parseLocKey, qtyAt, rpcErrorText, siteKey,
 } from '../stockUtils'
 
 // Where every part physically sits: Storage, the Barn, or on an entity's own site.
@@ -28,7 +28,6 @@ function PhysicalLocationTab({
   const [status, setStatus] = useState(null)
   const [gcsFilter, setGcsFilter] = useState('')
   const [placeFilter, setPlaceFilter] = useState('')
-  const [entityFilter, setEntityFilter] = useState('') // '' = every entity
   const [note, setNote] = useState('')
   const [moves, setMoves] = useState({}) // gcs -> { from, to, qty }
   const [uses, setUses] = useState({}) // gcs -> { from, owner, qty }
@@ -46,11 +45,9 @@ function PhysicalLocationTab({
   const items = useMemo(() => {
     let list = stockItems
     if (placeFilter) list = list.filter((i) => qtyAt(i, placeFilter) > 0)
-    if (entityFilter) list = list.filter((i) => ownedBy(i, Number(entityFilter)) > 0)
     if (gcsFilter) list = list.filter((i) => String(i.gcs_id) === gcsFilter)
     return list
-  }, [stockItems, placeFilter, entityFilter, gcsFilter])
-  const selectedEntity = entityFilter ? projects.find((p) => String(p.id) === String(entityFilter)) : null
+  }, [stockItems, placeFilter, gcsFilter])
   const gcsOptions = useMemo(() => stockItems.map((i) => i.gcs_id).sort((a, b) => a - b), [stockItems])
 
   useEffect(() => {
@@ -154,28 +151,14 @@ function PhysicalLocationTab({
   }
 
   // ---- export ----
-  // One entity chosen: one row per part it owns, split into what is on its own site and what
-  // is off-site (in Storage or the Barn -- the database doesn't track which of the two per
-  // owner). No entity chosen: one row per part per place, as before.
+  // Exports what the Location dropdown is set to: one place (Storage, the Barn, or an entity's
+  // own site), or every place when it's on "All locations". Only that place's rows are written.
   function exportCsv() {
     const date = new Date().toISOString().slice(0, 10)
-    if (selectedEntity) {
-      const rows = items.map((item) => ({
-        Entity: selectedEntity.name,
-        'GCS P/N': item.gcs_id,
-        'Part ID': item.part?.gcs_part_id || '',
-        Description: item.part?.description || '',
-        Owned: ownedBy(item, selectedEntity.id),
-        'On its own site': qtyAt(item, siteKey(selectedEntity.id)),
-        'Off its own site (Storage or Barn)': offSiteUnits(item, selectedEntity.id),
-      }))
-      const slug = shortProjectName(selectedEntity.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-      downloadCsv(`physical-locations-${slug || selectedEntity.id}-${date}.csv`, Papa.unparse(rows))
-      return
-    }
+    const exportKeys = placeFilter ? [placeFilter] : keys
     const rows = []
     for (const item of items) {
-      for (const k of keys) {
+      for (const k of exportKeys) {
         const q = qtyAt(item, k)
         if (q > 0) {
           rows.push({
@@ -188,7 +171,8 @@ function PhysicalLocationTab({
         }
       }
     }
-    downloadCsv(`physical-locations-${date}.csv`, Papa.unparse(rows))
+    const slug = placeFilter ? '-' + label(placeFilter).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : ''
+    downloadCsv(`physical-locations${slug}-${date}.csv`, Papa.unparse(rows))
   }
 
   const extraCols = mode === 'move' ? 4 : mode === 'use' ? 4 : 0
@@ -234,16 +218,10 @@ function PhysicalLocationTab({
                   {keys.map((k) => <option value={k} key={k}>{label(k)}</option>)}
                 </select>
               </div>
-              <div className="project-select-wrap" style={{ maxWidth: 280, flex: 'none' }}>
-                <select value={entityFilter} onChange={(e) => setEntityFilter(e.target.value)} title="Show only the parts this entity owns (and export just that entity)">
-                  <option value="">All entities</option>
-                  {projects.map((p) => <option value={p.id} key={p.id}>{shortProjectName(p.name)}</option>)}
-                </select>
-              </div>
               {!mode && (
                 <button className="btn-secondary" style={{ whiteSpace: 'nowrap' }} onClick={exportCsv} disabled={stockLoading || items.length === 0}
-                  title={selectedEntity ? `Export ${selectedEntity.name} only` : 'Export every entity'}>
-                  {selectedEntity ? `Export CSV (${shortProjectName(selectedEntity.name)})` : 'Export CSV'}
+                  title={placeFilter ? `Export only what is in ${label(placeFilter)}` : 'Export every location'}>
+                  {placeFilter ? `Export CSV (${label(placeFilter)})` : 'Export CSV'}
                 </button>
               )}
             </div>

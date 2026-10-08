@@ -759,6 +759,14 @@ export const PO_INSTRUCTIONS = [
   ...(PO_INVOICE_EMAIL ? [`Send all correspondence to: ${PO_INVOICE_EMAIL}`] : []),
 ]
 
+// Budget category (and sub-category, if one was chosen) as shown on the PO header.
+export function budgetCategoryLabel(request) {
+  const category = request?.budget_categories?.name
+  if (!category) return '-'
+  const sub = request?.budget_subcategories?.name
+  return sub ? category + ' / ' + sub : category
+}
+
 // Dollar amounts for the approval screens: thousands separators, two decimals.
 export const formatMoney = (n) =>
   `$${Number(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`

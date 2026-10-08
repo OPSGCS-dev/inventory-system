@@ -10,6 +10,7 @@ import {
   PO_INSTRUCTIONS,
   computeInvoicedTotal,
   computePoTotals,
+  budgetCategoryLabel,
   isNotToExceed,
   isOverSpendingCap,
   lineTotal,
@@ -82,6 +83,7 @@ export async function buildPoPdf(request, stamp = null) {
     body: [
       ['PO Date', new Date(request.issued_at || Date.now()).toLocaleDateString()],
       ['PO #', clean(poLabel(request))],
+      ['Budget Category', clean(budgetCategoryLabel(request))],
       ['Chargeable Expense', request.chargeable_expense ? 'Yes' : 'No'],
     ],
   })

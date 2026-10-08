@@ -44,6 +44,7 @@ import {
   computePoTotals,
   formatMoney,
   totalsByCurrencyText,
+  budgetCategoryLabel,
   COMPANY_ADDRESS_BLOCK,
   PO_INSTRUCTIONS,
   PO_STATUS_ORDER,
@@ -943,6 +944,10 @@ function PurchaseOrdersTab({
                         <td>{shownPoNumber(r) || `#${r.id}`}</td>
                       </tr>
                       <tr>
+                        <th>Budget Category</th>
+                        <td>{budgetCategoryLabel(r)}</td>
+                      </tr>
+                      <tr>
                         <th>Chargeable Expense</th>
                         <td>{r.chargeable_expense ? 'Yes' : 'No'}</td>
                       </tr>
@@ -1552,9 +1557,10 @@ function PurchaseOrdersTab({
 
           <div className="field-row" style={{ marginTop: 12 }}>
             <div>
-              <label htmlFor="po_draft_budget_category">Budget Category</label>
+              <label htmlFor="po_draft_budget_category">Budget Category *</label>
               <select
                 id="po_draft_budget_category"
+                className={poDraftFieldErrors?.budgetCategory ? 'field-invalid' : ''}
                 value={poDraftBudgetCategoryId ?? ''}
                 onChange={(e) => {
                   setPoDraftBudgetCategoryId(e.target.value ? Number(e.target.value) : null)

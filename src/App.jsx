@@ -2097,13 +2097,18 @@ function App() {
     const errors = {}
     if (!poDraftProjectId) errors.project = true
     if (!poDraftVendorId) errors.vendor = true
+    if (!poDraftBudgetCategoryId) errors.budgetCategory = true
     if (validLines.length === 0) errors.lines = true
     if (entitySubProjects.length > 0 && !poDraftSubProjectId) errors.subProject = true
 
     if (Object.keys(errors).length > 0) {
       setPoDraftFieldErrors(errors)
       flashPoStatus(
-        errors.subProject ? 'Select which project this request is for.' : 'Fill in the highlighted fields before saving.',
+        errors.subProject
+          ? 'Select which project this request is for.'
+          : errors.budgetCategory
+          ? 'Choose a budget category before saving.'
+          : 'Fill in the highlighted fields before saving.',
         false
       )
       return

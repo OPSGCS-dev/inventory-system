@@ -42,6 +42,8 @@ import {
   canPreviewPo,
   buildPoMailto,
   computePoTotals,
+  formatMoney,
+  totalsByCurrencyText,
   COMPANY_ADDRESS_BLOCK,
   PO_INSTRUCTIONS,
   PO_STATUS_ORDER,
@@ -2125,6 +2127,17 @@ function PurchaseOrdersTab({
           </div>
         </div>
 
+        {poView === 'my-approvals' && !poLoading && visiblePurchaseRequests.length > 0 && (
+          <div className="sub" style={{ margin: '0 0 8px' }}>
+            Total pending approval:{' '}
+            <strong>
+              {totalsByCurrencyText(
+                visiblePurchaseRequests.map((r) => ({ amount: computePoTotals(r).grandTotal, currency: r.currency }))
+              )}
+            </strong>
+          </div>
+        )}
+
         {poLoading ? (
           <div className="empty">Loading...</div>
         ) : visiblePurchaseRequests.length === 0 ? (
@@ -2153,6 +2166,7 @@ function PurchaseOrdersTab({
                 <col style={{ width: '190px' }} />
                 <col style={{ width: '100px' }} />
                 <col style={{ width: '85px' }} />
+                {poView === 'my-approvals' && <col style={{ width: '120px' }} />}
                 <col style={{ width: '170px' }} />
                 <col style={{ width: '170px' }} />
                 <col style={{ width: '120px' }} />
@@ -2168,6 +2182,7 @@ function PurchaseOrdersTab({
                   <th>Description</th>
                   <th>Entity</th>
                   <th>Vendor</th>
+                  {poView === 'my-approvals' && <th className="center-cell">Amount</th>}
                   <th ref={statusHeaderRef} className="center-cell">
                     Status
                   </th>
@@ -2193,6 +2208,12 @@ function PurchaseOrdersTab({
                       </td>
                       <td className="nowrap-cell">{r.projects?.name || '—'}</td>
                       <td className="nowrap-cell">{r.vendors?.name || '—'}</td>
+                      {poView === 'my-approvals' && (
+                        <td className="center-cell nowrap-cell">
+                          {formatMoney(computePoTotals(r).grandTotal)}
+                          {r.currency && r.currency.toUpperCase() !== 'CAD' ? ` ${r.currency.toUpperCase()}` : ''}
+                        </td>
+                      )}
                       <td className="center-cell">
                         <PoProgressStepper request={r} />
                       </td>

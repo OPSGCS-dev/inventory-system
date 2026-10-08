@@ -759,6 +759,22 @@ export const PO_INSTRUCTIONS = [
   ...(PO_INVOICE_EMAIL ? [`Send all correspondence to: ${PO_INVOICE_EMAIL}`] : []),
 ]
 
+// Dollar amounts for the approval screens: thousands separators, two decimals.
+export const formatMoney = (n) =>
+  `$${Number(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+// Total of a list of { amount, currency } entries, never adding across currencies:
+// "$1,234.00 CAD" or, with a mix, "$1,234.00 CAD · $500.00 USD".
+export function totalsByCurrencyText(entries) {
+  const byCurrency = new Map()
+  for (const { amount, currency } of entries) {
+    const code = (currency || 'CAD').toUpperCase()
+    byCurrency.set(code, (byCurrency.get(code) || 0) + (Number(amount) || 0))
+  }
+  if (byCurrency.size === 0) return formatMoney(0)
+  return [...byCurrency.entries()].map(([code, total]) => `${formatMoney(total)} ${code}`).join(' · ')
+}
+
 // Single source of truth for the PO cost breakdown, shared by the printed PO
 // layout and the vendor email body so the two can never disagree. Order of
 // operations mirrors the printed template exactly:

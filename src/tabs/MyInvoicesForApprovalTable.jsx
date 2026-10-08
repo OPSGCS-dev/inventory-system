@@ -1,3 +1,5 @@
+import { formatMoney, totalsByCurrencyText } from '../utils'
+
 // Flattened { request, invoice } rows for the "My Invoices for Approval"
 // view -- its rows are invoices, not purchase requests, so it doesn't share
 // the PO summary table's columns.
@@ -6,6 +8,16 @@ function MyInvoicesForApprovalTable({ invoicesPendingApproval, toggleExpandedPo 
     <div className="card">
       <div className="card-header">
         <h2>My Invoices for Approval ({invoicesPendingApproval.length})</h2>
+        {invoicesPendingApproval.length > 0 && (
+          <div className="sub" style={{ margin: 0 }}>
+            Total pending:{' '}
+            <strong>
+              {totalsByCurrencyText(
+                invoicesPendingApproval.map(({ request, invoice }) => ({ amount: invoice.amount, currency: request.currency }))
+              )}
+            </strong>
+          </div>
+        )}
       </div>
 
       {invoicesPendingApproval.length === 0 ? (
@@ -37,7 +49,7 @@ function MyInvoicesForApprovalTable({ invoicesPendingApproval, toggleExpandedPo 
               {invoicesPendingApproval.map(({ request, invoice }) => (
                 <tr key={invoice.id}>
                   <td>{invoice.invoice_number || '—'}</td>
-                  <td className="center-cell">${Number(invoice.amount).toFixed(2)}</td>
+                  <td className="center-cell">{formatMoney(invoice.amount)}</td>
                   <td>{request.po_number || `#${request.id}`}</td>
                   <td className="nowrap-cell">{request.projects?.name || '—'}</td>
                   <td>{request.vendors?.name || '—'}</td>

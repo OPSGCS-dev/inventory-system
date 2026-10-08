@@ -47,6 +47,7 @@ import {
   budgetCategoryLabel,
   ticketRefLabel,
   ticketRefUrl,
+  poEmailSubject,
   COMPANY_ADDRESS_BLOCK,
   poInstructions,
   PO_INVOICE_EMAIL_OPTIONS,
@@ -412,6 +413,11 @@ function PurchaseOrdersTab({
   }
 
   async function emailVendorWithPdf(r) {
+    // A vendor is only emailed once the PO has been issued and has its number.
+    if (!r.po_number) {
+      setEmailNote({ id: r.id, text: 'The vendor can only be emailed once the PO has been issued and has a PO number.' })
+      return
+    }
     setEmailBusy(true)
     try {
       const [{ buildPoPdf, poLabel }, { buildEml, buildPoEmailBody }] = await Promise.all([
@@ -423,7 +429,7 @@ function PurchaseOrdersTab({
       const label = poLabel(r)
       const eml = buildEml({
         to: r.vendors.email,
-        subject: `Purchase Order ${label}`,
+        subject: poEmailSubject(r),
         body: buildPoEmailBody(r, computePoTotals(r), label),
         attachment: { filename: pdf.filename, mime: 'application/pdf', bytes: pdf.bytes },
       })
@@ -1455,7 +1461,11 @@ function PurchaseOrdersTab({
                 <button className="btn-secondary" onClick={() => downloadPoPdf(r)} disabled={emailBusy}>
                   Download PDF
                 </button>
-                {r.vendors?.email ? (
+                {!r.po_number ? (
+                  <span className="sub" style={{ margin: 0 }}>
+                    Can be emailed to the vendor once the PO is issued.
+                  </span>
+                ) : r.vendors?.email ? (
                   <button className="btn-secondary" onClick={() => emailVendorWithPdf(r)} disabled={emailBusy}>
                     {emailBusy ? 'Preparing…' : 'Email Vendor'}
                   </button>

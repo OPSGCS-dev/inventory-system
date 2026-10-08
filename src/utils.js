@@ -857,12 +857,20 @@ export function computePoTotals(request) {
 // Builds a mailto: link addressed to the vendor for a purchase request that
 // has moved past approval, so a purchaser can hand it to their own email
 // client to send. Returns null when the vendor has no email on file.
+// Subject line of the email to a vendor: the PO and the entity it is for, e.g.
+// "Purchase Order PO-06-26-001 - SunE Rutley LP".
+export function poEmailSubject(request) {
+  const label = request?.po_number || '#' + request?.id
+  const entity = request?.projects?.name
+  return entity ? 'Purchase Order ' + label + ' - ' + entity : 'Purchase Order ' + label
+}
+
 export function buildPoMailto(request) {
   const vendorEmail = request?.vendors?.email
   if (!vendorEmail) return null
 
   const poLabel = request.po_number || `#${request.id}`
-  const subject = `Purchase Order ${poLabel}`
+  const subject = poEmailSubject(request)
 
   const lineLines = (request.purchase_request_lines || []).map((l) => {
     const label =

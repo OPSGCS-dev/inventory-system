@@ -777,6 +777,14 @@ table.po-summary-table {
   print-color-adjust: exact;
 }
 
+/* PO list: date range filter and the sortable Date header. */
+.po-date-filter { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.po-date-filter input[type="date"] { padding: 4px 6px; }
+.sort-btn {
+  padding: 0; border: none; background: none; font: inherit; font-weight: inherit; color: inherit; cursor: pointer;
+}
+.sort-btn:hover { color: var(--accent); }
+
 .po-print-header {
   display: flex;
   justify-content: space-between;

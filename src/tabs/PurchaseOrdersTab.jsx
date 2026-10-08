@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import PdfReadPanel from './PdfReadPanel.jsx'
 import {
   poStatusLabel,
@@ -111,6 +111,9 @@ function PoProgressStepper({ request }) {
     </div>
   )
 }
+
+// A timestamp as the local calendar day, YYYY-MM-DD (what a date input holds).
+const localDay = (iso) => (iso ? new Date(iso).toLocaleDateString('en-CA') : '')
 
 function PurchaseOrdersTab({
   loggedInUser,
@@ -235,6 +238,20 @@ function PurchaseOrdersTab({
   )
   const availableSubProjects = subProjects.filter((sp) => sp.project_id === poDraftProjectId)
   const viewingRequest = expandedPoId ? visiblePurchaseRequests.find((r) => r.id === expandedPoId) : null
+
+  // Date column: filter by a range of dates (both ends inclusive; the same day in both boxes
+  // is that one day) and sort by it. The list the table shows; the lookups above and below
+  // keep using the unfiltered one so a PO that is open never disappears from under you.
+  const [poDateFrom, setPoDateFrom] = useState('')
+  const [poDateTo, setPoDateTo] = useState('')
+  const [poDateSort, setPoDateSort] = useState('desc') // newest first, as loaded
+  const listedPurchaseRequests = useMemo(() => {
+    let list = visiblePurchaseRequests
+    if (poDateFrom) list = list.filter((r) => localDay(r.created_at) >= poDateFrom)
+    if (poDateTo) list = list.filter((r) => localDay(r.created_at) <= poDateTo)
+    const dir = poDateSort === 'asc' ? 1 : -1
+    return [...list].sort((a, b) => (new Date(a.created_at) - new Date(b.created_at)) * dir)
+  }, [visiblePurchaseRequests, poDateFrom, poDateTo, poDateSort])
   // Markup and shipping only apply to a PO with part lines; Not to Exceed only
   // to one with service lines -- the form shows each only then.
   const formHasParts = linesHaveParts(poDraftLines)
@@ -2129,9 +2146,29 @@ function PurchaseOrdersTab({
               : poView === 'my-issue'
               ? 'My POs to Issue'
               : 'Purchase Requests'}{' '}
-            {poLoading ? '' : `(${visiblePurchaseRequests.length})`}
+            {poLoading ? '' : `(${listedPurchaseRequests.length})`}
           </h2>
           <div className="header-actions">
+            <label className="po-date-filter" title="Show POs created on or after this date">
+              From
+              <input type="date" value={poDateFrom} max={poDateTo || undefined} onChange={(e) => setPoDateFrom(e.target.value)} />
+            </label>
+            <label className="po-date-filter" title="Show POs created on or before this date">
+              To
+              <input type="date" value={poDateTo} min={poDateFrom || undefined} onChange={(e) => setPoDateTo(e.target.value)} />
+            </label>
+            {(poDateFrom || poDateTo) && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setPoDateFrom('')
+                  setPoDateTo('')
+                }}
+              >
+                Clear dates
+              </button>
+            )}
             <select value={poStatusFilter} onChange={(e) => setPoStatusFilter(e.target.value)}>
               <option value="">All Statuses</option>
               {PO_STATUS_ORDER.map((s) => (
@@ -2151,12 +2188,12 @@ function PurchaseOrdersTab({
           </div>
         </div>
 
-        {poView === 'my-approvals' && !poLoading && visiblePurchaseRequests.length > 0 && (
+        {poView === 'my-approvals' && !poLoading && listedPurchaseRequests.length > 0 && (
           <div className="sub" style={{ margin: '0 0 8px' }}>
             Total pending approval:{' '}
             <strong>
               {totalsByCurrencyText(
-                visiblePurchaseRequests.map((r) => ({ amount: computePoTotals(r).grandTotal, currency: r.currency }))
+                listedPurchaseRequests.map((r) => ({ amount: computePoTotals(r).grandTotal, currency: r.currency }))
               )}
             </strong>
           </div>
@@ -2164,8 +2201,8 @@ function PurchaseOrdersTab({
 
         {poLoading ? (
           <div className="empty">Loading...</div>
-        ) : visiblePurchaseRequests.length === 0 ? (
-          <div className="empty">No purchase requests yet.</div>
+        ) : listedPurchaseRequests.length === 0 ? (
+          <div className="empty">{visiblePurchaseRequests.length === 0 ? 'No purchase requests yet.' : 'No purchase requests match the date range.'}</div>
         ) : (
           <div className="sheet-wrap" ref={sheetWrapRef}>
             <div className="po-progress-heading-block">
@@ -2187,6 +2224,7 @@ function PurchaseOrdersTab({
             <table className="sheet po-summary-table">
               <colgroup>
                 <col style={{ width: '36px' }} />
+                <col style={{ width: '100px' }} />
                 <col style={{ width: '190px' }} />
                 <col style={{ width: '100px' }} />
                 <col style={{ width: '85px' }} />
@@ -2203,6 +2241,16 @@ function PurchaseOrdersTab({
               <thead>
                 <tr className="header-row">
                   <th className="row-head">ID</th>
+                  <th aria-sort={poDateSort === 'asc' ? 'ascending' : 'descending'}>
+                    <button
+                      type="button"
+                      className="sort-btn"
+                      title="Date created. Click to reverse the order"
+                      onClick={() => setPoDateSort((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                    >
+                      Date {poDateSort === 'asc' ? '▲' : '▼'}
+                    </button>
+                  </th>
                   <th>Description</th>
                   <th>Entity</th>
                   <th>Vendor</th>
@@ -2220,13 +2268,14 @@ function PurchaseOrdersTab({
                 </tr>
               </thead>
               <tbody>
-                {visiblePurchaseRequests.map((r) => {
+                {listedPurchaseRequests.map((r) => {
                   const next = nextStepInfo(r, users)
                   const busy = poActionBusyId === r.id
                   const paymentStatus = computePaymentStatus(r)
                   return (
                     <tr key={r.id}>
                       <td className="row-head">{r.id}</td>
+                      <td className="nowrap-cell">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
                       <td className="nowrap-cell" title={r.description || undefined}>
                         {r.description ? truncate(r.description, PO_DESCRIPTION_MAX_LEN) : '—'}
                       </td>

@@ -577,6 +577,7 @@ table.sheet td.total-col {
 .po-work-badge-ordered { background: #fdf1d6; color: var(--warn); }
 .po-work-badge-partially_received { background: #fdf1d6; color: var(--warn); }
 .po-work-badge-received { background: #e6f4ea; color: var(--success); }
+.po-work-badge-prepaid { background: #e6f4ea; color: var(--success); }
 
 .po-payment-badge-unpaid { background: #ece7de; color: var(--muted); }
 .po-payment-badge-partial { background: #fdf1d6; color: var(--warn); }

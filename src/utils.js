@@ -92,6 +92,7 @@ export const WORK_STATUS_LABELS = {
   ordered: 'Ordered',
   partially_received: 'Partially Received',
   received: 'Received',
+  prepaid: 'Pre-paid',
 }
 
 // Purchase POs track ordering/receiving a physical part; Service (and Not to
@@ -100,6 +101,20 @@ export const WORK_STATUS_LABELS = {
 // Service PO never offers "Ordered".
 export const PARTS_STATUS_OPTIONS = ['not_ordered', 'ordered', 'partially_received', 'received']
 export const SERVICE_STATUS_OPTIONS = ['not_started', 'partial', 'complete']
+
+// 'Pre-paid' is a parts status of its own, only on a PO marked pre-paid: the vendor
+// was paid up front, so it stands in for "Received" when closing the PO.
+export function partsStatusOptions(request) {
+  return isPrepaid(request) ? [...PARTS_STATUS_OPTIONS, 'prepaid'] : PARTS_STATUS_OPTIONS
+}
+
+// What the parts status should become when a PO is marked pre-paid (or taken off it): a PO
+// marked pre-paid shows 'Pre-paid' unless its parts were already received, and goes back to
+// 'Not Ordered' if un-marked while still on 'Pre-paid'. {} = leave it alone.
+export function partsStatusForPrepaid(currentStatus, prepaid) {
+  if (prepaid) return currentStatus === 'received' ? {} : { parts_status: 'prepaid' }
+  return currentStatus === 'prepaid' ? { parts_status: 'not_ordered' } : {}
+}
 
 export function statusOptions(values) {
   return values.map((value) => ({ value, label: WORK_STATUS_LABELS[value] }))
@@ -155,13 +170,16 @@ export function workStatusEntries(request) {
   return entries
 }
 
-// Every kind of work on the PO is at its "done" end: all parts received and
-// all services complete. Closing a PO, the progress stepper and "what's next"
-// all go through this.
+// Every kind of work on the PO is at its "done" end: all parts received (or the PO is
+// pre-paid) and all services complete. Closing a PO, the progress stepper and "what's
+// next" all go through this.
 export function isWorkFullyDone(request) {
   const entries = workStatusEntries(request)
   if (entries.length === 0) return false
-  return entries.every((e) => (e.kind === 'parts' ? e.status === 'received' : e.status === 'complete'))
+  return entries.every((e) => {
+    if (e.kind === 'parts') return e.status === 'received' || (e.status === 'prepaid' && isPrepaid(request))
+    return e.status === 'complete'
+  })
 }
 
 export function computePaymentStatus(request) {

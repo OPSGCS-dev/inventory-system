@@ -18,9 +18,9 @@ import {
   canReopenRejected,
   workStatusEntries,
   statusOptions,
-  PARTS_STATUS_OPTIONS,
   SERVICE_STATUS_OPTIONS,
   partsStatus,
+  partsStatusOptions,
   poHasParts,
   poHasServices,
   linesHaveParts,
@@ -936,7 +936,7 @@ function PurchaseOrdersTab({
                         disabled={busy}
                         onChange={(e) => handleSetWorkStatus(r, entry.kind, e.target.value)}
                       >
-                        {statusOptions(entry.kind === 'parts' ? PARTS_STATUS_OPTIONS : SERVICE_STATUS_OPTIONS).map(
+                        {statusOptions(entry.kind === 'parts' ? partsStatusOptions(r) : SERVICE_STATUS_OPTIONS).map(
                           ({ value, label }) => (
                             <option value={value} key={value}>
                               {label}
@@ -1946,8 +1946,9 @@ function PurchaseOrdersTab({
                   Pre-paid
                 </label>
                 <p className="sub" style={{ margin: '4px 0 0' }}>
-                  The vendor is paid up front, so there won't be a receipt: its invoices go to Invoice Approval
-                  without one being matched.
+                  The vendor is paid up front, so there won't be a receipt: invoices go to Invoice Approval without
+                  one being matched, the parts status becomes Pre-paid, and the PO can be closed without the parts
+                  being marked Received (parts that are never marked Received aren't added to stock).
                 </p>
               </div>
             </div>

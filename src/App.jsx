@@ -25,6 +25,7 @@ import {
   incomingStockByKey,
   linesHaveServices,
   partsStatus,
+  partsStatusForPrepaid,
   serviceStatus,
   isAdmin,
   isVendorUser,
@@ -2154,11 +2155,16 @@ function App() {
     const notToExceedToSave = hasServiceLines && poDraftNotToExceed
     const spendingCapToSave = notToExceedToSave && poDraftSpendingCap !== '' ? Number(poDraftSpendingCap) : null
 
-    // Pre-paid only applies to a PO with parts. It's only sent when it changes, so requests keep
-    // saving before add_po_prepaid.sql has been run (until then it simply can't be turned on).
-    const priorPrepaid = poDraftId ? Boolean(purchaseRequests.find((r) => r.id === poDraftId)?.prepaid) : false
+    // Pre-paid only applies to a PO with parts, and sets its parts status to Pre-paid. It's only sent
+    // when it changes, so requests keep saving before add_po_prepaid.sql has been run (until then it
+    // simply can't be turned on).
+    const priorRequest = poDraftId ? purchaseRequests.find((r) => r.id === poDraftId) : null
+    const priorPrepaid = Boolean(priorRequest?.prepaid)
     const prepaidToSave = hasPartLines && poDraftPrepaid
-    const prepaidFields = prepaidToSave !== priorPrepaid ? { prepaid: prepaidToSave } : {}
+    const prepaidFields =
+      prepaidToSave !== priorPrepaid
+        ? { prepaid: prepaidToSave, ...partsStatusForPrepaid(priorRequest?.parts_status, prepaidToSave) }
+        : {}
 
     // The invoice address is only sent when it isn't the default (or is being put back to it from
     // something else), so POs on the default keep saving even before add_po_invoice_email.sql has been run.
@@ -3052,11 +3058,18 @@ function App() {
     }
     setPoActionBusyId(request.id)
     try {
-      const { data, error } = await supabase.from('purchase_requests').update({ prepaid: checked }).eq('id', request.id).select('id')
+      const { data, error } = await supabase.from('purchase_requests').update({ prepaid: checked, ...partsStatusForPrepaid(request.parts_status, checked) })
+        .eq('id', request.id)
+        .select('id')
       if (error) throw error
       if (!data || data.length === 0) throw new Error('The database did not apply the change (no rows were updated).')
       await logPoActivity(request.id, checked ? 'Marked pre-paid' : 'Pre-paid cleared')
-      flashPoStatus(checked ? 'Marked pre-paid — invoices no longer need a receipt matched.' : 'Pre-paid cleared.', true)
+      flashPoStatus(
+        checked
+          ? 'Marked pre-paid — invoices no longer need a receipt matched, and the parts status is Pre-paid.'
+          : 'Pre-paid cleared.',
+        true
+      )
       await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)

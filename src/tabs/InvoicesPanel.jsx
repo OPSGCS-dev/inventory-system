@@ -136,7 +136,7 @@ function InvoicesPanel({
       <div className="card-header">
         <h2>Receipts &amp; Invoices</h2>
         {canTogglePrepaid ? (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }} title="The vendor is paid up front: invoices skip receipt matching and go straight to approval">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }} title="The vendor is paid up front: invoices skip receipt matching, the parts status becomes Pre-paid, and the PO can close without the parts being received">
             <input
               type="checkbox"
               checked={Boolean(request.prepaid)}

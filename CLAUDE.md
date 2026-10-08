@@ -75,8 +75,11 @@ Most recent first, all on `main`:
 - **Pre-paid parts POs:** `purchase_requests.prepaid` (`add_po_prepaid.sql`). A checkbox on a parts request (or, for an issued PO,
   a toggle in the Receipts & Invoices panel for accounting/admin) means there will be no receipts: `isPrepaid` /
   `canApproveInvoice` let an invoice go straight to Invoice Approval without a matched receipt, and `allInvoicesFullyResolved`
-  needs only every invoice approved and paid (parts must still be received to close). Ignored on services-only POs. The save only
-  sends `prepaid` when it changes, so requests still save before the SQL has been run.
+  needs only every invoice approved and paid. Marking a PO pre-paid also sets its parts status to the new `prepaid` value
+  ("Pre-paid", which `isWorkFullyDone` counts as done), so it can close without the parts being marked Received -- those parts
+  are then never added to stock unless someone sets Received first (`partsStatusForPrepaid`, `partsStatusOptions`). The SQL also
+  widens the `parts_status` check constraint. Ignored on services-only POs. The save only sends `prepaid` when it changes, so
+  requests still save before the SQL has been run.
 - **Vendor approval guard:** a vendor that is still pending/rejected must not get a request approved or a PO issued. That
   rule used to live only in the browser, and failed open when the vendor row was missing. Now a trigger on
   `purchase_requests` enforces it (`add_vendor_approval_guard.sql`; needs `add_vendor_approval.sql`), and

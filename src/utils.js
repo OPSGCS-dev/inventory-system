@@ -773,6 +773,42 @@ export function budgetCategoryLabel(request) {
   return sub ? category + ' / ' + sub : category
 }
 
+// --- Ticket links -------------------------------------------------------------------
+// A PO can point at a ticket in the ticket system (a separate database, so no foreign key):
+//   ticket_system_ticket_id      the ticket's id, when the PO was created from the ticket
+//   ticket_system_ticket_code    '06-26-001' for a ticket shown as TK-06-26-001
+//   ticket_system_ticket_number  42 for an older ticket shown as TK-00042
+// Typing a ticket in here stores the code or the number; the ticket system finds it from that.
+
+// What someone typed -> { code, number } (one of them set), { empty: true }, or null if it
+// isn't a ticket number. Accepts "TK-06-26-001", "06-26-001", "TK-00042", "42".
+export function parseTicketRef(input) {
+  const text = String(input ?? '').trim()
+  if (!text) return { empty: true }
+  const code = text.match(/^(?:TK-?)?(\d{2}-\d{2}-\d{3})$/i)
+  if (code) return { code: code[1], number: null }
+  const number = text.match(/^(?:TK-?)?(\d{1,9})$/i)
+  if (number && Number(number[1]) > 0) return { code: null, number: Number(number[1]) }
+  return null
+}
+
+// "TK-06-26-001" / "TK-00042", or null when the PO isn't linked to a ticket.
+export function ticketRefLabel(request) {
+  if (request?.ticket_system_ticket_code) return 'TK-' + request.ticket_system_ticket_code
+  const n = request?.ticket_system_ticket_number
+  return n === null || n === undefined ? null : 'TK-' + String(n).padStart(5, '0')
+}
+
+// Where the label should link to in the ticket system (null when not linked).
+export function ticketRefUrl(request) {
+  if (request?.ticket_system_ticket_id) return TICKETING_URL + '/tickets/' + request.ticket_system_ticket_id
+  if (request?.ticket_system_ticket_code) {
+    return TICKETING_URL + '/tickets/find?code=' + encodeURIComponent(request.ticket_system_ticket_code)
+  }
+  const n = request?.ticket_system_ticket_number
+  return n === null || n === undefined ? null : TICKETING_URL + '/tickets/find?number=' + n
+}
+
 // Dollar amounts for the approval screens: thousands separators, two decimals.
 export const formatMoney = (n) =>
   `$${Number(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`

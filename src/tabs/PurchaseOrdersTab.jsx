@@ -45,6 +45,8 @@ import {
   formatMoney,
   totalsByCurrencyText,
   budgetCategoryLabel,
+  ticketRefLabel,
+  ticketRefUrl,
   COMPANY_ADDRESS_BLOCK,
   poInstructions,
   PO_INVOICE_EMAIL_OPTIONS,
@@ -72,6 +74,75 @@ import VendorsToApproveTable from './VendorsToApproveTable'
 
 function formatTicketNumber(n) {
   return `TK-${String(n).padStart(5, '0')}`
+}
+
+// The ticket a PO is linked to (a link to it in the ticket system), with Link / Change / Unlink
+// for people who may edit the request. The ticket is identified by its number, typed in.
+function TicketLinkEditor({ request, canEdit, busy, onSave }) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState('')
+  const label = ticketRefLabel(request)
+  const url = ticketRefUrl(request)
+
+  async function save(value) {
+    const ok = await onSave(request, value)
+    if (ok) setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          autoFocus
+          placeholder="TK-06-26-001 or TK-00042"
+          value={text}
+          style={{ width: 200 }}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') save(text)
+            if (e.key === 'Escape') setEditing(false)
+          }}
+        />
+        <button type="button" className="btn-primary" disabled={busy || !text.trim()} onClick={() => save(text)}>
+          Save
+        </button>
+        <button type="button" className="btn-secondary" disabled={busy} onClick={() => setEditing(false)}>
+          Cancel
+        </button>
+      </span>
+    )
+  }
+  return (
+    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      {label ? (
+        <a href={url} target="_blank" rel="noreferrer">
+          {label} ↗
+        </a>
+      ) : (
+        '—'
+      )}
+      {canEdit && (
+        <>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => {
+              setText(label || '')
+              setEditing(true)
+            }}
+          >
+            {label ? 'Change' : 'Link ticket'}
+          </button>
+          {label && (
+            <button type="button" className="btn-secondary" disabled={busy} onClick={() => save('')}>
+              Unlink
+            </button>
+          )}
+        </>
+      )}
+    </span>
+  )
 }
 
 const PO_DESCRIPTION_MAX_LEN = 50
@@ -201,6 +272,7 @@ function PurchaseOrdersTab({
   savingPoRequest,
   handleCreatePurchaseRequest,
   handleSubmitPurchaseRequest,
+  handleSetTicketLink,
   handleApprovePurchaseRequest,
   handleHoldPurchaseRequest,
   handleResumeFromHold,
@@ -227,6 +299,8 @@ function PurchaseOrdersTab({
   handleDeletePurchaseRequest,
 }) {
   const canCreate = canCreatePurchaseRequests(loggedInUser)
+  // Linking a PO to a ticket: anyone who can raise requests for its entity, or an admin.
+  const canEditTicketLink = (r) => isAdmin(loggedInUser) || canCreatePurchaseRequests(loggedInUser, r.project_id)
   const isAdminUser = isAdmin(loggedInUser)
   const canSeeApprovalsView = canApproveRequests(loggedInUser)
   const canSeeIssueView = canIssuePurchaseOrder(loggedInUser)
@@ -732,17 +806,16 @@ function PurchaseOrdersTab({
                 </span>
               </div>
             )}
-            {r.ticket_system_ticket_id && (
+            {(ticketRefLabel(r) || canEditTicketLink(r)) && (
               <div className="po-detail-meta-item">
                 <span className="po-detail-label">Ticket</span>
                 <span className="po-detail-value">
-                  <a
-                    href={`${TICKETING_URL}/tickets/${r.ticket_system_ticket_id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {formatTicketNumber(r.ticket_system_ticket_number)} ↗
-                  </a>
+                  <TicketLinkEditor
+                    request={r}
+                    canEdit={canEditTicketLink(r)}
+                    busy={poActionBusyId === r.id}
+                    onSave={handleSetTicketLink}
+                  />
                 </span>
               </div>
             )}

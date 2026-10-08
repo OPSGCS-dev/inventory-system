@@ -18,6 +18,8 @@ import {
   DEFAULT_CONSUMABLE_MAX_UNIT_COST,
   INVENTORY_MODE_TO_ACTION,
   PO_INVOICE_EMAIL,
+  parseTicketRef,
+  ticketRefLabel,
   INVENTORY_ACTION_TO_MODE,
   linesHaveParts,
   incomingStockByKey,
@@ -2750,6 +2752,46 @@ function App() {
     }
   }
 
+  // Link a PO to a ticket by its number (or clear the link with an empty box). The ticket
+  // system is a separate database, so only the number is stored -- see parseTicketRef.
+  async function handleSetTicketLink(request, rawInput) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return false
+    }
+    const ref = parseTicketRef(rawInput)
+    if (!ref) {
+      flashPoStatus('Enter a ticket number like TK-06-26-001 or TK-00042.', false)
+      return false
+    }
+    const fields = ref.empty
+      ? { ticket_system_ticket_id: null, ticket_system_ticket_number: null, ticket_system_ticket_code: null }
+      : { ticket_system_ticket_id: null, ticket_system_ticket_number: ref.number, ticket_system_ticket_code: ref.code }
+    const label = ref.empty ? null : ticketRefLabel({ ticket_system_ticket_code: ref.code, ticket_system_ticket_number: ref.number })
+    if (label === ticketRefLabel(request)) return true // unchanged
+    setPoActionBusyId(request.id)
+    try {
+      const { data, error } = await supabase.from('purchase_requests').update(fields).eq('id', request.id).select('id')
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error('The database did not apply the change (no rows were updated).')
+      await logPoActivity(request.id, label ? 'Linked to ticket ' + label : 'Ticket link removed')
+      flashPoStatus(label ? 'Linked to ticket ' + label + '.' : 'Ticket link removed.', true)
+      await refreshPurchaseRequest(request.id)
+      return true
+    } catch (error) {
+      console.error(error)
+      flashPoStatus(
+        /ticket_system_ticket_code/.test(error?.message || '')
+          ? "Ticket links aren't set up yet. Run supabase/add_ticket_code_link.sql in the Inventory project's SQL editor first."
+          : 'Could not update the ticket link — check the console for details.',
+        false
+      )
+      return false
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
   // A plain dropdown -- no evidence file required for any transition. A PO's
   // parts and its services are tracked separately: `kind` is 'parts'
   // (ordering/receiving) or 'service' (doing the work). Moving the parts into
@@ -4319,6 +4361,7 @@ function App() {
           savingPoRequest={savingPoRequest}
           handleCreatePurchaseRequest={handleCreatePurchaseRequest}
           handleSubmitPurchaseRequest={handleSubmitPurchaseRequest}
+          handleSetTicketLink={handleSetTicketLink}
           handleApprovePurchaseRequest={handleApprovePurchaseRequest}
           handleHoldPurchaseRequest={handleHoldPurchaseRequest}
           handleResumeFromHold={handleResumeFromHold}

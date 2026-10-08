@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { emptyFilters, shortProjectName } from '../utils'
+import PartsHistoryPanel from './PartsHistoryPanel'
 
 // Small picture icon. Opens the part's reference image in a popup.
 function ImageIcon() {
@@ -137,6 +138,9 @@ function MasterListTab({
             <button className="btn-primary" onClick={() => runAction({ type: 'import-parts' })}>
               Import List
             </button>
+            <button className="btn-primary" onClick={() => runAction({ type: 'parts-history' })}>
+              Change History
+            </button>
           </div>
         ) : (
           <div className="edit-toolbar">
@@ -215,6 +219,8 @@ function MasterListTab({
           )}
         </div>
       )}
+
+      {masterPanel === 'history' && <PartsHistoryPanel />}
 
       {!masterPanel && (
       <div className="card">

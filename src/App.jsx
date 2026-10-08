@@ -108,7 +108,7 @@ function App() {
   const [draftParts, setDraftParts] = useState([])
   const [savingEdits, setSavingEdits] = useState(false)
 
-  const [masterPanel, setMasterPanel] = useState(null) // null | 'import'
+  const [masterPanel, setMasterPanel] = useState(null) // null | 'import' | 'history'
   const [importFileName, setImportFileName] = useState('')
   const [importPreview, setImportPreview] = useState(null)
   const [importErrors, setImportErrors] = useState([])
@@ -928,6 +928,9 @@ function App() {
     }
     if (action.type === 'export-parts') {
       handleExportParts()
+    }
+    if (action.type === 'parts-history') {
+      setMasterPanel('history')
     }
     if (action.type === 'import-parts') {
       setImportFileName('')

@@ -918,6 +918,12 @@ function PurchaseOrdersTab({
 
           {canPreviewPo(r.status) && (
             <div className={'po-print-area' + (showPoPreview ? ' po-print-area-preview' : '')}>
+              {/* Until the PO is approved it is not a real PO yet: stamp it DRAFT across the page. */}
+              {!isApprovedOrLater(r.status) && (
+                <div className="po-watermark" aria-hidden="true">
+                  DRAFT
+                </div>
+              )}
               <div className="po-print-header">
                 <div className="po-print-header-left">
                   <p className="po-print-project-name">{r.projects?.name || '—'}</p>

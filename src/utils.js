@@ -744,20 +744,26 @@ export const COMPANY_ADDRESS_BLOCK = [
   'O: 416.366.4227',
 ]
 
-// The email address vendors send invoices to. It prints on every PO (screen,
-// print and the emailed PDF), both for invoices and for all other correspondence.
-// If it is ever emptied, the invoice line is left off rather than printing a blank.
-export const PO_INVOICE_EMAIL = 'ap@greatcirclesolar.com'
+// The email addresses a PO can tell vendors to send invoices to (picked in the PO draft
+// screen). The first is the default, used for any PO that hasn't picked one.
+export const PO_INVOICE_EMAIL_OPTIONS = ['ap@greatcirclesolar.com', 'repower@greatcirclesolar.com']
+export const PO_INVOICE_EMAIL = PO_INVOICE_EMAIL_OPTIONS[0]
 
-// The numbered instructions at the foot of every PO, on screen/print and in
-// the emailed PDF alike -- one list so the two can't drift apart.
-export const PO_INSTRUCTIONS = [
-  ...(PO_INVOICE_EMAIL ? [`Please send the invoice to: ${PO_INVOICE_EMAIL}`] : []),
-  'Enter this note in accordance with the prices, terms, delivery method, and specifications listed above.',
-  'Notify GCS immediately if PO number or work order is not specified.',
-  'Reference the PO number on the invoice.',
-  ...(PO_INVOICE_EMAIL ? [`Send all correspondence to: ${PO_INVOICE_EMAIL}`] : []),
-]
+// The address this PO sends invoices to (and, as it always has, all other correspondence).
+export const poInvoiceEmail = (request) => request?.invoice_email || PO_INVOICE_EMAIL
+
+// The numbered instructions at the foot of a PO, on screen/print and in the emailed PDF
+// alike -- one list so the two can't drift apart.
+export function poInstructions(request) {
+  const email = poInvoiceEmail(request)
+  return [
+    `Please send the invoice to: ${email}`,
+    'Enter this note in accordance with the prices, terms, delivery method, and specifications listed above.',
+    'Notify GCS immediately if PO number or work order is not specified.',
+    'Reference the PO number on the invoice.',
+    `Send all correspondence to: ${email}`,
+  ]
+}
 
 // Budget category (and sub-category, if one was chosen) as shown on the PO header.
 export function budgetCategoryLabel(request) {

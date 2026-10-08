@@ -17,6 +17,7 @@ import {
   setConsumableMaxUnitCost,
   DEFAULT_CONSUMABLE_MAX_UNIT_COST,
   INVENTORY_MODE_TO_ACTION,
+  PO_INVOICE_EMAIL,
   INVENTORY_ACTION_TO_MODE,
   linesHaveParts,
   incomingStockByKey,
@@ -169,6 +170,7 @@ function App() {
   const [poDraftNotes, setPoDraftNotes] = useState('')
   const [poDraftDescription, setPoDraftDescription] = useState('')
   const [poDraftChargeableExpense, setPoDraftChargeableExpense] = useState(false)
+  const [poDraftInvoiceEmail, setPoDraftInvoiceEmail] = useState(PO_INVOICE_EMAIL)
   const [poDraftVendorQuoteNumber, setPoDraftVendorQuoteNumber] = useState('')
   const [poDraftQuoteFileUrl, setPoDraftQuoteFileUrl] = useState(null)
   const [poDraftQuoteFileName, setPoDraftQuoteFileName] = useState(null)
@@ -1774,6 +1776,7 @@ function App() {
       setPoDraftTicketSystemTicketId(existing.ticket_system_ticket_id ?? null)
       setPoDraftTicketSystemTicketNumber(existing.ticket_system_ticket_number ?? null)
       setPoDraftChargeableExpense(Boolean(existing.chargeable_expense))
+      setPoDraftInvoiceEmail(existing.invoice_email || PO_INVOICE_EMAIL)
       setPoDraftVendorQuoteNumber(existing.vendor_quote_number || '')
       setPoDraftQuoteFileUrl(existing.quote_file_url || null)
       setPoDraftQuoteFileName(existing.quote_file_name || null)
@@ -1835,6 +1838,7 @@ function App() {
       setPoDraftTicketSystemTicketId(prefill?.ticketSystemTicketId ?? null)
       setPoDraftTicketSystemTicketNumber(prefill?.ticketSystemTicketNumber ?? null)
       setPoDraftChargeableExpense(false)
+      setPoDraftInvoiceEmail(PO_INVOICE_EMAIL)
       setPoDraftVendorQuoteNumber(prefill?.vendorQuoteNumber ?? '')
       setPoDraftQuoteFileUrl(null)
       setPoDraftQuoteFileName(null)
@@ -2139,6 +2143,16 @@ function App() {
     const notToExceedToSave = hasServiceLines && poDraftNotToExceed
     const spendingCapToSave = notToExceedToSave && poDraftSpendingCap !== '' ? Number(poDraftSpendingCap) : null
 
+    // The invoice address is only sent when it isn't the default (or is being put back to it from
+    // something else), so POs on the default keep saving even before add_po_invoice_email.sql has been run.
+    const priorInvoiceEmail = poDraftId ? purchaseRequests.find((r) => r.id === poDraftId)?.invoice_email : null
+    const invoiceEmailFields =
+      poDraftInvoiceEmail === PO_INVOICE_EMAIL
+        ? priorInvoiceEmail
+          ? { invoice_email: null }
+          : {}
+        : { invoice_email: poDraftInvoiceEmail }
+
     setSavingPoRequest(true)
     try {
       let quoteFileUrl = poDraftQuoteFileUrl
@@ -2180,6 +2194,7 @@ function App() {
             budget_category_id: poDraftBudgetCategoryId,
             budget_subcategory_id: poDraftBudgetSubcategoryId,
             chargeable_expense: poDraftChargeableExpense,
+            ...invoiceEmailFields,
             quote_file_url: quoteFileUrl,
             quote_file_name: quoteFileName,
             currency: poDraftCurrency.trim() || 'CAD',
@@ -2235,6 +2250,9 @@ function App() {
           if ((existing.vendor_quote_number || '') !== (newValues.vendor_quote_number || '')) {
             changeLines.push(`Vendor Quote #: ${newValues.vendor_quote_number || '(cleared)'}`)
           }
+          if ((existing.invoice_email || PO_INVOICE_EMAIL) !== poDraftInvoiceEmail) {
+            changeLines.push(`Send Invoices To: ${existing.invoice_email || PO_INVOICE_EMAIL} → ${poDraftInvoiceEmail}`)
+          }
           if (changeLines.length > 0) {
             await logPoActivity(requestId, changeLines.map((l) => `• ${l}`).join('\n'))
           }
@@ -2260,6 +2278,7 @@ function App() {
             budget_category_id: poDraftBudgetCategoryId,
             budget_subcategory_id: poDraftBudgetSubcategoryId,
             chargeable_expense: poDraftChargeableExpense,
+            ...invoiceEmailFields,
             vendor_quote_number: poDraftVendorQuoteNumber.trim() || null,
             quote_file_url: quoteFileUrl,
             quote_file_name: quoteFileName,
@@ -4252,6 +4271,8 @@ function App() {
           budgetCategories={budgetCategories}
           budgetSubcategories={budgetSubcategories}
           poDraftChargeableExpense={poDraftChargeableExpense}
+          poDraftInvoiceEmail={poDraftInvoiceEmail}
+          setPoDraftInvoiceEmail={setPoDraftInvoiceEmail}
           setPoDraftChargeableExpense={setPoDraftChargeableExpense}
           poDraftVendorQuoteNumber={poDraftVendorQuoteNumber}
           setPoDraftVendorQuoteNumber={setPoDraftVendorQuoteNumber}

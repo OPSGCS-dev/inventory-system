@@ -7,7 +7,7 @@
 // actually emails or downloads a PO.
 import {
   COMPANY_ADDRESS_BLOCK,
-  PO_INSTRUCTIONS,
+  poInstructions,
   computeInvoicedTotal,
   computePoTotals,
   budgetCategoryLabel,
@@ -204,7 +204,7 @@ export async function buildPoPdf(request, stamp = null) {
 
   // --- instructions, reference, signature
   doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(INK)
-  PO_INSTRUCTIONS.forEach((instruction, i) => {
+  poInstructions(request).forEach((instruction, i) => {
     const lines = doc.splitTextToSize(clean(`${i + 1}. ${instruction}`), pageW - M * 2 - 12)
     needRoom(lines.length * 12 + 4)
     lines.forEach((part, j) => {

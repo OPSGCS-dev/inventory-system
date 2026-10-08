@@ -46,7 +46,8 @@ import {
   totalsByCurrencyText,
   budgetCategoryLabel,
   COMPANY_ADDRESS_BLOCK,
-  PO_INSTRUCTIONS,
+  poInstructions,
+  PO_INVOICE_EMAIL_OPTIONS,
   PO_STATUS_ORDER,
   nextStepInfo,
   truncate,
@@ -156,6 +157,8 @@ function PurchaseOrdersTab({
   budgetSubcategories,
   poDraftChargeableExpense,
   setPoDraftChargeableExpense,
+  poDraftInvoiceEmail,
+  setPoDraftInvoiceEmail,
   poDraftVendorQuoteNumber,
   setPoDraftVendorQuoteNumber,
   poDraftQuoteFileUrl,
@@ -1094,9 +1097,9 @@ function PurchaseOrdersTab({
                 )
               })()}
 
-              {/* PLACEHOLDER wording lives in PO_INSTRUCTIONS (utils.js), shared with the emailed PDF */}
+              {/* Wording lives in poInstructions (utils.js), shared with the emailed PDF */}
               <ol className="po-print-instructions">
-                {PO_INSTRUCTIONS.map((text) => (
+                {poInstructions(r).map((text) => (
                   <li key={text}>{text}</li>
                 ))}
               </ol>
@@ -1623,6 +1626,20 @@ function PurchaseOrdersTab({
                 />
                 <span>{poDraftChargeableExpense ? 'Yes' : 'No'}</span>
               </div>
+            </div>
+            <div>
+              <label htmlFor="po_draft_invoice_email">Send Invoices To</label>
+              <select
+                id="po_draft_invoice_email"
+                value={poDraftInvoiceEmail}
+                onChange={(e) => setPoDraftInvoiceEmail(e.target.value)}
+              >
+                {[...new Set([...PO_INVOICE_EMAIL_OPTIONS, poDraftInvoiceEmail])].filter(Boolean).map((email) => (
+                  <option value={email} key={email}>
+                    {email}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

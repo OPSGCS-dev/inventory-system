@@ -2479,8 +2479,26 @@ function App() {
 
   // A request can be drafted and submitted with a vendor that's still pending,
   // but not approved, and its PO not issued, until that vendor is approved.
-  function vendorBlockFor(request) {
-    return vendorBlockReason(request.vendors || vendors.find((v) => v.id === request.vendor_id))
+  // Looked up fresh from the database each time rather than read from the copy
+  // this page loaded, so a vendor rejected (or still pending) since then can't
+  // be slipped past, and a vendor that can't be found blocks instead of
+  // counting as approved. (The database has the same rule as a trigger --
+  // add_vendor_approval_guard.sql.) Returns the reason, or null if it's fine.
+  async function vendorBlockFor(request) {
+    if (!request.vendor_id) return null
+    const { data, error } = await supabase.from('vendors').select('*').eq('id', request.vendor_id).maybeSingle()
+    if (error) {
+      console.error(error)
+      return "Couldn't check the vendor's approval status — try again."
+    }
+    if (!data) return "The vendor on this request couldn't be found."
+    return vendorBlockReason(data)
+  }
+
+  // The database refuses with its own plain message when a vendor isn't
+  // approved; show that rather than the generic one.
+  function dbRefusal(error) {
+    return error?.code === 'P0001' && error.message ? error.message : null
   }
 
   // Shared by approve / hold / resume / reject: needs the Purchase Rec Approval
@@ -2500,7 +2518,7 @@ function App() {
       flashPoStatus(blocked, false)
       return
     }
-    const vendorBlock = vendorBlockFor(request)
+    const vendorBlock = await vendorBlockFor(request)
     if (vendorBlock) {
       flashPoStatus(`${vendorBlock} The vendor has to be approved before this request can be.`, false)
       return
@@ -2533,7 +2551,7 @@ function App() {
       await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
-      flashPoStatus('Could not approve — check the console for details.', false)
+      flashPoStatus(dbRefusal(error) || 'Could not approve — check the console for details.', false)
     } finally {
       setPoActionBusyId(null)
     }
@@ -2711,7 +2729,7 @@ function App() {
   }
 
   async function startIssuePurchaseOrder(request) {
-    const vendorBlock = vendorBlockFor(request)
+    const vendorBlock = await vendorBlockFor(request)
     if (vendorBlock) {
       flashPoStatus(`${vendorBlock} A PO can't be issued to it until it is approved.`, false)
       return
@@ -2744,7 +2762,7 @@ function App() {
       flashPoStatus('PO number is not ready yet.', false)
       return
     }
-    const vendorBlock = vendorBlockFor(request)
+    const vendorBlock = await vendorBlockFor(request)
     if (vendorBlock) {
       flashPoStatus(`${vendorBlock} A PO can't be issued to it until it is approved.`, false)
       return
@@ -2795,7 +2813,7 @@ function App() {
       await refreshPurchaseRequest(request.id)
     } catch (error) {
       console.error(error)
-      flashPoStatus('Could not issue PO — check the console for details.', false)
+      flashPoStatus(dbRefusal(error) || 'Could not issue PO — check the console for details.', false)
     } finally {
       setPoActionBusyId(null)
     }

@@ -72,6 +72,11 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **Vendor approval guard:** a vendor that is still pending/rejected must not get a request approved or a PO issued. That
+  rule used to live only in the browser, and failed open when the vendor row was missing. Now a trigger on
+  `purchase_requests` enforces it (`add_vendor_approval_guard.sql`; needs `add_vendor_approval.sql`), and
+  `vendorBlockFor` in App.jsx re-reads the vendor from the database and blocks when it can't be found. Note a vendor
+  requested by someone holding `vendor_approval` is auto-approved on purpose.
 - **Invoice scan and PO comparison:** choosing an invoice PDF in the PO's Receipts & Invoices panel (`InvoicesPanel`) now
   reads it (`src/scrape/`, same reader as the PO draft form) and opens `InvoiceReview`: invoice # and amount pre-filled
   (editable), a checklist against the PO (`scrape/comparePo.js`: vendor, PO number, total/cap, currency, subtotal/tax/
@@ -95,7 +100,7 @@ Most recent first, all on `main`:
   Audit tab (demo); security hardening (`security_0*.sql`).
 
 SQL added in this round (run in this order if not already run): `add_part_images`, `add_app_settings`, `add_transfer_pos`
-(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`.
+(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`.
 
 ## What to build next
 

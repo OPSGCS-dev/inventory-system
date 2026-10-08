@@ -72,6 +72,14 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **Invoice scan and PO comparison:** choosing an invoice PDF in the PO's Receipts & Invoices panel (`InvoicesPanel`) now
+  reads it (`src/scrape/`, same reader as the PO draft form) and opens `InvoiceReview`: invoice # and amount pre-filled
+  (editable), a checklist against the PO (`scrape/comparePo.js`: vendor, PO number, total/cap, currency, subtotal/tax/
+  shipping, line items paired by part number or wording), and the PO PDF (`buildPoPdf`) beside the invoice with the
+  disagreeing figures boxed. **Warns only, never blocks.** Scanned PDFs have no text, so they are entered by hand. No SQL.
+  pdf.js draws pages using the font files in `public/pdfjs/standard_fonts/` (copied from `node_modules/pdfjs-dist`;
+  re-copy if pdfjs-dist is upgraded). A hidden browser tab pauses pdf.js page drawing (it waits on animation frames),
+  so the pictures only appear once the tab is visible; the checklist and Add button don't wait for them.
 - **Master List change history:** trigger on `parts` -> `parts_history`; "Change History" panel with filters. (`add_parts_history.sql`)
 - **Tickets <-> POs:** link an existing PO to a ticket by number from either app (`TicketLinkEditor`; ticket side has
   "Link existing PO" and `/tickets/find`). (`add_ticket_code_link.sql`)

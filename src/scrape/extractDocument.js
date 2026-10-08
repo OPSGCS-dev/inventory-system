@@ -36,15 +36,21 @@ export function buildRows(items) {
       if (prev && it.x - prev.x2 < 3.5 && it.str !== '$' && prev.text !== '$') {
         prev.text = `${prev.text} ${it.str}`
         prev.x2 = it.x + it.w
+        prev.h = Math.max(prev.h || 0, it.h || 0)
       } else {
-        cells.push({ text: it.str, x: it.x, x2: it.x + it.w })
+        cells.push({ text: it.str, x: it.x, x2: it.x + it.w, h: it.h || 0 })
       }
     }
     // A lone "$" belongs to the number after it ("$  17,257"), however far
     // apart a spreadsheet-style layout sets them.
     for (let i = cells.length - 2; i >= 0; i--) {
       if (/^(?:US|CA)?\$$/.test(cells[i].text)) {
-        cells[i + 1] = { text: `${cells[i].text} ${cells[i + 1].text}`, x: cells[i].x, x2: cells[i + 1].x2 }
+        cells[i + 1] = {
+          text: `${cells[i].text} ${cells[i + 1].text}`,
+          x: cells[i].x,
+          x2: cells[i + 1].x2,
+          h: Math.max(cells[i].h || 0, cells[i + 1].h || 0),
+        }
         cells.splice(i, 1)
       }
     }

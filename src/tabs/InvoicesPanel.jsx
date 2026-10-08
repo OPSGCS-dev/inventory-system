@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import InvoiceReview from './InvoiceReview'
 import {
   canMatchInvoices,
   canApproveInvoice,
@@ -7,6 +8,7 @@ import {
   usersWithRole,
   findUserName,
   isAdmin,
+  formatMoney,
 } from '../utils'
 
 // Receipts & Invoices table for a PO's detail view. The requisitioner
@@ -27,6 +29,8 @@ function InvoicesPanel({
   handleAddReceipt,
   handleDeleteReceipt,
   handleMatchInvoiceReceipt,
+  poPdfRequest,
+  poStamp,
 }) {
   const canManage = canMatchInvoices(loggedInUser, request)
   const canPay = canManagePayment(loggedInUser, request)
@@ -35,16 +39,11 @@ function InvoicesPanel({
   const invoices = request.invoices || []
   const receipts = request.receipts || []
 
-  const [invoiceNumberDraft, setInvoiceNumberDraft] = useState('')
-  const [invoiceAmountDraft, setInvoiceAmountDraft] = useState('')
-  // Per-row draft invoice#/amount for the inline "add & match" mini-form
-  // that appears in an unmatched receipt's empty Invoice cell, keyed by
-  // receipt id (several unmatched receipts can each have their own draft).
-  const [rowInvoiceDrafts, setRowInvoiceDrafts] = useState({})
-
-  function setRowInvoiceDraft(receiptId, field, value) {
-    setRowInvoiceDrafts((prev) => ({ ...prev, [receiptId]: { ...prev[receiptId], [field]: value } }))
-  }
+  // The invoice being added: choosing a PDF reads it (number, amount, how it
+  // compares with the PO) and shows that for review before anything is saved.
+  // { file, receiptId, number, amount, scan: { busy, note }, review, error }
+  const [pending, setPending] = useState(null)
+  const scanToken = useRef(0)
 
   const unmatchedReceiptIds = new Set(receipts.map((r) => r.id))
   for (const inv of invoices) {
@@ -61,11 +60,69 @@ function InvoicesPanel({
     ...unmatchedReceipts.map((r) => ({ invoice: null, receipt: r })),
   ]
 
-  function submitNewInvoice(file) {
+  async function startInvoice(file, receiptId = null) {
     if (!file) return
-    handleAddInvoice(request, { invoiceNumber: invoiceNumberDraft, amount: invoiceAmountDraft, file })
-    setInvoiceNumberDraft('')
-    setInvoiceAmountDraft('')
+    const token = ++scanToken.current
+    const fresh = (patch) => setPending((p) => (p && token === scanToken.current ? { ...p, ...patch } : p))
+    setPending({ file, receiptId, number: '', amount: '', scan: { busy: true }, review: null, error: '' })
+    if (file.type !== 'application/pdf') {
+      fresh({ scan: { note: 'Please choose a PDF file.' } })
+      return
+    }
+    try {
+      const { prepareInvoiceReview } = await import('../scrape/invoiceReview.js')
+      const review = await prepareInvoiceReview(file, poPdfRequest || request, poStamp)
+      if (!review.hasText) {
+        fresh({ scan: { note: 'No readable text in this PDF (a scan?) — enter the invoice number and amount by hand.' } })
+        return
+      }
+      const { invoiceNumber, amount } = review.extracted
+      const found = [
+        invoiceNumber && `Invoice # ${invoiceNumber.value}`,
+        amount && `${formatMoney(amount.value)}${amount.currency ? ` ${amount.currency}` : ''}`,
+      ].filter(Boolean)
+      const missing = [!invoiceNumber && 'invoice number', !amount && 'total'].filter(Boolean)
+      const note =
+        (found.length ? `Read from the PDF: ${found.join(', ')}. Check before saving.` : '') +
+        (missing.length ? `${found.length ? ' ' : ''}Couldn't find the ${missing.join(' or ')} — enter it by hand.` : '')
+      setPending((p) =>
+        p && token === scanToken.current
+          ? {
+              ...p,
+              number: p.number || (invoiceNumber ? invoiceNumber.value : ''),
+              amount: p.amount === '' && amount ? String(amount.value) : p.amount,
+              scan: { note },
+              review,
+            }
+          : p
+      )
+      // The side-by-side pictures take a moment longer; they arrive on their
+      // own and the invoice can be added without waiting for them.
+      review.loadViews().then((views) => {
+        setPending((p) => (p && token === scanToken.current ? { ...p, review: { ...p.review, views } } : p))
+      })
+    } catch (error) {
+      console.error(error)
+      fresh({ scan: { note: "Couldn't read this PDF — enter the invoice number and amount by hand." } })
+    }
+  }
+
+  async function submitPending() {
+    const n = Number(pending.amount)
+    if (!pending.amount || Number.isNaN(n) || n <= 0) {
+      setPending((p) => ({ ...p, error: 'Enter a valid invoice amount.' }))
+      return
+    }
+    const ok = await handleAddInvoice(request, {
+      invoiceNumber: pending.number,
+      amount: pending.amount,
+      file: pending.file,
+      matchToReceiptId: pending.receiptId,
+    })
+    if (ok) {
+      scanToken.current++
+      setPending(null)
+    }
   }
 
   return (
@@ -199,41 +256,12 @@ function InvoicesPanel({
                               Add &amp; match:
                             </span>
                             <input
-                              type="text"
-                              placeholder="Invoice #"
-                              value={rowInvoiceDrafts[row.receipt.id]?.number || ''}
-                              onChange={(e) => setRowInvoiceDraft(row.receipt.id, 'number', e.target.value)}
-                              style={{ maxWidth: 100 }}
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              placeholder="Amount"
-                              value={rowInvoiceDrafts[row.receipt.id]?.amount || ''}
-                              onChange={(e) => setRowInvoiceDraft(row.receipt.id, 'amount', e.target.value)}
-                              style={{ maxWidth: 90 }}
-                            />
-                            <input
                               type="file"
                               accept="application/pdf"
                               disabled={busy}
                               onChange={(e) => {
-                                const file = e.target.files[0]
-                                if (!file) return
-                                const draft = rowInvoiceDrafts[row.receipt.id] || {}
-                                handleAddInvoice(request, {
-                                  invoiceNumber: draft.number,
-                                  amount: draft.amount,
-                                  file,
-                                  matchToReceiptId: row.receipt.id,
-                                })
+                                startInvoice(e.target.files[0], row.receipt.id)
                                 e.target.value = ''
-                                setRowInvoiceDrafts((prev) => {
-                                  const next = { ...prev }
-                                  delete next[row.receipt.id]
-                                  return next
-                                })
                               }}
                             />
                           </div>
@@ -319,6 +347,20 @@ function InvoicesPanel({
         </div>
       )}
 
+      {pending && (
+        <InvoiceReview
+          pending={pending}
+          request={request}
+          busy={busy}
+          onChange={(field, value) => setPending((p) => ({ ...p, [field]: value, error: '' }))}
+          onSubmit={submitPending}
+          onCancel={() => {
+            scanToken.current++
+            setPending(null)
+          }}
+        />
+      )}
+
       <div className="edit-toolbar" style={{ flexWrap: 'wrap' }}>
         {canAddReceipt && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
@@ -337,22 +379,6 @@ function InvoicesPanel({
         )}
         {canManage && (
           <>
-            <input
-              type="text"
-              placeholder="Invoice #"
-              value={invoiceNumberDraft}
-              onChange={(e) => setInvoiceNumberDraft(e.target.value)}
-              style={{ maxWidth: 140 }}
-            />
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Amount"
-              value={invoiceAmountDraft}
-              onChange={(e) => setInvoiceAmountDraft(e.target.value)}
-              style={{ maxWidth: 120 }}
-            />
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
               Add Invoice (PDF):
               <input
@@ -360,8 +386,7 @@ function InvoicesPanel({
                 accept="application/pdf"
                 disabled={busy}
                 onChange={(e) => {
-                  const file = e.target.files[0]
-                  submitNewInvoice(file)
+                  startInvoice(e.target.files[0])
                   e.target.value = ''
                 }}
               />

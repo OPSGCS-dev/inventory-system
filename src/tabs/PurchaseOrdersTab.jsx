@@ -1527,6 +1527,8 @@ function PurchaseOrdersTab({
               handleAddReceipt={handleAddReceipt}
               handleDeleteReceipt={handleDeleteReceipt}
               handleMatchInvoiceReceipt={handleMatchInvoiceReceipt}
+              poPdfRequest={withShownPoNumber(r)}
+              poStamp={approvalStamp(users, r)}
             />
           )}
         </div>

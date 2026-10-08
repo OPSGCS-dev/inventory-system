@@ -3003,9 +3003,11 @@ function App() {
       })
       flashPoStatus(matchToReceiptId ? 'Invoice added and matched.' : 'Invoice added.', true)
       await refreshPurchaseRequest(request.id)
+      return true
     } catch (error) {
       console.error(error)
       flashPoStatus('Could not add the invoice — check the console for details.', false)
+      return false
     } finally {
       setPoActionBusyId(null)
     }

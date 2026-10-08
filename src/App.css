@@ -587,6 +587,24 @@ table.sheet td.total-col {
 .po-category-badge-nte { background: #fdf1d6; color: var(--warn); }
 
 .po-badge-overcap { background: #fdecea; color: var(--danger); }
+
+/* Add-invoice review (tabs/InvoiceReview.jsx): invoice checked against its PO */
+.inv-review { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 12px 0; background: var(--card); }
+.inv-warn-text { color: var(--warn); font-weight: 600; font-size: 13px; margin: 6px 0; }
+.inv-ok-text { color: var(--success); font-weight: 600; font-size: 13px; }
+table.sheet tbody tr.inv-chk-warn td:not(.row-head) { background: #fdf1d6; }
+.inv-status { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.inv-status-ok { color: var(--success); }
+.inv-status-warn { color: var(--warn); }
+.inv-status-info { color: var(--muted); }
+.inv-docs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 900px) { .inv-docs { grid-template-columns: 1fr; } }
+.inv-doc { border: 1px solid var(--border); border-radius: 6px; min-width: 0; }
+.inv-doc-title { font-size: 13px; font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.inv-doc-scroll { max-height: 75vh; overflow: auto; padding: 8px; background: #e9e5dc; }
+.inv-page { position: relative; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
+.inv-page img { display: block; width: 100%; height: auto; }
+.inv-hl { position: absolute; background: rgba(255, 214, 0, 0.35); outline: 2px solid #e0a800; border-radius: 2px; pointer-events: none; }
 .po-badge-onhold { background: #fdf1d6; color: var(--warn); }
 .po-badge-rejected { background: #fde2e2; color: var(--danger); }
 .po-badge-voided { background: #e8e8e8; color: var(--muted); text-decoration: line-through; }

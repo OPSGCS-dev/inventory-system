@@ -1,4 +1,16 @@
+import { useEffect, useRef, useState } from 'react'
 import { emptyFilters, shortProjectName } from '../utils'
+
+// Small picture icon. Opens the part's reference image in a popup.
+function ImageIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="M21 15l-5-5L5 21" />
+    </svg>
+  )
+}
 
 function MasterListTab({
   canEditInventory,
@@ -32,7 +44,58 @@ function MasterListTab({
   parts,
   updateDraftField,
   removeDraftRow,
+  onPartImage,
+  imageBusyId,
 }) {
+  const [previewPart, setPreviewPart] = useState(null)
+  const fileInput = useRef(null)
+  const pickFor = useRef(null)
+
+  useEffect(() => {
+    if (!previewPart) return undefined
+    const onKey = (e) => e.key === 'Escape' && setPreviewPart(null)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [previewPart])
+
+  function chooseImage(gcsId) {
+    pickFor.current = gcsId
+    fileInput.current?.click()
+  }
+  function onImageChosen(e) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // so picking the same file again still fires
+    if (file && pickFor.current !== null) onPartImage(pickFor.current, file)
+  }
+
+  // The image cell: the icon (opens the popup) when the part has a picture; in edit mode also
+  // Attach / Replace / Remove. A part that isn't saved yet has no number to file a picture under.
+  const imageCell = (p) => {
+    const busy = imageBusyId === p.gcs_id
+    if (editMode && p._existing === false) return <span className="sub" style={{ margin: 0 }} title="Save the new part first, then attach its picture">—</span>
+    return (
+      <span className="img-cell">
+        {p.image_url && (
+          <button type="button" className="img-btn" title="Show picture" aria-label={`Show picture of part ${p.gcs_id}`} onClick={() => setPreviewPart(p)}>
+            <ImageIcon />
+          </button>
+        )}
+        {editMode && (
+          <>
+            <button type="button" className="img-edit-btn" disabled={busy} onClick={() => chooseImage(p.gcs_id)}>
+              {busy ? '…' : p.image_url ? 'Replace' : 'Attach'}
+            </button>
+            {p.image_url && !busy && (
+              <button type="button" className="img-edit-btn" title="Remove picture" onClick={() => onPartImage(p.gcs_id, null)}>
+                ✕
+              </button>
+            )}
+          </>
+        )}
+      </span>
+    )
+  }
+
   // Every entity that requires the part, by its short name (full names on hover).
   const usedByCell = (p) => {
     const used = usedByByPart.get(p.gcs_id) || []
@@ -178,6 +241,7 @@ function MasterListTab({
             <table className="sheet">
               <colgroup>
                 <col className="col-rowhead" />
+                <col style={{ width: editMode ? '110px' : '44px' }} />
                 <col style={{ width: '11%' }} />
                 <col style={{ width: '13%' }} />
                 <col style={{ width: '11%' }} />
@@ -190,6 +254,7 @@ function MasterListTab({
               <thead>
                 <tr>
                   <th className="row-head"></th>
+                  <th></th>
                   <th>A</th>
                   <th>B</th>
                   <th>C</th>
@@ -201,6 +266,7 @@ function MasterListTab({
                 </tr>
                 <tr className="header-row">
                   <th className="row-head">GCS P/N</th>
+                  <th title="Reference picture">Pic</th>
                   <th>Part ID</th>
                   <th>Mfr Part #</th>
                   <th>Manufacturer</th>
@@ -225,6 +291,7 @@ function MasterListTab({
                         ))}
                       </select>
                     </th>
+                    <th></th>
                     <th>
                       <input
                         type="text"
@@ -295,7 +362,7 @@ function MasterListTab({
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="empty" colSpan={editMode ? 9 : 8}>
+                    <td className="empty" colSpan={editMode ? 10 : 9}>
                       {parts.length === 0 ? 'No parts yet.' : 'No parts match your filters.'}
                     </td>
                   </tr>
@@ -303,6 +370,7 @@ function MasterListTab({
                   rows.map((p, i) => (
                     <tr key={editMode ? p._tempId || p.gcs_id : p.gcs_id}>
                       <td className="row-head">{p._existing !== false ? p.gcs_id : 'new'}</td>
+                      <td className="center-cell">{imageCell(p)}</td>
                       {editMode && !p._existing ? (
                         <>
                           <td>
@@ -386,6 +454,25 @@ function MasterListTab({
           </div>
         )}
       </div>
+      )}
+
+      <input ref={fileInput} type="file" accept="image/*" hidden onChange={onImageChosen} />
+
+      {previewPart && (
+        <div className="img-modal-backdrop" onClick={() => setPreviewPart(null)} role="dialog" aria-modal="true" aria-label="Part picture">
+          <div className="img-modal" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="img-modal-close" onClick={() => setPreviewPart(null)} aria-label="Close">
+              ×
+            </button>
+            <img src={previewPart.image_url} alt={previewPart.gcs_part_id || `Part ${previewPart.gcs_id}`} />
+            <div className="img-modal-caption">
+              <strong>
+                {previewPart.gcs_id} · {previewPart.gcs_part_id}
+              </strong>
+              {previewPart.description ? <div>{previewPart.description}</div> : null}
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

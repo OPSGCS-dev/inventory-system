@@ -13,7 +13,9 @@ import {
   partLineHasContent,
   partLineIsComplete,
   consumableOverCap,
-  CONSUMABLE_MAX_UNIT_COST,
+  getConsumableMaxUnitCost,
+  setConsumableMaxUnitCost,
+  DEFAULT_CONSUMABLE_MAX_UNIT_COST,
   INVENTORY_MODE_TO_ACTION,
   INVENTORY_ACTION_TO_MODE,
   linesHaveParts,
@@ -52,6 +54,7 @@ import OwnershipTab from './tabs/OwnershipTab'
 import PhysicalLocationTab from './tabs/PhysicalLocationTab'
 import HistoryPanel from './tabs/HistoryPanel'
 import { fetchAllRows } from './stockUtils'
+import { PART_IMAGE_BUCKET, partImagePath, shrinkImageToJpeg } from './imageUtils'
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import PoLedgerTab from './tabs/PoLedgerTab'
 import AuditTab from './tabs/AuditTab'
@@ -265,6 +268,121 @@ function App() {
   useEffect(() => {
     if (loggedInUser) loadParts()
   }, [loggedInUser])
+
+  // --- Admin-editable settings (app_settings) ---
+  // Today that's the per-unit cap on a consumable. Until supabase/add_app_settings.sql has
+  // been run the table doesn't exist and the built-in default stays in force.
+  const [consumableCap, setConsumableCap] = useState(DEFAULT_CONSUMABLE_MAX_UNIT_COST)
+  const [savingSettings, setSavingSettings] = useState(false)
+  const [settingsStatus, setSettingsStatus] = useState(null)
+
+  function flashSettingsStatus(msg, ok) {
+    setSettingsStatus({ ok, msg })
+    setTimeout(() => setSettingsStatus(null), ok ? 3500 : 9000)
+  }
+
+  async function loadSettings() {
+    const { data, error } = await supabase.from('app_settings').select('key, value')
+    if (error) {
+      console.error(error)
+      return
+    }
+    const cap = (data ?? []).find((r) => r.key === 'consumable_max_unit_cost')
+    if (cap) {
+      setConsumableMaxUnitCost(cap.value)
+      setConsumableCap(Number(cap.value))
+    }
+  }
+
+  useEffect(() => {
+    if (loggedInUser) loadSettings()
+  }, [loggedInUser])
+
+  async function handleSaveConsumableCap(rawValue) {
+    const value = Number(rawValue)
+    if (String(rawValue).trim() === '' || !Number.isFinite(value) || value < 0) {
+      flashSettingsStatus('Enter a dollar amount of 0 or more.', false)
+      return false
+    }
+    setSavingSettings(true)
+    try {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .upsert(
+          { key: 'consumable_max_unit_cost', value, updated_at: new Date().toISOString(), updated_by: loggedInUser.id },
+          { onConflict: 'key' }
+        )
+        .select('key')
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error('The database did not apply the change — only an admin can change settings.')
+      setConsumableMaxUnitCost(value)
+      setConsumableCap(value)
+      flashSettingsStatus(`Consumable limit set to $${value.toLocaleString()} per unit.`, true)
+      return true
+    } catch (error) {
+      console.error(error)
+      flashSettingsStatus(
+        /app_settings/i.test(error?.message || '')
+          ? 'The settings table is missing. Run supabase/add_app_settings.sql in the Inventory project\'s SQL editor first.'
+          : error?.message || 'Could not save the setting.',
+        false
+      )
+      return false
+    } finally {
+      setSavingSettings(false)
+    }
+  }
+
+  // --- Part reference images (Master List) ---
+  const [imageBusyId, setImageBusyId] = useState(null)
+
+  // Attach, replace (file given) or remove (file null) a part's reference image. Saves
+  // straight away rather than waiting for "Save Changes" -- the picture is its own file, and
+  // this also works from the plain Master List view.
+  async function handlePartImage(gcsId, file) {
+    const part = parts.find((p) => p.gcs_id === gcsId)
+    if (!part) return
+    setImageBusyId(gcsId)
+    let uploadedPath = null
+    try {
+      let newUrl = null
+      if (file) {
+        const blob = await shrinkImageToJpeg(file)
+        uploadedPath = `${gcsId}-${crypto.randomUUID()}.jpg`
+        const { error: uploadError } = await supabase.storage
+          .from(PART_IMAGE_BUCKET)
+          .upload(uploadedPath, blob, { contentType: 'image/jpeg' })
+        if (uploadError) throw uploadError
+        newUrl = supabase.storage.from(PART_IMAGE_BUCKET).getPublicUrl(uploadedPath).data.publicUrl
+      }
+      const { data: saved, error } = await supabase
+        .from('parts')
+        .update({ image_url: newUrl })
+        .eq('gcs_id', gcsId)
+        .select('gcs_id')
+      if (error) throw error
+      if (!saved || saved.length === 0) throw new Error('The database did not apply the change (no rows were updated).')
+      uploadedPath = null // saved: it's referenced now
+
+      const oldPath = partImagePath(part.image_url)
+      if (oldPath) await supabase.storage.from(PART_IMAGE_BUCKET).remove([oldPath])
+
+      setParts((prev) => prev.map((p) => (p.gcs_id === gcsId ? { ...p, image_url: newUrl } : p)))
+      setDraftParts((prev) => prev.map((r) => (r._existing && r.gcs_id === gcsId ? { ...r, image_url: newUrl } : r)))
+      flashStatus(file ? 'Image saved.' : 'Image removed.', true)
+    } catch (error) {
+      console.error(error)
+      if (uploadedPath) await supabase.storage.from(PART_IMAGE_BUCKET).remove([uploadedPath])
+      flashStatus(
+        /image_url|bucket/i.test(error?.message || '')
+          ? 'Part images are not set up yet. Run supabase/add_part_images.sql in the Inventory project\'s SQL editor first.'
+          : error?.message || 'Could not save the image.',
+        false
+      )
+    } finally {
+      setImageBusyId(null)
+    }
+  }
 
   async function loadProjects() {
     const { data, error } = await supabase.from('projects').select('*').order('name', { ascending: true })
@@ -1927,7 +2045,7 @@ function App() {
     if (overCap.length > 0) {
       flagLines(
         overCap,
-        `A consumable can't cost more than $${CONSUMABLE_MAX_UNIT_COST.toLocaleString()} each. If it's an inventory part, pick it from the list as a Spare or Used immediately; otherwise include it in a service line.`
+        `A consumable can't cost more than $${getConsumableMaxUnitCost().toLocaleString()} each. If it's an inventory part, pick it from the list as a Spare or Used immediately; otherwise include it in a service line.`
       )
       return
     }
@@ -3988,6 +4106,8 @@ function App() {
           parts={parts}
           updateDraftField={updateDraftField}
           removeDraftRow={removeDraftRow}
+          onPartImage={handlePartImage}
+          imageBusyId={imageBusyId}
         />
       )}
 
@@ -4053,6 +4173,7 @@ function App() {
           loadError={stockStatus && !stockStatus.ok ? stockStatus.msg : null}
           incomingByKey={incomingByKey}
           reloadStock={loadStock}
+          reloadPurchaseRequests={loadPurchaseRequests}
           focusGcsId={focusPart?.tab === 'ownership' ? focusPart.gcsId : null}
           onFocusDone={() => setFocusPart(null)}
           onShowLocation={(gcsId) => {
@@ -4284,6 +4405,10 @@ function App() {
           updateDraftSubProjectField={updateDraftSubProjectField}
           savingSubProjects={savingSubProjects}
           handleSaveSubProjects={handleSaveSubProjects}
+          consumableCap={consumableCap}
+          savingSettings={savingSettings}
+          settingsStatus={settingsStatus}
+          handleSaveConsumableCap={handleSaveConsumableCap}
         />
       )}
 

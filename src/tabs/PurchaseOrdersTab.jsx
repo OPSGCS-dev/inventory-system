@@ -28,7 +28,7 @@ import {
   consumableOverCap,
   compareInvoicesToPo,
   invoiceMatchText,
-  CONSUMABLE_MAX_UNIT_COST,
+  getConsumableMaxUnitCost,
   computePaymentStatus,
   canMarkPaymentPaid,
   PAYMENT_STATUS_LABELS,
@@ -1885,7 +1885,7 @@ function PurchaseOrdersTab({
                                 <option value="spare">Spare — from the inventory list, added to stock when received</option>
                                 <option value="used">Used immediately — from the inventory list, not added to stock</option>
                                 <option value="consumable">
-                                  {`Consumable — not tracked (max $${CONSUMABLE_MAX_UNIT_COST.toLocaleString()} each)`}
+                                  {`Consumable — not tracked (max $${getConsumableMaxUnitCost().toLocaleString()} each)`}
                                 </option>
                               </select>
 
@@ -1946,7 +1946,7 @@ function PurchaseOrdersTab({
                                   />
                                   {consumableOverCap(line) && (
                                     <p className="sub" style={{ margin: '4px 0 0', color: 'var(--danger)' }}>
-                                      {`Over the $${CONSUMABLE_MAX_UNIT_COST.toLocaleString()} limit for a consumable — it has to be an inventory part, or go in a service line.`}
+                                      {`Over the $${getConsumableMaxUnitCost().toLocaleString()} limit for a consumable — it has to be an inventory part, or go in a service line.`}
                                     </p>
                                   )}
                                 </>
@@ -1979,7 +1979,7 @@ function PurchaseOrdersTab({
                           <input
                             type="number"
                             min="0"
-                            max={mode === 'consumable' ? CONSUMABLE_MAX_UNIT_COST : undefined}
+                            max={mode === 'consumable' ? getConsumableMaxUnitCost() : undefined}
                             value={line.unit_cost}
                             onChange={(e) => updatePoDraftLineField(i, 'unit_cost', e.target.value)}
                           />

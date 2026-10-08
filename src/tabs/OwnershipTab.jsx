@@ -19,6 +19,7 @@ function OwnershipTab({
   loadError,
   incomingByKey,
   reloadStock,
+  reloadPurchaseRequests,
   focusGcsId,
   onFocusDone,
   onShowLocation,
@@ -193,7 +194,7 @@ function OwnershipTab({
     if (!transferNote.trim()) return flash('A reason is required before saving.', false)
     if (!qty || qty <= 0) return flash('Enter a quantity greater than zero.', false)
     setBusyPart(item.gcs_id)
-    const { error } = await supabase.rpc('fn_stock_transfer', {
+    const { data: journalId, error } = await supabase.rpc('fn_stock_transfer', {
       p_part: item.gcs_id,
       p_from: Number(fromId),
       p_to: Number(toId),
@@ -208,8 +209,15 @@ function OwnershipTab({
       return flash(rpcErrorText(error, 'Could not record the transfer.'), false)
     }
     setQtyByPart((prev) => ({ ...prev, [item.gcs_id]: '' }))
-    flash('Stock transfer recorded.', true)
+    // The transfer also wrote a PO between the two entities; its number is on the History entry.
+    let poNumber = null
+    if (journalId) {
+      const { data: entry } = await supabase.from('inventory_journal').select('note').eq('id', journalId).maybeSingle()
+      poNumber = entry?.note?.match(/PO-[0-9A-Za-z-]+/)?.[0] ?? null
+    }
+    flash(poNumber ? `Stock transfer recorded. PO ${poNumber} created.` : 'Stock transfer recorded.', true)
     await reloadStock()
+    reloadPurchaseRequests?.()
   }
 
   // ------- upload -------
@@ -393,7 +401,7 @@ function OwnershipTab({
                 <option value="barn">Barn</option>
               </select>
               <span className="sub" style={{ margin: 0 }}>
-                The move is assumed to have already happened, so the owner and the location change together.
+                The move is assumed to have already happened, so the owner and the location change together. Each saved transfer also creates a closed PO from the sender to the receiver.
               </span>
             </div>
           </>

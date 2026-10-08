@@ -350,7 +350,17 @@ export const ENTITY_SCOPED_ROLES = [
 //               link, and capped per unit (CONSUMABLE_MAX_UNIT_COST)
 // A part that is neither on the list nor a consumable belongs in a service
 // line instead.
-export const CONSUMABLE_MAX_UNIT_COST = 1000
+//
+// The per-unit cap is an admin setting (Admin > Settings, stored in app_settings and
+// enforced again by the database). Screens read it through getConsumableMaxUnitCost();
+// App sets it once the setting loads. The default only applies until then.
+export const DEFAULT_CONSUMABLE_MAX_UNIT_COST = 1000
+let consumableMaxUnitCost = DEFAULT_CONSUMABLE_MAX_UNIT_COST
+export const getConsumableMaxUnitCost = () => consumableMaxUnitCost
+export function setConsumableMaxUnitCost(value) {
+  const n = Number(value)
+  consumableMaxUnitCost = Number.isFinite(n) && n >= 0 ? n : DEFAULT_CONSUMABLE_MAX_UNIT_COST
+}
 
 // inventory_mode is the draft's choice ('spare' | 'used' | 'consumable', or ''
 // when a line still has to be answered); inventory_action is the stored form.
@@ -393,7 +403,7 @@ export function partLineHasContent(line) {
 // A consumable over the per-unit cap is not allowed -- it would be a real
 // part being waved past the inventory counters.
 export function consumableOverCap(line) {
-  return line.inventory_mode === 'consumable' && Number(line.unit_cost) > CONSUMABLE_MAX_UNIT_COST
+  return line.inventory_mode === 'consumable' && Number(line.unit_cost) > consumableMaxUnitCost
 }
 
 // Has the person said how this part line relates to inventory? Every part
@@ -409,9 +419,10 @@ export function partLineIsComplete(line) {
 
 // Does receiving this saved part line add it to stock? Only spares do; a line
 // with no action at all is an older ordinary list part and counted as before.
+// (A 'transfer' line comes from a Stock Transfer, which already moved the stock.)
 export function lineCountsInStock(line) {
   if (line.line_type !== 'part' || !line.part_gcs_id) return false
-  return !['used_immediately', 'consumable'].includes(line.inventory_action)
+  return !['used_immediately', 'consumable', 'transfer'].includes(line.inventory_action)
 }
 
 // One line of plain English about what a saved part line does with inventory,
@@ -425,6 +436,8 @@ export function describeLineInventory(line, entityName, received) {
       return 'Used immediately — not added to inventory'
     case 'consumable':
       return 'Consumable — not tracked in inventory'
+    case 'transfer':
+      return 'Stock transfer between entities — the stock already moved when the transfer was saved'
     case 'add_new':
     case 'not_tracked':
       return 'Uses an older inventory option that no longer exists — edit the request and choose Spare, Used immediately or Consumable'

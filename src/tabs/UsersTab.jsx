@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PO_ROLE_OPTIONS, ENTITY_SCOPED_ROLES, userDisplayName } from '../utils'
 
 // Compact "add one at a time" control instead of a tall multi-select: a
@@ -151,7 +151,16 @@ function UsersTab({
   adminImporting,
   handleConfirmAdminImport,
   resetAdminImportPanel,
+  consumableCap,
+  savingSettings,
+  settingsStatus,
+  handleSaveConsumableCap,
 }) {
+  const [capDraft, setCapDraft] = useState(String(consumableCap))
+  useEffect(() => {
+    setCapDraft(String(consumableCap))
+  }, [consumableCap])
+  const capChanged = capDraft.trim() !== String(consumableCap)
   const [passwordCopied, setPasswordCopied] = useState(false)
   const [vendorPasswordCopied, setVendorPasswordCopied] = useState(false)
 
@@ -252,6 +261,40 @@ function UsersTab({
             )}
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <h2>Settings</h2>
+        </div>
+
+        <div className="edit-toolbar" style={{ alignItems: 'center' }}>
+          <label htmlFor="consumable-cap" style={{ fontWeight: 600 }}>
+            Consumable limit ($ per unit)
+          </label>
+          <input
+            id="consumable-cap"
+            type="number"
+            min="0"
+            step="1"
+            style={{ width: 120 }}
+            value={capDraft}
+            onChange={(e) => setCapDraft(e.target.value)}
+          />
+          <button
+            className="btn-primary"
+            disabled={savingSettings || !capChanged}
+            onClick={() => handleSaveConsumableCap(capDraft)}
+          >
+            {savingSettings ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        <p className="sub" style={{ margin: '8px 0 0' }}>
+          The most a single consumable can cost on a purchase request. Anything dearer has to be an
+          inventory part from the list, or go in a service line. Lines already saved are not changed;
+          the new limit applies to lines saved from now on.
+        </p>
+        {settingsStatus && <div className={'status ' + (settingsStatus.ok ? 'ok' : 'err')}>{settingsStatus.msg}</div>}
       </div>
 
       <div className="card">

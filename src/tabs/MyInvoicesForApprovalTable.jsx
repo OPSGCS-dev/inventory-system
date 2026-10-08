@@ -1,27 +1,37 @@
 import { formatMoney, totalsByCurrencyText } from '../utils'
+import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 
 // Flattened { request, invoice } rows for the "My Invoices for Approval"
 // view -- its rows are invoices, not purchase requests, so it doesn't share
 // the PO summary table's columns.
+const uploadedAt = ({ invoice }) => invoice.uploaded_at
+
 function MyInvoicesForApprovalTable({ invoicesPendingApproval, toggleExpandedPo }) {
+  const range = useDateRange(invoicesPendingApproval, uploadedAt)
+  const listed = range.listed
   return (
     <div className="card">
       <div className="card-header">
-        <h2>My Invoices for Approval ({invoicesPendingApproval.length})</h2>
-        {invoicesPendingApproval.length > 0 && (
+        <h2>My Invoices for Approval ({listed.length})</h2>
+        <div className="header-actions">
+          <DateRangeFilter range={range} what="uploaded" />
+        </div>
+        {listed.length > 0 && (
           <div className="sub" style={{ margin: 0 }}>
             Total pending:{' '}
             <strong>
               {totalsByCurrencyText(
-                invoicesPendingApproval.map(({ request, invoice }) => ({ amount: invoice.amount, currency: request.currency }))
+                listed.map(({ request, invoice }) => ({ amount: invoice.amount, currency: request.currency }))
               )}
             </strong>
           </div>
         )}
       </div>
 
-      {invoicesPendingApproval.length === 0 ? (
-        <div className="empty">No invoices waiting on approval.</div>
+      {listed.length === 0 ? (
+        <div className="empty">
+          {invoicesPendingApproval.length === 0 ? 'No invoices waiting on approval.' : 'No invoices match the date range.'}
+        </div>
       ) : (
         <div className="sheet-wrap">
           <table className="sheet">
@@ -41,12 +51,12 @@ function MyInvoicesForApprovalTable({ invoicesPendingApproval, toggleExpandedPo 
                 <th>PO #</th>
                 <th>Entity</th>
                 <th>Vendor</th>
-                <th>Uploaded</th>
+                <DateSortHeader range={range} label="Uploaded" />
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {invoicesPendingApproval.map(({ request, invoice }) => (
+              {listed.map(({ request, invoice }) => (
                 <tr key={invoice.id}>
                   <td>{invoice.invoice_number || '—'}</td>
                   <td className="center-cell">{formatMoney(invoice.amount)}</td>

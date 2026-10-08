@@ -65,6 +65,7 @@ import {
 import InvoicesPanel from './InvoicesPanel'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
 import MyInvoicesToPayTable from './MyInvoicesToPayTable'
+import { localDay } from './DateRange'
 import InvoiceMatchChip from './InvoiceMatchChip'
 import VendorRequestPanel from './VendorRequestPanel'
 import VendorsToApproveTable from './VendorsToApproveTable'
@@ -111,9 +112,6 @@ function PoProgressStepper({ request }) {
     </div>
   )
 }
-
-// A timestamp as the local calendar day, YYYY-MM-DD (what a date input holds).
-const localDay = (iso) => (iso ? new Date(iso).toLocaleDateString('en-CA') : '')
 
 function PurchaseOrdersTab({
   loggedInUser,

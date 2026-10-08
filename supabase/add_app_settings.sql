@@ -1,13 +1,14 @@
 -- Run this once in the Supabase SQL editor (Project Settings > SQL Editor > New query)
--- IN THE INVENTORY PROJECT. Needs security_04_lock_down_users_table.sql to have run
--- first (it defines public.is_app_admin()).
+-- IN THE INVENTORY PROJECT. Self-contained: it creates public.is_app_admin() itself if it
+-- isn't there yet (identical to the one security_04_lock_down_users_table.sql creates, so
+-- running that later is harmless).
 --
 -- Admin-editable settings. The first one is the per-unit cap on a consumable
 -- on a purchase request (Admin > Settings in the app). It used to be a fixed
 -- $1000 written into the app and into a table check; now the app reads it from
 -- here, and the database enforces whatever it is set to.
 --
---   Anyone signed in and active can read the settings; only an admin can change them.
+--   Anyone signed in can read the settings; only an admin can change them.
 --   Changing the cap does not touch consumable lines already saved: it applies to
 --   lines saved from now on.
 
@@ -18,11 +19,28 @@ create table if not exists public.app_settings (
   updated_by bigint references public.users (id)
 );
 
+-- Admin check, same definition as in security_04_lock_down_users_table.sql.
+create or replace function public.is_app_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select exists (
+    select 1 from public.users u
+    where u.auth_user_id = auth.uid() and u.active and 'admin' = any (u.roles)
+  );
+$$;
+revoke all on function public.is_app_admin() from public, anon;
+grant execute on function public.is_app_admin() to authenticated, service_role;
+
 alter table public.app_settings enable row level security;
 
+-- Anyone signed in can read the settings (they're not secret; the PO screens need the cap).
 drop policy if exists "app settings read" on public.app_settings;
 create policy "app settings read" on public.app_settings
-  for select to authenticated using (public.is_active_app_user());
+  for select to authenticated using (true);
 
 drop policy if exists "app settings insert admin" on public.app_settings;
 create policy "app settings insert admin" on public.app_settings

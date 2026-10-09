@@ -370,6 +370,8 @@ begin
       ev := 'vendor_deleted';
     elsif o ->> 'approval_status' is distinct from n ->> 'approval_status' then
       ev := case n ->> 'approval_status' when 'approved' then 'vendor_approved' when 'rejected' then 'vendor_rejected' else 'vendor_status_changed' end;
+    elsif o ->> 'active' is distinct from n ->> 'active' then
+      ev := case when coalesce((n ->> 'active')::boolean, true) then 'vendor_reactivated' else 'vendor_deactivated' end;
     else
       ev := 'vendor_edited';
     end if;

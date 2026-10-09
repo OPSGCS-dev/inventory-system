@@ -61,6 +61,8 @@ export const PO_HISTORY_EVENTS = {
   vendor_approved: 'Vendor approved',
   vendor_rejected: 'Vendor rejected',
   vendor_status_changed: 'Vendor status changed',
+  vendor_deactivated: 'Vendor deactivated',
+  vendor_reactivated: 'Vendor reactivated',
   vendor_edited: 'Vendor edited',
   vendor_deleted: 'Vendor deleted',
   po_pdf_downloaded: 'PO PDF downloaded',
@@ -136,6 +138,8 @@ const FIELD_LABELS = {
   address: 'Address',
   approval_status: 'Approval status',
   logon_enabled: 'Vendor logon',
+  active: 'Active',
+  deactivation_reason: 'Reason deactivated',
 }
 
 const prettify = (k) => k.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
@@ -308,11 +312,14 @@ export function summarize(row, ctx = {}) {
     case 'vendor_added':
     case 'vendor_approved':
     case 'vendor_rejected':
+    case 'vendor_deactivated':
+    case 'vendor_reactivated':
     case 'vendor_edited':
     case 'vendor_deleted':
     case 'vendor_status_changed':
       if (row.vendor_name) bits.push(row.vendor_name)
       if (row.event === 'vendor_rejected' && newOf(row, 'rejection_reason')) bits.push(`reason: ${newOf(row, 'rejection_reason')}`)
+      if (row.event === 'vendor_deactivated' && newOf(row, 'deactivation_reason')) bits.push(`reason: ${newOf(row, 'deactivation_reason')}`)
       break
     case 'po_pdf_downloaded':
     case 'po_email_drafted':

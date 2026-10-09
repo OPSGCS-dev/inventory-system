@@ -110,6 +110,7 @@ function UsersTab({
   openNewVendorForm,
   openEditVendorForm,
   handleDeleteVendor,
+  handleSetVendorActive,
   closeVendorForm,
   vendorFormName,
   setVendorFormName,
@@ -796,9 +797,14 @@ function UsersTab({
                 </tr>
               ) : (
                 vendors.map((v) => (
-                  <tr key={v.id}>
+                  <tr key={v.id} style={v.active === false ? { opacity: 0.6 } : undefined}>
                     <td>
                       {v.name}
+                      {v.active === false && (
+                        <div className="sub" style={{ color: 'var(--danger)' }}>
+                          Deactivated{v.deactivation_reason ? ` — ${v.deactivation_reason}` : ''}
+                        </div>
+                      )}
                       {v.approval_status === 'pending' && <div className="sub">Pending approval</div>}
                       {v.approval_status === 'rejected' && (
                         <div className="sub" style={{ color: 'var(--danger)' }}>
@@ -833,7 +839,19 @@ function UsersTab({
                       <button className="btn-secondary" onClick={() => openEditVendorForm(v)}>
                         Edit
                       </button>{' '}
-                      <button className="del-btn" onClick={() => handleDeleteVendor(v)}>
+                      <button
+                        className="btn-secondary"
+                        onClick={() => handleSetVendorActive(v, v.active === false)}
+                        title={
+                          v.active === false
+                            ? 'Let this vendor be used again'
+                            : 'Keep the vendor and its history, but stop it being used for new requests'
+                        }
+                      >
+                        {v.active === false ? 'Reactivate' : 'Deactivate'}
+                      </button>{' '}
+                      {/* TEMPORARY (testing): vendors should only ever be deactivated; delete stays while testing. */}
+                      <button className="del-btn" onClick={() => handleDeleteVendor(v)} title="Temporary — use Deactivate instead">
                         Delete
                       </button>
                     </td>

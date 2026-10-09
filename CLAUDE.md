@@ -72,6 +72,12 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **Vendors are deactivated, not deleted:** `vendors.active` (+ `deactivated_by/_at`, `deactivation_reason`; `add_vendor_deactivate.sql`, run after
+  `add_vendor_approval_guard.sql`). Admin > Vendors has Deactivate / Reactivate (`handleSetVendorActive`, which also switches off the vendor's
+  logon). A deactivated vendor drops out of the PO form's vendor list, can't be used to approve a request or issue a PO (`vendorBlockReason` /
+  `isVendorActive`, and the same trigger as the approval guard, now extended), but its existing POs carry on. Audited as vendor_deactivated /
+  vendor_reactivated (re-run `add_po_history.sql` to pick those up). **Delete is kept TEMPORARILY while testing** (button in UsersTab,
+  `handleDeleteVendor`, both marked) -- when testing is over, remove it, like PO delete was restored to drafts only.
 - **PO History (audit trail):** `po_history` (`add_po_history.sql`; run after the other PO SQL files, and re-run it if one of them
   is run later) is written only by database triggers (`fn_po_audit` on `purchase_requests`, lines, `invoices`, `receipts`,
   `invoice_payment_batches`, `vendors`): who (real signed-in user), when (server time), event code, and field-by-field old -> new,
@@ -138,7 +144,7 @@ Most recent first, all on `main`:
   Audit tab (demo); security hardening (`security_0*.sql`).
 
 SQL added in this round (run in this order if not already run): `add_part_images`, `add_app_settings`, `add_transfer_pos`
-(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`.
+(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`, `add_vendor_deactivate`.
 
 ## What to build next
 

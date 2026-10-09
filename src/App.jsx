@@ -3977,6 +3977,8 @@ function App() {
     }
   }
 
+  // TEMPORARY, while testing: vendors should only ever be deactivated (handleSetVendorActive); delete is kept
+  // for now and goes away once testing is over.
   // Admin-only (the button is only shown to admins, and this checks again).
   // A vendor that any purchase request points at can't be deleted -- that would
   // orphan the PO's record of who it was for -- so say so up front instead of
@@ -4067,6 +4069,63 @@ function App() {
       true
     )
     return { vendor: data }
+  }
+
+  // Vendors are deactivated, not deleted: the vendor and every PO ever issued to it stay on file, but it
+  // can't be picked for new requests or used to approve one or issue a PO (add_vendor_deactivate.sql,
+  // and vendorBlockReason here). Turning off also switches off the vendor's logon, if it has one;
+  // reactivating does not turn it back on -- tick Logon again if it should have it.
+  async function handleSetVendorActive(vendor, active) {
+    if (!isAdmin(loggedInUser)) {
+      flashUsersStatus('Only an admin can deactivate or reactivate a vendor.', false)
+      return
+    }
+    let reason = ''
+    if (!active) {
+      const answer = window.prompt(
+        `Deactivate ${vendor.name}? It stays on file, but can't be used for new requests.\n\nReason (optional):`
+      )
+      if (answer === null) return
+      reason = answer.trim()
+    }
+    try {
+      const { error } = await supabase
+        .from('vendors')
+        .update(
+          active
+            ? { active: true, deactivated_by: null, deactivated_at: null, deactivation_reason: null }
+            : {
+                active: false,
+                deactivated_by: loggedInUser.id,
+                deactivated_at: new Date().toISOString(),
+                deactivation_reason: reason || null,
+                // A deactivated vendor can't be signed in as either.
+                ...(vendor.logon_enabled ? { logon_enabled: false } : {}),
+              }
+        )
+        .eq('id', vendor.id)
+      if (error) throw error
+      if (!active && vendor.logon_enabled) {
+        const existingUser = users.find((u) => u.vendor_id === vendor.id)
+        if (existingUser) {
+          const { error: userError } = await supabase.from('users').update({ active: false }).eq('id', existingUser.id)
+          if (userError) throw userError
+        }
+      }
+      flashUsersStatus(
+        active ? `${vendor.name} reactivated.` : `${vendor.name} deactivated — it stays on file but can't be used for new requests.`,
+        true
+      )
+      await Promise.all([loadVendors(), loadUsers(), loadPurchaseRequests()])
+    } catch (error) {
+      console.error(error)
+      flashUsersStatus(
+        error?.code === '42703' || /deactivat|\bactive\b/i.test(error?.message || '')
+          ? "Deactivating vendors isn't set up in the database yet — run add_vendor_deactivate.sql."
+          : 'Could not update the vendor — check the console for details.',
+        false
+      )
+    }
   }
 
   // Approve or reject a requested vendor. Requests and POs carry a copy of the
@@ -4897,6 +4956,7 @@ function App() {
           openNewVendorForm={openNewVendorForm}
           openEditVendorForm={openEditVendorForm}
           handleDeleteVendor={handleDeleteVendor}
+          handleSetVendorActive={handleSetVendorActive}
           closeVendorForm={closeVendorForm}
           vendorFormName={vendorFormName}
           setVendorFormName={setVendorFormName}

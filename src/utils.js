@@ -699,8 +699,17 @@ export function vendorApprovalStatus(vendor) {
   return vendor?.approval_status || 'approved'
 }
 
+// A deactivated vendor is kept on file (and its POs carry on) but can't take new work. Vendors from
+// before deactivation existed have no `active` value and count as active.
+export function isVendorActive(vendor) {
+  return vendor?.active !== false
+}
+
 // Why a request can't go forward on this vendor yet, or null if it can.
 export function vendorBlockReason(vendor) {
+  if (vendor && !isVendorActive(vendor)) {
+    return `${vendor.name} has been deactivated as a vendor — choose another vendor, or ask an admin to reactivate it.`
+  }
   const status = vendorApprovalStatus(vendor)
   if (status === 'pending') return `${vendor.name} is still pending approval as a vendor.`
   if (status === 'rejected') {

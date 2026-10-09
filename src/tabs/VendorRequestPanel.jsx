@@ -4,9 +4,9 @@
 // the page for a form elsewhere would risk them).
 import { useState } from 'react'
 import { similarNames } from '../scrape/matchers'
-import { vendorApprovalStatus } from '../utils'
+import { isVendorActive, vendorApprovalStatus } from '../utils'
 
-const STATUS_WORDS = { pending: 'pending approval', rejected: 'rejected' }
+const STATUS_WORDS = { pending: 'pending approval', rejected: 'rejected', inactive: 'deactivated — ask an admin to reactivate it' }
 
 export default function VendorRequestPanel({ vendors, onSubmit, onClose, onUseExisting }) {
   const [form, setForm] = useState({ name: '', contact: '', phone: '', email: '', address: '', notes: '' })
@@ -42,12 +42,12 @@ export default function VendorRequestPanel({ vendors, onSubmit, onClose, onUseEx
         <div className="sub" style={{ margin: '6px 0 0' }}>
           ⚠ Similar vendor{similar.length === 1 ? '' : 's'} already in your list:
           {similar.map((v) => {
-            const status = vendorApprovalStatus(v)
+            const status = isVendorActive(v) ? vendorApprovalStatus(v) : 'inactive'
             return (
               <span key={v.id} style={{ marginLeft: 8 }}>
                 <strong>{v.name}</strong>
                 {STATUS_WORDS[status] ? ` (${STATUS_WORDS[status]})` : ''}
-                {onUseExisting && status !== 'rejected' && (
+                {onUseExisting && status !== 'rejected' && status !== 'inactive' && (
                   <>
                     {' '}
                     <button type="button" className="btn-secondary" onClick={() => onUseExisting(v)}>

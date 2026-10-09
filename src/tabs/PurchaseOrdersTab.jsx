@@ -65,6 +65,7 @@ import {
   isOverSpendingCap,
   canApproveVendors,
   vendorApprovalStatus,
+  isVendorActive,
   vendorBlockReason,
   voidBlockReason,
 } from '../utils'
@@ -1643,14 +1644,15 @@ function PurchaseOrdersTab({
               >
                 <option value="">Select a vendor…</option>
                 {vendors
-                  // Rejected vendors can't be chosen (unless one is already on
+                  // Rejected and deactivated vendors can't be chosen (unless one is already on
                   // this request, so it doesn't silently vanish from the field).
-                  .filter((v) => vendorApprovalStatus(v) !== 'rejected' || v.id === poDraftVendorId)
+                  .filter((v) => (vendorApprovalStatus(v) !== 'rejected' && isVendorActive(v)) || v.id === poDraftVendorId)
                   .map((v) => (
                     <option value={v.id} key={v.id}>
                       {v.name}
                       {vendorApprovalStatus(v) === 'pending' ? ' (pending approval)' : ''}
                       {vendorApprovalStatus(v) === 'rejected' ? ' (rejected)' : ''}
+                      {!isVendorActive(v) ? ' (deactivated)' : ''}
                     </option>
                   ))}
               </select>

@@ -58,6 +58,7 @@ import {
   voidBlockReason,
   canViewPoLedger,
   canViewAudit,
+  canViewPoHistory,
   TICKETING_URL,
 } from './utils'
 import MasterListTab from './tabs/MasterListTab'
@@ -70,6 +71,7 @@ import { PART_IMAGE_BUCKET, partImagePath, shrinkImageToJpeg } from './imageUtil
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import PoLedgerTab from './tabs/PoLedgerTab'
 import AuditTab from './tabs/AuditTab'
+import PoHistoryTab from './tabs/PoHistoryTab'
 import UsersTab from './tabs/UsersTab'
 import SignatureCard from './tabs/SignatureCard'
 import GlobalSearch from './tabs/GlobalSearch'
@@ -107,6 +109,8 @@ function App() {
   const [changePasswordBusy, setChangePasswordBusy] = useState(false)
 
   const [activeTab, setActiveTab] = useState('master')
+  // The PO History tab narrowed to one PO ({ id, label }), or null for all of them.
+  const [poHistoryFocus, setPoHistoryFocus] = useState(null)
 
   const [parts, setParts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -745,6 +749,14 @@ function App() {
     } catch (error) {
       console.error('Could not log PO activity:', error)
     }
+  }
+
+  // The database can't see a PO PDF being downloaded or a vendor email being drafted, so the app says so;
+  // the database stamps it with the real user and time (add_po_history.sql). A failure here -- or the SQL
+  // not having been run -- never gets in the way of what the person was doing.
+  async function logPoDocumentEvent(request, event, note) {
+    const { error } = await supabase.rpc('fn_log_po_event', { p_request_id: request.id, p_event: event, p_note: note || null })
+    if (error) console.warn('Could not record the PO document event:', error.message)
   }
 
   useEffect(() => {
@@ -2444,14 +2456,18 @@ function App() {
     }
   }
 
-  // Admin-only. TEMPORARY, while testing: delete works at any status, alongside Void
-  // (handleVoidPurchaseRequest), which is what keeps the row and its activity log for
-  // accounting. Once testing is over this should go back to drafts only (the guard here
-  // and the button in PurchaseOrdersTab). Cascades to the request's own line items
-  // (on delete cascade), but doesn't remove any uploaded receipt/invoice PDF from
+  // Admin-only, and only while the request is still a draft: anything later has to be voided
+  // (handleVoidPurchaseRequest), which keeps the PO on file for accounting and the audit trail. The
+  // database refuses a delete of a non-draft too (add_po_history.sql). The deletion itself is
+  // recorded in the PO history, with what the draft held. Cascades to the request's own line
+  // items (on delete cascade), but doesn't remove any uploaded receipt/invoice PDF from
   // Storage -- those just become unreferenced files there.
   async function handleDeletePurchaseRequest(request) {
     if (!isAdmin(loggedInUser)) return
+    if (request.status !== 'draft') {
+      flashPoStatus('Only a draft can be deleted — void the PO instead, which keeps it on file.', false)
+      return
+    }
     if (
       !window.confirm(
         `Delete ${request.po_number || `purchase request #${request.id}`}? This cannot be undone.`
@@ -2474,7 +2490,7 @@ function App() {
       setPurchaseRequests((prev) => prev.filter((r) => r.id !== request.id))
     } catch (error) {
       console.error(error)
-      flashPoStatus('Could not delete — check the console for details.', false)
+      flashPoStatus(dbRefusal(error) || 'Could not delete — check the console for details.', false)
     } finally {
       setPoActionBusyId(null)
     }
@@ -4232,6 +4248,13 @@ function App() {
     }
   }, [activeTab, loggedInUser])
 
+  // Same for the PO History tab: only people the database lets read it.
+  useEffect(() => {
+    if (activeTab === 'poHistory' && !canViewPoHistory(loggedInUser)) {
+      setActiveTab('master')
+    }
+  }, [activeTab, loggedInUser])
+
   // A vendor-logon account only ever gets the Purchase Orders tab — guard
   // the content itself, not just the tab buttons, in case activeTab is
   // already on a hidden tab (e.g. right after logging in).
@@ -4359,6 +4382,8 @@ function App() {
           ? 'PO Ledger'
           : activeTab === 'audit'
           ? 'Accounting Audit'
+          : activeTab === 'poHistory'
+          ? 'PO History'
           : 'Purchase Orders'}
       </h1>
       <p className="sub">Backed by Supabase — data lives in the cloud, not just this page.</p>
@@ -4393,6 +4418,17 @@ function App() {
           Purchase Orders
           {poAttentionCounts.total > 0 && <span className="nav-badge">{poAttentionCounts.total}</span>}
         </button>
+        {canViewPoHistory(loggedInUser) && (
+          <button
+            className={'tab-btn' + (activeTab === 'poHistory' ? ' active' : '')}
+            onClick={() => {
+              setPoHistoryFocus(null)
+              setActiveTab('poHistory')
+            }}
+          >
+            PO History
+          </button>
+        )}
         {canViewAudit(loggedInUser) && !isVendorUser(loggedInUser) && (
           <button
             className={'tab-btn' + (activeTab === 'audit' ? ' active' : '')}
@@ -4774,10 +4810,35 @@ function App() {
           handleApproveInvoicesForPayment={handleApproveInvoicesForPayment}
           handleReturnInvoice={handleReturnInvoice}
           handleResubmitInvoice={handleResubmitInvoice}
+          logPoDocumentEvent={logPoDocumentEvent}
+          onOpenPoHistory={(r) => {
+            setPoHistoryFocus({ id: r.id, label: r.po_number || `Request #${r.id}` })
+            setActiveTab('poHistory')
+          }}
           handleClosePo={handleClosePo}
           poActionBusyId={poActionBusyId}
           handleDeletePurchaseRequest={handleDeletePurchaseRequest}
           handleVoidPurchaseRequest={handleVoidPurchaseRequest}
+        />
+      )}
+
+      {activeTab === 'poHistory' && canViewPoHistory(loggedInUser) && (
+        <PoHistoryTab
+          users={users}
+          projects={projects}
+          vendors={vendors}
+          purchaseRequests={purchaseRequests}
+          focus={poHistoryFocus}
+          onClearFocus={() => setPoHistoryFocus(null)}
+          onSelectPo={(sel) => {
+            if (sel.open) {
+              setActiveTab('po')
+              setExpandedPoId(sel.id)
+              loadPoActivity(sel.id)
+            } else {
+              setPoHistoryFocus({ id: sel.id, label: sel.label })
+            }
+          }}
         />
       )}
 

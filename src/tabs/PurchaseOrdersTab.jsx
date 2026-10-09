@@ -15,6 +15,7 @@ import {
   canApproveRequests,
   canIssuePurchaseOrder,
   canClosePo,
+  canViewPoHistory,
   canReopenRejected,
   workStatusEntries,
   statusOptions,
@@ -280,6 +281,8 @@ function PurchaseOrdersTab({
   handleApproveInvoicesForPayment,
   handleReturnInvoice,
   handleResubmitInvoice,
+  logPoDocumentEvent,
+  onOpenPoHistory,
   setPoDraftNotToExceed,
   poDraftSpendingCap,
   setPoDraftSpendingCap,
@@ -428,6 +431,7 @@ function PurchaseOrdersTab({
       const pdf = await buildPoPdf(withShownPoNumber(r), approvalStamp(users, r))
       downloadBlob(new Blob([pdf.bytes], { type: 'application/pdf' }), pdf.filename)
       setEmailNote({ id: r.id, text: `Downloaded ${pdf.filename}.` })
+      logPoDocumentEvent(r, 'po_pdf_downloaded', pdf.filename)
     } catch (error) {
       console.error(error)
       setEmailNote({ id: r.id, text: "Couldn't build the PDF — check the console for details." })
@@ -462,6 +466,7 @@ function PurchaseOrdersTab({
         id: r.id,
         text: `Open the downloaded file: it opens in your email program as a draft to ${r.vendors.email} with the PO PDF attached.`,
       })
+      logPoDocumentEvent(r, 'po_email_drafted', `to ${r.vendors.email}`)
     } catch (error) {
       console.error(error)
       setEmailNote({ id: r.id, text: "Couldn't attach the PDF, so a plain email (no attachment) was opened instead." })
@@ -732,8 +737,17 @@ function PurchaseOrdersTab({
               {isOverSpendingCap(r) && (
                 <span className="po-badge po-badge-overcap">Over Spending Cap</span>
               )}
-              {/* TEMPORARY (testing): admins can delete at any status; was drafts only. */}
-              {isAdminUser && (
+              {canViewPoHistory(loggedInUser) && (
+                <button
+                  className="btn-secondary"
+                  onClick={() => onOpenPoHistory(r)}
+                  title="Everything that has happened to this PO: who did what, and when"
+                >
+                  History
+                </button>
+              )}
+              {/* Drafts only: anything later has to be voided, which keeps it on file for the audit trail. */}
+              {isAdminUser && r.status === 'draft' && (
                 <button
                   className="btn-secondary"
                   style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}

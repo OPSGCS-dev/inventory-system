@@ -72,6 +72,20 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **PO History (audit trail):** `po_history` (`add_po_history.sql`; run after the other PO SQL files, and re-run it if one of them
+  is run later) is written only by database triggers (`fn_po_audit` on `purchase_requests`, lines, `invoices`, `receipts`,
+  `invoice_payment_batches`, `vendors`): who (real signed-in user), when (server time), event code, and field-by-field old -> new,
+  with PO number / entity / vendor / person's name snapshotted. No foreign keys, so it survives deleting a PO. Append-only (insert/
+  update/delete/truncate revoked and refused) and hash-chained (`seq`, `prev_hash`, `row_hash`); `fn_verify_po_history()` is the
+  "Verify integrity" button. Readable only by admin, Invoice Matching, Payment Approval, Payment, Purchase Rec Approval and PO Issue
+  (`can_view_po_history()`, mirrored by `canViewPoHistory`). Document events the database can't see (PO PDF downloaded, vendor email
+  drafted) go through the `fn_log_po_event` RPC (`logPoDocumentEvent` in App.jsx). The old per-PO activity feed
+  (`purchase_request_activity`, written by `logPoActivity` from the browser) is unchanged and is *not* tamper-proof (anyone signed in
+  can insert into it, and it vanishes with its PO); its existing rows were copied into po_history once. The `PoHistoryTab` filters
+  server-side (date, person, entity, vendor, category, event, free text, one PO) and exports CSV including the hashes;
+  `src/poHistory.js` holds the labels and the text for each event. **PO delete is drafts only again** (UI, handler and a database
+  trigger); anything later is voided. When a new field or event is added to a PO table, add its label in `poHistory.js` (the trigger
+  records new fields automatically, with a prettified name).
 - **Payment batches:** each supervisor approval is recorded as a batch (`invoice_payment_batches`, `invoices.payment_batch_id`;
   `add_payment_batches.sql`, independent of the other invoice SQL): a name (theirs, or "Payment run <date>"), who and when. A single
   invoice approved from its PO page is a batch of one. The supervisor list shows "Recent payment batches" with paid progress; the
@@ -124,7 +138,7 @@ Most recent first, all on `main`:
   Audit tab (demo); security hardening (`security_0*.sql`).
 
 SQL added in this round (run in this order if not already run): `add_part_images`, `add_app_settings`, `add_transfer_pos`
-(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`.
+(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`.
 
 ## What to build next
 

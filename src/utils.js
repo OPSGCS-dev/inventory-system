@@ -558,6 +558,15 @@ export function canEditPurchaseRequest(user, request) {
   return false
 }
 
+// The PO History tab (the audit trail written by add_po_history.sql): admins, the accounting
+// roles, and the people who approve and issue POs. The database enforces the same list.
+export function canViewPoHistory(user) {
+  if (!user || isVendorUser(user)) return false
+  return ['admin', 'invoice_matching', 'invoice_approval', 'payment', 'purchase_rec_approval', 'po_issue'].some((role) =>
+    userHasRole(user, role)
+  )
+}
+
 // Accounting Audit (inventory vs accounting's books): admins and the accounting roles.
 export function canViewAudit(user) {
   return (

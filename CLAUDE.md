@@ -72,6 +72,16 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **Invoice approval flow:** invoice -> (receipt matched) -> **requisitioner reviews** -> **supervisor approves for payment**
+  (batched) -> **accounting confirms paid** (date + reference) -> requisitioner closes the PO. `invoiceStage` in utils.js works the
+  stage out from `invoices.reviewed / approved / paid / returned_at`; `canReviewInvoice`, `canApproveInvoice`, `canPayInvoice`,
+  `canReturnInvoice` ... say who can do what. The supervisor step reuses the `invoice_approval` role (relabelled "Payment Approval" in
+  Admin); the requisitioner is `request.requested_by` (admin can stand in). Either approver can **send back** with a reason (accounting
+  resubmits or, if returned, deletes and re-uploads). The Invoice Matching role can now upload receipts too. Views: **My Invoices to
+  Review** (`MyInvoicesToReviewTable`), **My Invoices for Payment Approval** (`MyInvoicesForApprovalTable`, tick + approve a batch),
+  **My Invoices to Pay** (`MyInvoicesToPayTable`, `PaymentConfirm`, CSV of the list). The stage order is also enforced by a trigger on
+  `invoices` (`add_invoice_approval_flow.sql`; run after `add_po_prepaid.sql`); before that SQL is run the app falls back to the old
+  two-step flow (`invoiceFlowReady`). Existing approved invoices are backfilled as reviewed. Ledger CSV gained paid date and reference.
 - **Pre-paid parts POs:** `purchase_requests.prepaid` (`add_po_prepaid.sql`). A checkbox on a parts request (or, for an issued PO,
   a toggle in the Receipts & Invoices panel for accounting/admin) means there will be no receipts: `isPrepaid` /
   `canApproveInvoice` let an invoice go straight to Invoice Approval without a matched receipt, and `allInvoicesFullyResolved`
@@ -108,7 +118,7 @@ Most recent first, all on `main`:
   Audit tab (demo); security hardening (`security_0*.sql`).
 
 SQL added in this round (run in this order if not already run): `add_part_images`, `add_app_settings`, `add_transfer_pos`
-(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`.
+(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`.
 
 ## What to build next
 
@@ -118,19 +128,21 @@ has put it after this.
 
 What exists today on that side, so new work extends it rather than duplicating it:
 
-- **Invoices and receipts** are tables (`invoices`, `receipts`) hanging off a PO; an invoice is matched to a receipt
-  (`InvoiceMatchChip`, `allInvoicesFullyResolved`), then approved (`invoice_approval` role), then marked paid
-  (`payment` role). `payment_status` on the PO is a manual label; closing a PO (`canClosePo`) requires every
-  receipt/invoice matched, approved and paid. Views: **My Invoices for Approval**, **My Invoices to Pay**
-  (`MyInvoicesForApprovalTable`, `MyInvoicesToPayTable`, both with date sort/filter and totals).
+- **Invoices and receipts** are tables (`invoices`, `receipts`) hanging off a PO. An invoice is matched to a receipt
+  (`InvoiceMatchChip`), reviewed by the requisitioner, approved for payment by a supervisor (`invoice_approval` role),
+  then confirmed paid by accounting (`payment` role) -- see "Invoice approval flow" above. `payment_status` on the PO is a
+  manual label; closing a PO (`canClosePo`, `allInvoicesFullyResolved`) requires every invoice paid (and, unless pre-paid,
+  every receipt matched). Views: **My Invoices to Review**, **My Invoices for Payment Approval**, **My Invoices to Pay**
+  (all with date sort/filter and totals).
 - **Money on a PO:** line items, markup, shipping, credit, tax and currency (`computePoTotals`); Not to Exceed
   spending cap with `compareInvoicesToPo`; `chargeable_expense`; budget categories and sub-categories (a category is now
   required to save a draft); the invoice email address a PO tells vendors to use.
 - **Reporting:** `PoLedgerTab` lists issued/closed POs with totals, ledger categories and CSV export.
 - **Inter-entity charges:** stock transfers now create closed POs (sender as vendor, part Last Cost as price, payment left
   Unpaid). Nothing yet settles or reports on those.
-- Open edges worth knowing: payment is recorded per invoice but there is no payment record (date, method, reference),
-  no batch payment, no accounting export, and the transfer POs have no budget category.
+- Open edges worth knowing: payment is recorded per invoice (date paid + reference, no method or amount paid), the supervisor
+  approves in batches but there is no batch record, there is no accounting export beyond the ledger / invoices-to-pay CSVs, and the
+  transfer POs have no budget category.
 
 Other unfinished items, lower priority: the Accounting Audit tab (`AuditTab`) still runs on made-up data held in browser
 memory, and is next after payments; the ownership/location cutover after the recount (check whether it has already

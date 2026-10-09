@@ -71,6 +71,12 @@ function buildRows(requests) {
         invoicedTotal: i === 0 ? computeInvoicedTotal(r) : null,
         invoiceNumbers: invoices.map((inv) => inv.invoice_number).filter(Boolean).join(', '),
         paidState: invoicePaidState(r),
+        paidDates: invoices
+          .filter((inv) => inv.paid)
+          .map((inv) => inv.paid_date || (inv.paid_at ? inv.paid_at.slice(0, 10) : ''))
+          .filter(Boolean)
+          .join(', '),
+        paymentRefs: invoices.map((inv) => inv.payment_reference).filter(Boolean).join(', '),
         issuedAt: r.issued_at,
         workDoneAt,
       })
@@ -183,6 +189,8 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
         'Invoiced Total': row.invoicedTotal !== null ? row.invoicedTotal.toFixed(2) : '',
         'Invoice #s': row.invoiceNumbers,
         'Invoice Payment': row.paidState,
+        'Paid Date(s)': row.paidDates,
+        'Payment Reference(s)': row.paymentRefs,
         'Payment Status (manual)': paymentStatusLabel(computePaymentStatus(r)),
         'Voided Reason': r.status === 'voided' ? r.void_reason || '' : '',
       }

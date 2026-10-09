@@ -356,7 +356,7 @@ export const PO_ROLE_OPTIONS = [
   { value: 'purchase_rec_approval', label: 'Purchase Rec Approval' },
   { value: 'po_issue', label: 'PO Issue' },
   { value: 'invoice_matching', label: 'Invoice Matching' },
-  { value: 'invoice_approval', label: 'Invoice Approval' },
+  { value: 'invoice_approval', label: 'Payment Approval' },
   { value: 'payment', label: 'Payment' },
   { value: 'vendor_approval', label: 'Vendor Approval' },
 ]
@@ -707,15 +707,94 @@ export function canMatchInvoices(user, request) {
   return !request || isEntityAllowed(user, 'invoice_matching', request.project_id)
 }
 
-// Approving a matched invoice/receipt pair -- company-wide, not scoped to
-// whoever happened to approve that PO's original requisition. Only matters
-// once accounting has actually paired an invoice with a receipt (an
-// unmatched invoice has nothing to approve yet) -- unless the PO is pre-paid,
-// where there is no receipt and an invoice can be approved as soon as it's on file.
-export function canApproveInvoice(user, invoice, request) {
-  if (!invoice?.matched_receipt_id && !isPrepaid(request)) return false
+// --- The invoice approval flow ----------------------------------------------------
+// An invoice moves through these stages, each owned by someone different:
+//   matching          accounting (Invoice Matching) pairs it with a receipt -- or it's on a pre-paid PO
+//   review            the requisitioner (whoever raised the PO) reviews and approves the pair
+//   payment_approval  a supervisor (the Invoice Approval role) approves it for payment, in batches
+//   to_pay            accounting (the Payment role) pays it outside the system...
+//   paid              ...then confirms each one paid, with the date and a reference
+// An approver can instead send it back to accounting with a reason: 'returned' until
+// accounting resubmits it. `invoice.reviewed` / `invoice.approved` / `invoice.paid` are the
+// three sign-offs; the stage is worked out from them (add_invoice_approval_flow.sql).
+export const INVOICE_STAGE_LABELS = {
+  matching: 'Needs a receipt matched',
+  returned: 'Sent back to accounting',
+  review: 'With the requisitioner',
+  payment_approval: 'Waiting on payment approval',
+  to_pay: 'Approved — ready to pay',
+  paid: 'Paid',
+}
+
+// False until add_invoice_approval_flow.sql has been run: the invoice rows don't have the
+// new columns yet, and the flow falls back to how it used to work.
+export function invoiceFlowReady(invoice) {
+  return Boolean(invoice) && 'reviewed' in invoice
+}
+
+export function invoiceStage(invoice, request) {
+  if (invoice?.paid) return 'paid'
+  if (invoice?.returned_at) return 'returned'
+  if (invoice?.approved) return 'to_pay'
+  if (invoice?.reviewed) return 'payment_approval'
+  if (!invoice?.matched_receipt_id && !isPrepaid(request)) return 'matching'
+  // Before the SQL is run there is no requisitioner review: a matched invoice goes straight
+  // to the approver, as it used to.
+  return invoiceFlowReady(invoice) ? 'review' : 'payment_approval'
+}
+
+// The person who raised the PO reviews its invoices; an admin can stand in for them.
+function isRequisitioner(user, request) {
+  return isAdmin(user) || (Boolean(user?.id) && user.id === request?.requested_by)
+}
+
+// Approving for payment is the Invoice Approval role (relabelled Payment Approval in the
+// Users tab), which can be limited to certain entities like the other steps.
+function isPaymentApprover(user, request) {
   if (!userHasRole(user, 'invoice_approval')) return false
   return !request || isEntityAllowed(user, 'invoice_approval', request.project_id)
+}
+
+export function canReviewInvoice(user, invoice, request) {
+  return invoiceStage(invoice, request) === 'review' && isRequisitioner(user, request)
+}
+
+// Taking back the requisitioner's approval, while the supervisor hasn't acted on it yet.
+export function canUndoReview(user, invoice, request) {
+  return invoiceFlowReady(invoice) && invoiceStage(invoice, request) === 'payment_approval' && isRequisitioner(user, request)
+}
+
+export function canApproveInvoice(user, invoice, request) {
+  return invoiceStage(invoice, request) === 'payment_approval' && isPaymentApprover(user, request)
+}
+
+// Taking back a payment approval, while the invoice hasn't been paid.
+export function canWithdrawApproval(user, invoice, request) {
+  return invoiceStage(invoice, request) === 'to_pay' && isPaymentApprover(user, request)
+}
+
+export function canPayInvoice(user, invoice, request) {
+  return invoiceStage(invoice, request) === 'to_pay' && canManagePayment(user, request)
+}
+
+// Either approver can send an invoice back to accounting from their own step.
+export function canReturnInvoice(user, invoice, request) {
+  if (!invoiceFlowReady(invoice)) return false
+  const stage = invoiceStage(invoice, request)
+  if (stage === 'review') return canReviewInvoice(user, invoice, request)
+  if (stage === 'payment_approval') return canApproveInvoice(user, invoice, request)
+  return false
+}
+
+// Accounting fixes what was wrong (or re-matches it) and sends it round again.
+export function canResubmitInvoice(user, invoice, request) {
+  return invoiceStage(invoice, request) === 'returned' && (isAdmin(user) || canMatchInvoices(user, request))
+}
+
+// Admins can delete any invoice; accounting can delete one that was sent back, to upload a
+// corrected one in its place.
+export function canDeleteInvoice(user, invoice, request) {
+  return isAdmin(user) || (invoiceStage(invoice, request) === 'returned' && canMatchInvoices(user, request))
 }
 
 // Marking an invoice paid and setting the manual Payment Status dropdown.
@@ -861,6 +940,19 @@ export function ticketRefUrl(request) {
   }
   const n = request?.ticket_system_ticket_number
   return n === null || n === undefined ? null : TICKETING_URL + '/tickets/find?number=' + n
+}
+
+// Today's date in the person's own time zone as yyyy-mm-dd (what a date input wants).
+export function todayLocal() {
+  return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+}
+
+// A yyyy-mm-dd date column for display. Parsed as a local date, so it can't slip a day the
+// way `new Date('2026-10-09')` (read as UTC) does west of Greenwich.
+export function formatDateOnly(value) {
+  if (!value) return ''
+  const [y, m, d] = String(value).slice(0, 10).split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString()
 }
 
 // Dollar amounts for the approval screens: thousands separators, two decimals.

@@ -69,6 +69,7 @@ import {
 } from '../utils'
 import InvoicesPanel from './InvoicesPanel'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
+import MyInvoicesToReviewTable from './MyInvoicesToReviewTable'
 import MyInvoicesToPayTable from './MyInvoicesToPayTable'
 import { localDay } from './DateRange'
 import InvoiceMatchChip from './InvoiceMatchChip'
@@ -272,6 +273,11 @@ function PurchaseOrdersTab({
   poDraftPrepaid,
   setPoDraftPrepaid,
   handleSetPrepaid,
+  invoicesToReview,
+  handleReviewInvoice,
+  handleApproveInvoicesForPayment,
+  handleReturnInvoice,
+  handleResubmitInvoice,
   setPoDraftNotToExceed,
   poDraftSpendingCap,
   setPoDraftSpendingCap,
@@ -319,6 +325,9 @@ function PurchaseOrdersTab({
   const canSeeApprovalsView = canApproveRequests(loggedInUser)
   const canSeeIssueView = canIssuePurchaseOrder(loggedInUser)
   const canSeeInvoicesView = userHasRole(loggedInUser, 'invoice_approval')
+  // Whoever raises POs reviews their invoices; the tab also shows for anyone with one waiting.
+  const canSeeReviewView =
+    userHasRole(loggedInUser, 'purchase_req') || userHasRole(loggedInUser, 'admin') || poAttentionCounts.invoicesToReview > 0
   const availableSubcategories = budgetSubcategories.filter(
     (sc) => sc.category_id === poDraftBudgetCategoryId
   )
@@ -1533,6 +1542,9 @@ function PurchaseOrdersTab({
               handleDeleteReceipt={handleDeleteReceipt}
               handleMatchInvoiceReceipt={handleMatchInvoiceReceipt}
               handleSetPrepaid={handleSetPrepaid}
+              handleReviewInvoice={handleReviewInvoice}
+              handleReturnInvoice={handleReturnInvoice}
+              handleResubmitInvoice={handleResubmitInvoice}
               poPdfRequest={withShownPoNumber(r)}
               poStamp={approvalStamp(users, r)}
             />
@@ -1946,7 +1958,7 @@ function PurchaseOrdersTab({
                   Pre-paid
                 </label>
                 <p className="sub" style={{ margin: '4px 0 0' }}>
-                  The vendor is paid up front, so there won't be a receipt: invoices go to Invoice Approval without
+                  The vendor is paid up front, so there won't be a receipt: invoices go to the requisitioner for review without
                   one being matched, the parts status becomes Pre-paid, and the PO can be closed without the parts
                   being marked Received (parts that are never marked Received aren't added to stock).
                 </p>
@@ -2236,12 +2248,23 @@ function PurchaseOrdersTab({
               )}
             </button>
           )}
+          {canSeeReviewView && (
+            <button
+              className={poView === 'my-review' ? 'btn-primary' : 'btn-secondary'}
+              onClick={() => setPoView('my-review')}
+            >
+              My Invoices to Review
+              {poAttentionCounts.invoicesToReview > 0 && (
+                <span className="nav-badge">{poAttentionCounts.invoicesToReview}</span>
+              )}
+            </button>
+          )}
           {canSeeInvoicesView && (
             <button
               className={poView === 'my-invoices' ? 'btn-primary' : 'btn-secondary'}
               onClick={() => setPoView('my-invoices')}
             >
-              My Invoices for Approval
+              My Invoices for Payment Approval
               {poAttentionCounts.invoicesToApprove > 0 && (
                 <span className="nav-badge">{poAttentionCounts.invoicesToApprove}</span>
               )}
@@ -2265,6 +2288,7 @@ function PurchaseOrdersTab({
           toggleExpandedPo={toggleExpandedPo}
           handlePayInvoice={handlePayInvoice}
           poActionBusyId={poActionBusyId}
+          users={users}
         />
       ) : poView === 'vendors' ? (
         <VendorsToApproveTable
@@ -2273,10 +2297,21 @@ function PurchaseOrdersTab({
           onApprove={handleApproveVendor}
           onReject={handleRejectVendor}
         />
+      ) : poView === 'my-review' ? (
+        <MyInvoicesToReviewTable
+          invoicesToReview={invoicesToReview}
+          toggleExpandedPo={toggleExpandedPo}
+          handleReviewInvoice={handleReviewInvoice}
+          handleReturnInvoice={handleReturnInvoice}
+          poActionBusyId={poActionBusyId}
+        />
       ) : poView === 'my-invoices' ? (
         <MyInvoicesForApprovalTable
           invoicesPendingApproval={invoicesPendingApproval}
           toggleExpandedPo={toggleExpandedPo}
+          handleApproveInvoicesForPayment={handleApproveInvoicesForPayment}
+          handleReturnInvoice={handleReturnInvoice}
+          poActionBusyId={poActionBusyId}
         />
       ) : (
       <div className="card">

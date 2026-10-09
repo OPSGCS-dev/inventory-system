@@ -607,6 +607,9 @@ table.sheet tbody tr.inv-chk-warn td:not(.row-head) { background: #fdf1d6; }
 .inv-page { position: relative; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
 .inv-page img { display: block; width: 100%; height: auto; }
 .inv-hl { position: absolute; background: rgba(255, 214, 0, 0.35); outline: 2px solid #e0a800; border-radius: 2px; pointer-events: none; }
+/* Small text-style button for undoing a step in the Receipts & Invoices table */
+.inv-undo { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font-size: 12px; text-decoration: underline; }
+.inv-undo:disabled { color: var(--muted); cursor: default; }
 .po-badge-onhold { background: #fdf1d6; color: var(--warn); }
 .po-badge-rejected { background: #fde2e2; color: var(--danger); }
 .po-badge-voided { background: #e8e8e8; color: var(--muted); text-decoration: line-through; }

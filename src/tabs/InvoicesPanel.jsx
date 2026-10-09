@@ -1,10 +1,21 @@
 import { useRef, useState } from 'react'
 import InvoiceReview from './InvoiceReview'
+import PaymentConfirm from './PaymentConfirm'
 import {
   canMatchInvoices,
   canApproveInvoice,
   canManagePayment,
   canConfirmReceipt,
+  invoiceStage,
+  invoiceFlowReady,
+  canReviewInvoice,
+  canUndoReview,
+  canWithdrawApproval,
+  canPayInvoice,
+  canReturnInvoice,
+  canResubmitInvoice,
+  canDeleteInvoice,
+  formatDateOnly,
   usersWithRole,
   findUserName,
   isAdmin,
@@ -14,11 +25,12 @@ import {
 } from '../utils'
 
 // Receipts & Invoices table for a PO's detail view. The requisitioner
-// uploads receipts and Invoice Matching uploads/pairs invoices,
-// independently/in parallel; each row below is either a matched pair, an
-// invoice still waiting on a receipt, or a receipt still waiting on an
-// invoice. Approving a matched pair (Invoice Approval) and marking it paid
-// (Payment) are their own separate roles, distinct from matching.
+// uploads receipts and Invoice Matching uploads/pairs invoices (and usually
+// receipts too), independently/in parallel; each row below is either a matched
+// pair, an invoice still waiting on a receipt, or a receipt still waiting on an
+// invoice. A matched pair then goes to the requisitioner to review, to a
+// supervisor for payment approval, and finally to accounting to confirm paid --
+// the three columns after Invoice (see invoiceStage in utils.js).
 function InvoicesPanel({
   request,
   loggedInUser,
@@ -26,6 +38,9 @@ function InvoicesPanel({
   busy,
   handleAddInvoice,
   handleApproveInvoice,
+  handleReviewInvoice,
+  handleReturnInvoice,
+  handleResubmitInvoice,
   handlePayInvoice,
   handleDeleteInvoice,
   handleAddReceipt,
@@ -36,10 +51,13 @@ function InvoicesPanel({
   poStamp,
 }) {
   const canManage = canMatchInvoices(loggedInUser, request)
-  const canPay = canManagePayment(loggedInUser, request)
-  const canAddReceipt = canConfirmReceipt(loggedInUser, request)
+  // The requisitioner can upload receipts, and so can the Invoice Matching person (who usually
+  // uploads the receipt along with the invoice).
+  const canAddReceipt = canConfirmReceipt(loggedInUser, request) || canManage
   const canDelete = isAdmin(loggedInUser)
   const invoices = request.invoices || []
+  // False until add_invoice_approval_flow.sql has been run (then there's no requisitioner step).
+  const flow = invoices.every(invoiceFlowReady)
   const receipts = request.receipts || []
   // Pre-paid: no receipt to match, so invoices go straight to approval.
   const prepaid = isPrepaid(request)
@@ -151,7 +169,7 @@ function InvoicesPanel({
       </div>
       {prepaid && (
         <p className="sub" style={{ margin: '0 0 8px' }}>
-          Pre-paid: invoices don't need a receipt matched — they go straight to Invoice Approval.
+          Pre-paid: invoices don't need a receipt matched — they go straight to the requisitioner for review.
         </p>
       )}
 
@@ -161,17 +179,19 @@ function InvoicesPanel({
         <div className="sheet-wrap">
           <table className="sheet" style={{ marginBottom: 12 }}>
             <colgroup>
-              <col style={{ width: '26%' }} />
-              <col style={{ width: '26%' }} />
-              <col style={{ width: '110px' }} />
-              <col style={{ width: '160px' }} />
-              <col style={{ width: '90px' }} />
+              <col style={{ width: '19%' }} />
+              <col style={{ width: '19%' }} />
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '16%' }} />
+              <col />
+              <col style={{ width: '100px' }} />
             </colgroup>
             <thead>
               <tr className="header-row">
                 <th>Receipt</th>
                 <th>Invoice</th>
-                <th className="center-cell">Approved</th>
+                <th>Requisitioner Review</th>
+                <th>Payment Approval</th>
                 <th>Paid</th>
                 <th></th>
               </tr>
@@ -179,9 +199,8 @@ function InvoicesPanel({
             <tbody>
               {rows.map((row) => {
                 const key = `${row.invoice?.id ?? 'x'}-${row.receipt?.id ?? 'x'}`
-                const matched = Boolean(row.invoice && row.receipt)
-                // Ready for approval: matched to a receipt, or pre-paid (no receipt to match).
-                const approvable = Boolean(row.invoice) && (matched || prepaid)
+                const inv = row.invoice
+                const stage = inv ? invoiceStage(inv, request) : null
                 return (
                   <tr key={key}>
                     <td>
@@ -303,71 +322,152 @@ function InvoicesPanel({
                         </span>
                       )}
                     </td>
-                    <td className="center-cell">
-                      {approvable ? (
-                        canApproveInvoice(loggedInUser, row.invoice, request) ? (
-                          <input
-                            type="checkbox"
-                            checked={Boolean(row.invoice.approved)}
-                            disabled={busy}
-                            onChange={(e) => handleApproveInvoice(row.invoice, e.target.checked)}
-                          />
-                        ) : row.invoice.approved ? (
-                          'Yes'
+                    <td>
+                      {inv && stage === 'returned' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ color: 'var(--danger)', fontWeight: 600 }}>Sent back</span>
+                          <span className="sub" style={{ margin: 0 }}>
+                            {inv.return_reason || '—'} — {findUserName(users, inv.returned_by)},{' '}
+                            {new Date(inv.returned_at).toLocaleDateString()}
+                          </span>
+                          {canResubmitInvoice(loggedInUser, inv, request) && (
+                            <div>
+                              <button className="btn-secondary" disabled={busy} onClick={() => handleResubmitInvoice(inv)}>
+                                Resubmit
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : !inv || !flow || stage === 'matching' ? (
+                        '—'
+                      ) : stage === 'review' ? (
+                        canReviewInvoice(loggedInUser, inv, request) ? (
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <button className="btn-primary" disabled={busy} onClick={() => handleReviewInvoice(inv, true)}>
+                              Approve
+                            </button>
+                            <button
+                              className="btn-secondary"
+                              style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                              disabled={busy}
+                              onClick={() => handleReturnInvoice(inv)}
+                            >
+                              Send Back
+                            </button>
+                          </div>
                         ) : (
                           <span className="sub" style={{ margin: 0 }}>
-                            Waiting on {usersWithRole(users, 'invoice_approval').join(', ') || 'Invoice Approval'}
+                            Waiting on {findUserName(users, request.requested_by)}
                           </span>
                         )
                       ) : (
-                        '—'
+                        <>
+                          ✓ {findUserName(users, inv.reviewed_by)}
+                          {inv.reviewed_at ? ` — ${new Date(inv.reviewed_at).toLocaleDateString()}` : ''}
+                          {canUndoReview(loggedInUser, inv, request) && (
+                            <>
+                              {' '}
+                              <button className="inv-undo" disabled={busy} onClick={() => handleReviewInvoice(inv, false)}>
+                                Undo
+                              </button>
+                            </>
+                          )}
+                        </>
                       )}
                     </td>
                     <td>
-                      {row.invoice && row.invoice.approved ? (
-                        canPay ? (
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(row.invoice.paid)}
-                              disabled={busy}
-                              onChange={(e) => handlePayInvoice(row.invoice, e.target.checked)}
-                            />
-                            {row.invoice.paid ? `Paid — ${new Date(row.invoice.paid_at).toLocaleDateString()}` : 'Not paid'}
-                          </label>
-                        ) : row.invoice.paid ? (
-                          'Yes'
+                      {!inv || !['payment_approval', 'to_pay', 'paid'].includes(stage) ? (
+                        '—'
+                      ) : stage === 'payment_approval' ? (
+                        canApproveInvoice(loggedInUser, inv, request) ? (
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <button className="btn-primary" disabled={busy} onClick={() => handleApproveInvoice(inv, true)}>
+                              Approve for Payment
+                            </button>
+                            {canReturnInvoice(loggedInUser, inv, request) && (
+                              <button
+                                className="btn-secondary"
+                                style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                                disabled={busy}
+                                onClick={() => handleReturnInvoice(inv)}
+                              >
+                                Send Back
+                              </button>
+                            )}
+                          </div>
                         ) : (
-                          'No'
+                          <span className="sub" style={{ margin: 0 }}>
+                            Waiting on {usersWithRole(users, 'invoice_approval').join(', ') || 'a supervisor'}
+                          </span>
                         )
+                      ) : (
+                        <>
+                          ✓ {findUserName(users, inv.approved_by)}
+                          {inv.approved_at ? ` — ${new Date(inv.approved_at).toLocaleDateString()}` : ''}
+                          {canWithdrawApproval(loggedInUser, inv, request) && (
+                            <>
+                              {' '}
+                              <button className="inv-undo" disabled={busy} onClick={() => handleApproveInvoice(inv, false)}>
+                                Undo
+                              </button>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </td>
+                    <td>
+                      {stage === 'to_pay' ? (
+                        canPayInvoice(loggedInUser, inv, request) ? (
+                          <PaymentConfirm busy={busy} onConfirm={(details) => handlePayInvoice(inv, true, details)} />
+                        ) : (
+                          <span className="sub" style={{ margin: 0 }}>
+                            Waiting on accounting
+                          </span>
+                        )
+                      ) : stage === 'paid' ? (
+                        <>
+                          Paid — {inv.paid_date ? formatDateOnly(inv.paid_date) : new Date(inv.paid_at).toLocaleDateString()}
+                          {inv.payment_reference && (
+                            <>
+                              <br />
+                              <span className="sub" style={{ margin: 0 }}>
+                                Ref: {inv.payment_reference}
+                              </span>
+                            </>
+                          )}
+                          {canManagePayment(loggedInUser, request) && (
+                            <>
+                              {' '}
+                              <button className="inv-undo" disabled={busy} onClick={() => handlePayInvoice(inv, false)}>
+                                Clear
+                              </button>
+                            </>
+                          )}
+                        </>
                       ) : (
                         '—'
                       )}
                     </td>
                     <td>
-                      {canDelete && (
-                        <>
-                          {row.receipt && (
-                            <button
-                              className="btn-secondary"
-                              style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                              onClick={() => handleDeleteReceipt(row.receipt)}
-                              disabled={busy}
-                            >
-                              Del. Receipt
-                            </button>
-                          )}
-                          {row.invoice && (
-                            <button
-                              className="btn-secondary"
-                              style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                              onClick={() => handleDeleteInvoice(row.invoice)}
-                              disabled={busy}
-                            >
-                              Del. Invoice
-                            </button>
-                          )}
-                        </>
+                      {canDelete && row.receipt && (
+                        <button
+                          className="btn-secondary"
+                          style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                          onClick={() => handleDeleteReceipt(row.receipt)}
+                          disabled={busy}
+                        >
+                          Del. Receipt
+                        </button>
+                      )}
+                      {inv && canDeleteInvoice(loggedInUser, inv, request) && (
+                        <button
+                          className="btn-secondary"
+                          style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                          onClick={() => handleDeleteInvoice(inv)}
+                          disabled={busy}
+                        >
+                          Del. Invoice
+                        </button>
                       )}
                     </td>
                   </tr>

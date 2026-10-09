@@ -36,6 +36,11 @@ import {
   canApproveVendors,
   canManagePayment,
   canApproveInvoice,
+  todayLocal,
+  canReviewInvoice,
+  canReturnInvoice,
+  canPayInvoice,
+  invoiceStage,
   canReopenRejected,
   entitiesAllowedFor,
   vendorApprovalStatus,
@@ -1702,13 +1707,26 @@ function App() {
   // the PO summary table's row shape. Approval is a company-wide role
   // (invoice_approval), not scoped to any particular person or entity, so
   // every unapproved matched invoice shows up here for anyone holding it.
+  // Invoices waiting on the logged-in person to review as the requisitioner (the PO is theirs).
+  // Only their own POs: an admin can stand in on any PO's page, but that shouldn't fill their queue.
+  const invoicesToReview = useMemo(() => {
+    const pairs = []
+    for (const r of purchaseRequests) {
+      if (r.requested_by !== loggedInUserWithScopes?.id) continue
+      for (const invoice of r.invoices || []) {
+        if (canReviewInvoice(loggedInUserWithScopes, invoice, r)) pairs.push({ request: r, invoice })
+      }
+    }
+    return pairs
+  }, [purchaseRequests, loggedInUserWithScopes])
+
   const invoicesPendingApproval = useMemo(() => {
     const pairs = []
     for (const r of purchaseRequests) {
       for (const invoice of r.invoices || []) {
-        // Invoice Approval can be limited to certain entities, like the other steps. An invoice
-        // needs its receipt matched first, except on a pre-paid PO (canApproveInvoice knows).
-        if (!invoice.approved && canApproveInvoice(loggedInUserWithScopes, invoice, r)) {
+        // The supervisor's step: invoices the requisitioner has reviewed. Payment approval can be
+        // limited to certain entities, like the other steps (canApproveInvoice checks).
+        if (canApproveInvoice(loggedInUserWithScopes, invoice, r)) {
           pairs.push({ request: r, invoice })
         }
       }
@@ -1722,7 +1740,7 @@ function App() {
     const pairs = []
     for (const r of purchaseRequests) {
       for (const invoice of r.invoices || []) {
-        if (invoice.approved && !invoice.paid && canManagePayment(loggedInUserWithScopes, r)) {
+        if (canPayInvoice(loggedInUserWithScopes, invoice, r)) {
           pairs.push({ request: r, invoice })
         }
       }
@@ -1752,10 +1770,11 @@ function App() {
       toIssue,
       invoicesToApprove,
       invoicesToPay: invoicesToPayCount,
+      invoicesToReview: invoicesToReview.length,
       vendorsToApprove,
-      total: approvals + toIssue + invoicesToApprove + invoicesToPayCount + vendorsToApprove,
+      total: approvals + toIssue + invoicesToApprove + invoicesToPayCount + invoicesToReview.length + vendorsToApprove,
     }
-  }, [purchaseRequests, loggedInUserWithScopes, invoicesPendingApproval, invoicesToPay, vendors])
+  }, [purchaseRequests, loggedInUserWithScopes, invoicesPendingApproval, invoicesToPay, invoicesToReview, vendors])
 
   function toggleExpandedPo(id) {
     setExpandedPoId((prev) => {
@@ -3083,6 +3102,164 @@ function App() {
     }
   }
 
+  // --- The invoice approval flow (stages are worked out by invoiceStage in utils.js) ------
+  // matched pair -> requisitioner review -> supervisor payment approval (batched) -> paid.
+  const invoiceTag = (invoice) => (invoice.invoice_number ? ` (#${invoice.invoice_number})` : '')
+
+  // The database's own refusal (stage order, see add_invoice_approval_flow.sql) is shown as is;
+  // a missing column means the SQL hasn't been run yet.
+  function invoiceFlowError(error, fallback) {
+    if (dbRefusal(error)) return dbRefusal(error)
+    if (error?.code === '42703' || /reviewed|returned_|paid_date|payment_reference/.test(error?.message || '')) {
+      return "The new invoice approval steps aren't set up in the database yet — run add_invoice_approval_flow.sql."
+    }
+    return fallback
+  }
+
+  // The requisitioner approves (or, with checked false, takes back) their review of a matched pair.
+  async function handleReviewInvoice(invoice, checked) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    const request = purchaseRequests.find((r) => r.id === invoice.purchase_request_id)
+    if (checked && !canReviewInvoice(loggedInUserWithScopes, invoice, request)) {
+      flashPoStatus('Only the person who raised this PO can review its invoices.', false)
+      return
+    }
+    setPoActionBusyId(invoice.purchase_request_id)
+    try {
+      const payload = checked
+        ? { reviewed: true, reviewed_by: loggedInUser.id, reviewed_at: new Date().toISOString() }
+        : { reviewed: false, reviewed_by: null, reviewed_at: null }
+      const { error } = await supabase.from('invoices').update(payload).eq('id', invoice.id)
+      if (error) throw error
+      await logPoActivity(
+        invoice.purchase_request_id,
+        checked ? `Invoice approved by the requisitioner${invoiceTag(invoice)}` : `Requisitioner approval withdrawn${invoiceTag(invoice)}`
+      )
+      flashPoStatus(checked ? 'Invoice approved — it now waits for payment approval.' : 'Your approval was withdrawn.', true)
+      await refreshPurchaseRequest(invoice.purchase_request_id)
+    } catch (error) {
+      console.error(error)
+      flashPoStatus(invoiceFlowError(error, 'Could not update the invoice review — check the console for details.'), false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // The supervisor's batch: approve several reviewed invoices for payment in one go.
+  // `pairs` are { request, invoice }. All or none: the database refuses the lot if any one
+  // of them isn't ready. Returns true when they were approved.
+  async function handleApproveInvoicesForPayment(pairs) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return false
+    }
+    if (pairs.length === 0) return false
+    setPoActionBusyId('invoice-batch')
+    try {
+      const ids = pairs.map(({ invoice }) => invoice.id)
+      const { data, error } = await supabase
+        .from('invoices')
+        .update({ approved: true, approved_by: loggedInUser.id, approved_at: new Date().toISOString() })
+        .in('id', ids)
+        .select('id')
+      if (error) throw error
+      if (!data || data.length !== ids.length) {
+        throw new Error(`Only ${data ? data.length : 0} of ${ids.length} invoices were updated.`)
+      }
+      await Promise.all(
+        pairs.map(({ invoice }) =>
+          logPoActivity(
+            invoice.purchase_request_id,
+            `Invoice approved for payment${invoiceTag(invoice)}${pairs.length > 1 ? ` (batch of ${pairs.length})` : ''}`
+          )
+        )
+      )
+      flashPoStatus(`${pairs.length} invoice${pairs.length === 1 ? '' : 's'} approved for payment.`, true)
+      await Promise.all([...new Set(pairs.map(({ invoice }) => invoice.purchase_request_id))].map((id) => refreshPurchaseRequest(id)))
+      return true
+    } catch (error) {
+      console.error(error)
+      flashPoStatus(invoiceFlowError(error, `Could not approve the invoices — ${error?.message || 'check the console for details.'}`), false)
+      return false
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // Either approver sends an invoice back to accounting, with a reason, from their own step.
+  // It drops out of both approval lists until accounting resubmits it.
+  async function handleReturnInvoice(invoice) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    const request = purchaseRequests.find((r) => r.id === invoice.purchase_request_id)
+    if (!canReturnInvoice(loggedInUserWithScopes, invoice, request)) {
+      flashPoStatus("You can't send this invoice back from where it is now.", false)
+      return
+    }
+    const reason = window.prompt(`Why is invoice${invoiceTag(invoice)} being sent back to accounting? (required)`)
+    if (reason === null) return
+    if (!reason.trim()) {
+      flashPoStatus('A reason is required to send an invoice back.', false)
+      return
+    }
+    setPoActionBusyId(invoice.purchase_request_id)
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({
+          reviewed: false,
+          reviewed_by: null,
+          reviewed_at: null,
+          approved: false,
+          approved_by: null,
+          approved_at: null,
+          returned_by: loggedInUser.id,
+          returned_at: new Date().toISOString(),
+          return_reason: reason.trim(),
+          returned_stage: invoiceStage(invoice, request),
+        })
+        .eq('id', invoice.id)
+      if (error) throw error
+      await logPoActivity(invoice.purchase_request_id, `Invoice sent back to accounting${invoiceTag(invoice)}: ${reason.trim()}`)
+      flashPoStatus('Invoice sent back to accounting.', true)
+      await refreshPurchaseRequest(invoice.purchase_request_id)
+    } catch (error) {
+      console.error(error)
+      flashPoStatus(invoiceFlowError(error, 'Could not send the invoice back — check the console for details.'), false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // Accounting has fixed the problem (or re-matched the receipt): back to the requisitioner.
+  async function handleResubmitInvoice(invoice) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    setPoActionBusyId(invoice.purchase_request_id)
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ returned_by: null, returned_at: null, return_reason: null, returned_stage: null })
+        .eq('id', invoice.id)
+      if (error) throw error
+      await logPoActivity(invoice.purchase_request_id, `Invoice resubmitted for review${invoiceTag(invoice)}`)
+      flashPoStatus('Invoice resubmitted — it goes back to the requisitioner.', true)
+      await refreshPurchaseRequest(invoice.purchase_request_id)
+    } catch (error) {
+      console.error(error)
+      flashPoStatus(invoiceFlowError(error, 'Could not resubmit the invoice — check the console for details.'), false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
   async function handleApproveInvoice(invoice, checked) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
@@ -3097,39 +3274,53 @@ function App() {
       if (error) throw error
       await logPoActivity(
         invoice.purchase_request_id,
-        checked ? `Invoice approved${invoice.invoice_number ? ` (#${invoice.invoice_number})` : ''}` : 'Invoice approval cleared'
+        checked ? `Invoice approved for payment${invoiceTag(invoice)}` : `Payment approval withdrawn${invoiceTag(invoice)}`
       )
-      flashPoStatus(checked ? 'Invoice marked approved.' : 'Invoice approval cleared.', true)
+      flashPoStatus(checked ? 'Invoice approved for payment.' : 'Payment approval withdrawn.', true)
       await refreshPurchaseRequest(invoice.purchase_request_id)
     } catch (error) {
       console.error(error)
-      flashPoStatus('Could not update invoice approval — check the console for details.', false)
+      flashPoStatus(invoiceFlowError(error, 'Could not update invoice approval — check the console for details.'), false)
     } finally {
       setPoActionBusyId(null)
     }
   }
 
-  async function handlePayInvoice(invoice, checked) {
+  // Accounting confirms an invoice paid -- one at a time, after paying the batch outside the system --
+  // with the date it was paid and a reference (`details`: { paidDate, reference }). Clearing it
+  // (checked false) removes both again.
+  async function handlePayInvoice(invoice, checked, details = {}) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
     }
+    // The date/reference columns arrive with add_invoice_approval_flow.sql; before that, just paid/not.
+    const withDetails = 'paid_date' in invoice
+    const paidDate = details.paidDate || todayLocal()
+    const reference = (details.reference || '').trim()
     setPoActionBusyId(invoice.purchase_request_id)
     try {
       const payload = checked
-        ? { paid: true, paid_by: loggedInUser.id, paid_at: new Date().toISOString() }
-        : { paid: false, paid_by: null, paid_at: null }
+        ? {
+            paid: true,
+            paid_by: loggedInUser.id,
+            paid_at: new Date().toISOString(),
+            ...(withDetails ? { paid_date: paidDate, payment_reference: reference || null } : {}),
+          }
+        : { paid: false, paid_by: null, paid_at: null, ...(withDetails ? { paid_date: null, payment_reference: null } : {}) }
       const { error } = await supabase.from('invoices').update(payload).eq('id', invoice.id)
       if (error) throw error
       await logPoActivity(
         invoice.purchase_request_id,
-        checked ? `Invoice marked paid${invoice.invoice_number ? ` (#${invoice.invoice_number})` : ''}` : 'Invoice paid status cleared'
+        checked
+          ? `Invoice marked paid${invoiceTag(invoice)}${withDetails ? ` on ${paidDate}${reference ? `, ref ${reference}` : ''}` : ''}`
+          : 'Invoice paid status cleared'
       )
       flashPoStatus(checked ? 'Marked paid.' : 'Paid status cleared.', true)
       await refreshPurchaseRequest(invoice.purchase_request_id)
     } catch (error) {
       console.error(error)
-      flashPoStatus('Could not update paid status — check the console for details.', false)
+      flashPoStatus(invoiceFlowError(error, 'Could not update paid status — check the console for details.'), false)
     } finally {
       setPoActionBusyId(null)
     }
@@ -4507,6 +4698,11 @@ function App() {
           handleDeleteReceipt={handleDeleteReceipt}
           handleMatchInvoiceReceipt={handleMatchInvoiceReceipt}
           handleSetPrepaid={handleSetPrepaid}
+          invoicesToReview={invoicesToReview}
+          handleReviewInvoice={handleReviewInvoice}
+          handleApproveInvoicesForPayment={handleApproveInvoicesForPayment}
+          handleReturnInvoice={handleReturnInvoice}
+          handleResubmitInvoice={handleResubmitInvoice}
           handleClosePo={handleClosePo}
           poActionBusyId={poActionBusyId}
           handleDeletePurchaseRequest={handleDeletePurchaseRequest}

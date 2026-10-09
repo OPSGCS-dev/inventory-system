@@ -16,6 +16,7 @@ import {
   canResubmitInvoice,
   canDeleteInvoice,
   formatDateOnly,
+  paymentBatchLabel,
   usersWithRole,
   findUserName,
   isAdmin,
@@ -41,6 +42,7 @@ function InvoicesPanel({
   handleReviewInvoice,
   handleReturnInvoice,
   handleResubmitInvoice,
+  paymentBatchSummaries,
   handlePayInvoice,
   handleDeleteInvoice,
   handleAddReceipt,
@@ -56,6 +58,8 @@ function InvoicesPanel({
   const canAddReceipt = canConfirmReceipt(loggedInUser, request) || canManage
   const canDelete = isAdmin(loggedInUser)
   const invoices = request.invoices || []
+  // The payment batch an invoice was approved in, if it has one.
+  const batchOf = (invoice) => (paymentBatchSummaries || []).find((s) => s.batch.id === invoice.payment_batch_id)?.batch
   // False until add_invoice_approval_flow.sql has been run (then there's no requisitioner step).
   const flow = invoices.every(invoiceFlowReady)
   const receipts = request.receipts || []
@@ -404,6 +408,11 @@ function InvoicesPanel({
                         <>
                           ✓ {findUserName(users, inv.approved_by)}
                           {inv.approved_at ? ` — ${new Date(inv.approved_at).toLocaleDateString()}` : ''}
+                          {batchOf(inv) && (
+                            <div className="sub" style={{ margin: 0 }}>
+                              {paymentBatchLabel(batchOf(inv))}
+                            </div>
+                          )}
                           {canWithdrawApproval(loggedInUser, inv, request) && (
                             <>
                               {' '}

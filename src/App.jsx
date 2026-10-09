@@ -37,6 +37,7 @@ import {
   canManagePayment,
   canApproveInvoice,
   todayLocal,
+  paymentBatchLabel,
   canReviewInvoice,
   canReturnInvoice,
   canPayInvoice,
@@ -159,6 +160,9 @@ function App() {
   // with no rows here is unscoped -- sees every entity.
   const [userRoleEntities, setUserRoleEntities] = useState([])
   const [vendors, setVendors] = useState([])
+  // Payment-approval batches (add_payment_batches.sql); `Ready` is false until that has been run.
+  const [paymentBatches, setPaymentBatches] = useState([])
+  const [paymentBatchesReady, setPaymentBatchesReady] = useState(false)
   const [purchaseRequests, setPurchaseRequests] = useState([])
   const [poLoading, setPoLoading] = useState(true)
   const [poStatus, setPoStatus] = useState(null)
@@ -601,6 +605,22 @@ function App() {
     )
   }
 
+  // Payment-approval batches (add_payment_batches.sql). If that file hasn't been run the table
+  // isn't there: that isn't an error, there just are no batches and approving works without them.
+  async function loadPaymentBatches() {
+    const { data, error } = await supabase
+      .from('invoice_payment_batches')
+      .select('*')
+      .order('approved_at', { ascending: false })
+    if (error) {
+      setPaymentBatches([])
+      setPaymentBatchesReady(false)
+      return
+    }
+    setPaymentBatches(data ?? [])
+    setPaymentBatchesReady(true)
+  }
+
   async function loadVendors() {
     const { data, error } = await supabase.from('vendors').select('*').order('name', { ascending: true })
     if (error) {
@@ -733,6 +753,7 @@ function App() {
       loadUserRoleEntities()
       loadVendors()
       loadPurchaseRequests()
+      loadPaymentBatches()
       loadBudgetCategories()
       loadBudgetSubcategories()
       loadSubProjects()
@@ -1707,6 +1728,19 @@ function App() {
   // the PO summary table's row shape. Approval is a company-wide role
   // (invoice_approval), not scoped to any particular person or entity, so
   // every unapproved matched invoice shows up here for anyone holding it.
+  // Each payment batch with the invoices approved in it, newest first (a batch whose invoices have
+  // all since been withdrawn is left out).
+  const paymentBatchSummaries = useMemo(() => {
+    const byBatch = new Map(paymentBatches.map((batch) => [batch.id, { batch, items: [] }]))
+    for (const r of purchaseRequests) {
+      for (const invoice of r.invoices || []) {
+        const entry = byBatch.get(invoice.payment_batch_id)
+        if (entry) entry.items.push({ request: r, invoice })
+      }
+    }
+    return [...byBatch.values()].filter((entry) => entry.items.length > 0)
+  }, [paymentBatches, purchaseRequests])
+
   // Invoices waiting on the logged-in person to review as the requisitioner (the PO is theirs).
   // Only their own POs: an admin can stand in on any PO's page, but that shouldn't fill their queue.
   const invoicesToReview = useMemo(() => {
@@ -3148,40 +3182,64 @@ function App() {
     }
   }
 
-  // The supervisor's batch: approve several reviewed invoices for payment in one go.
-  // `pairs` are { request, invoice }. All or none: the database refuses the lot if any one
-  // of them isn't ready. Returns true when they were approved.
-  async function handleApproveInvoicesForPayment(pairs) {
+  // The supervisor's batch: approve several reviewed invoices for payment in one go, as one
+  // named payment batch (a record accounting can filter by). `pairs` are { request, invoice }.
+  // All or none: the database refuses the lot if any one of them isn't ready. Returns true
+  // when they were approved. Before add_payment_batches.sql has been run there's no batch
+  // record, and they're simply approved.
+  async function handleApproveInvoicesForPayment(pairs, batchName = '') {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return false
     }
     if (pairs.length === 0) return false
-    setPoActionBusyId('invoice-batch')
+    // A lone invoice approved from its own PO page locks just that PO's buttons.
+    setPoActionBusyId(pairs.length === 1 ? pairs[0].invoice.purchase_request_id : 'invoice-batch')
+    let batch = null
     try {
+      const now = new Date().toISOString()
+      const name = batchName.trim() || `Payment run ${todayLocal()}`
+      if (paymentBatchesReady) {
+        const { data, error } = await supabase
+          .from('invoice_payment_batches')
+          .insert({ name, approved_by: loggedInUser.id, approved_at: now })
+          .select()
+          .single()
+        if (error) throw error
+        batch = data
+      }
       const ids = pairs.map(({ invoice }) => invoice.id)
       const { data, error } = await supabase
         .from('invoices')
-        .update({ approved: true, approved_by: loggedInUser.id, approved_at: new Date().toISOString() })
+        .update({ approved: true, approved_by: loggedInUser.id, approved_at: now, ...(batch ? { payment_batch_id: batch.id } : {}) })
         .in('id', ids)
         .select('id')
       if (error) throw error
       if (!data || data.length !== ids.length) {
         throw new Error(`Only ${data ? data.length : 0} of ${ids.length} invoices were updated.`)
       }
+      const where = batch ? ` in ${paymentBatchLabel(batch)}` : ''
       await Promise.all(
         pairs.map(({ invoice }) =>
           logPoActivity(
             invoice.purchase_request_id,
-            `Invoice approved for payment${invoiceTag(invoice)}${pairs.length > 1 ? ` (batch of ${pairs.length})` : ''}`
+            `Invoice approved for payment${invoiceTag(invoice)}${where}${pairs.length > 1 ? ` (batch of ${pairs.length})` : ''}`
           )
         )
       )
-      flashPoStatus(`${pairs.length} invoice${pairs.length === 1 ? '' : 's'} approved for payment.`, true)
-      await Promise.all([...new Set(pairs.map(({ invoice }) => invoice.purchase_request_id))].map((id) => refreshPurchaseRequest(id)))
+      flashPoStatus(`${pairs.length} invoice${pairs.length === 1 ? '' : 's'} approved for payment${where}.`, true)
+      await Promise.all([
+        ...[...new Set(pairs.map(({ invoice }) => invoice.purchase_request_id))].map((id) => refreshPurchaseRequest(id)),
+        loadPaymentBatches(),
+      ])
       return true
     } catch (error) {
       console.error(error)
+      // Don't leave an empty batch behind if the invoices themselves couldn't be approved.
+      if (batch) {
+        const { error: cleanupError } = await supabase.from('invoice_payment_batches').delete().eq('id', batch.id)
+        if (cleanupError) console.error('Could not remove the unused batch:', cleanupError)
+      }
       flashPoStatus(invoiceFlowError(error, `Could not approve the invoices — ${error?.message || 'check the console for details.'}`), false)
       return false
     } finally {
@@ -3265,11 +3323,22 @@ function App() {
       flashPoStatus('You must be logged in.', false)
       return
     }
+    // Approving one invoice is a batch of one, so it's recorded the same way.
+    if (checked && paymentBatchesReady) {
+      const request = purchaseRequests.find((r) => r.id === invoice.purchase_request_id)
+      await handleApproveInvoicesForPayment([{ request, invoice }])
+      return
+    }
     setPoActionBusyId(invoice.purchase_request_id)
     try {
       const payload = checked
         ? { approved: true, approved_by: loggedInUser.id, approved_at: new Date().toISOString() }
-        : { approved: false, approved_by: null, approved_at: null }
+        : {
+            approved: false,
+            approved_by: null,
+            approved_at: null,
+            ...('payment_batch_id' in invoice ? { payment_batch_id: null } : {}),
+          }
       const { error } = await supabase.from('invoices').update(payload).eq('id', invoice.id)
       if (error) throw error
       await logPoActivity(
@@ -4699,6 +4768,8 @@ function App() {
           handleMatchInvoiceReceipt={handleMatchInvoiceReceipt}
           handleSetPrepaid={handleSetPrepaid}
           invoicesToReview={invoicesToReview}
+          paymentBatchesReady={paymentBatchesReady}
+          paymentBatchSummaries={paymentBatchSummaries}
           handleReviewInvoice={handleReviewInvoice}
           handleApproveInvoicesForPayment={handleApproveInvoicesForPayment}
           handleReturnInvoice={handleReturnInvoice}

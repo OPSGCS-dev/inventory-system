@@ -955,6 +955,11 @@ export function formatDateOnly(value) {
   return new Date(y, m - 1, d).toLocaleDateString()
 }
 
+// How a payment batch is shown: its name and number, e.g. "Payment run 2026-10-15 (#7)".
+export function paymentBatchLabel(batch) {
+  return `${batch.name} (#${batch.id})`
+}
+
 // Dollar amounts for the approval screens: thousands separators, two decimals.
 export const formatMoney = (n) =>
   `$${Number(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`

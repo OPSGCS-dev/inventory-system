@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { formatMoney, totalsByCurrencyText } from '../utils'
+import { findUserName, formatMoney, paymentBatchLabel, todayLocal, totalsByCurrencyText } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 
 // "My Invoices for Payment Approval": the supervisor's list. Every invoice the
 // requisitioner has reviewed and approved piles up here; a few times a month the
 // supervisor ticks the ones to pay and approves them in one go, which releases them to
-// accounting. A single invoice can instead be sent back to accounting with a reason.
-// Rows are { request, invoice } pairs.
+// accounting as one named payment batch. A single invoice can instead be sent back to
+// accounting with a reason. Rows are { request, invoice } pairs.
 const reviewedAt = ({ invoice }) => invoice.reviewed_at || invoice.uploaded_at
+
+const amountsOf = (pairs) => pairs.map(({ request, invoice }) => ({ amount: invoice.amount, currency: request.currency }))
 
 function MyInvoicesForApprovalTable({
   invoicesPendingApproval,
@@ -15,12 +17,16 @@ function MyInvoicesForApprovalTable({
   handleApproveInvoicesForPayment,
   handleReturnInvoice,
   poActionBusyId,
+  paymentBatchesReady,
+  paymentBatchSummaries,
+  users,
 }) {
   const range = useDateRange(invoicesPendingApproval, reviewedAt)
   const listed = range.listed
   // Ticked invoice ids. Kept apart from the list so a changed date range or a refreshed
   // list can't leave an invoice ticked that's no longer on screen (see `chosen` below).
   const [ticked, setTicked] = useState(() => new Set())
+  const [batchName, setBatchName] = useState('')
   const batchBusy = poActionBusyId === 'invoice-batch'
 
   const chosen = listed.filter(({ invoice }) => ticked.has(invoice.id))
@@ -40,11 +46,17 @@ function MyInvoicesForApprovalTable({
   }
 
   async function approveChosen() {
-    const total = totalsByCurrencyText(chosen.map(({ request, invoice }) => ({ amount: invoice.amount, currency: request.currency })))
-    if (!window.confirm(`Approve ${chosen.length} invoice${chosen.length === 1 ? '' : 's'} for payment (${total})?`)) return
-    const ok = await handleApproveInvoicesForPayment(chosen)
-    if (ok) setTicked(new Set())
+    const name = batchName.trim() || `Payment run ${todayLocal()}`
+    const what = `${chosen.length} invoice${chosen.length === 1 ? '' : 's'} (${totalsByCurrencyText(amountsOf(chosen))})`
+    if (!window.confirm(`Approve ${what} for payment${paymentBatchesReady ? ` as "${name}"` : ''}?`)) return
+    const ok = await handleApproveInvoicesForPayment(chosen, batchName)
+    if (ok) {
+      setTicked(new Set())
+      setBatchName('')
+    }
   }
+
+  const recentBatches = (paymentBatchSummaries || []).slice(0, 5)
 
   return (
     <div className="card">
@@ -55,10 +67,7 @@ function MyInvoicesForApprovalTable({
         </div>
         {listed.length > 0 && (
           <div className="sub" style={{ margin: 0 }}>
-            Total waiting:{' '}
-            <strong>
-              {totalsByCurrencyText(listed.map(({ request, invoice }) => ({ amount: invoice.amount, currency: request.currency })))}
-            </strong>
+            Total waiting: <strong>{totalsByCurrencyText(amountsOf(listed))}</strong>
           </div>
         )}
       </div>
@@ -72,15 +81,22 @@ function MyInvoicesForApprovalTable({
       ) : (
         <>
           <div className="edit-toolbar" style={{ flexWrap: 'wrap' }}>
+            {paymentBatchesReady && (
+              <input
+                type="text"
+                aria-label="Batch name"
+                placeholder={`Batch name (optional) — Payment run ${todayLocal()}`}
+                value={batchName}
+                onChange={(e) => setBatchName(e.target.value)}
+                style={{ minWidth: 280 }}
+              />
+            )}
             <button className="btn-primary" onClick={approveChosen} disabled={chosen.length === 0 || batchBusy}>
               {batchBusy ? 'Approving…' : chosen.length > 0 ? `Approve ${chosen.length} Selected for Payment` : 'Approve Selected for Payment'}
             </button>
             {chosen.length > 0 && (
               <span className="sub" style={{ margin: 0 }}>
-                Selected total:{' '}
-                <strong>
-                  {totalsByCurrencyText(chosen.map(({ request, invoice }) => ({ amount: invoice.amount, currency: request.currency })))}
-                </strong>
+                Selected total: <strong>{totalsByCurrencyText(amountsOf(chosen))}</strong>
               </span>
             )}
           </div>
@@ -144,6 +160,41 @@ function MyInvoicesForApprovalTable({
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {recentBatches.length > 0 && (
+        <>
+          <h3 style={{ margin: '16px 0 6px' }}>Recent payment batches</h3>
+          <div className="sheet-wrap">
+            <table className="sheet">
+              <thead>
+                <tr className="header-row">
+                  <th>Batch</th>
+                  <th>Approved</th>
+                  <th>By</th>
+                  <th className="center-cell">Invoices</th>
+                  <th>Total</th>
+                  <th>Paid</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentBatches.map(({ batch, items }) => {
+                  const paid = items.filter(({ invoice }) => invoice.paid).length
+                  return (
+                    <tr key={batch.id}>
+                      <td>{paymentBatchLabel(batch)}</td>
+                      <td>{new Date(batch.approved_at).toLocaleDateString()}</td>
+                      <td>{findUserName(users, batch.approved_by)}</td>
+                      <td className="center-cell">{items.length}</td>
+                      <td>{totalsByCurrencyText(amountsOf(items))}</td>
+                      <td>{paid === items.length ? 'All paid' : `${paid} of ${items.length}`}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

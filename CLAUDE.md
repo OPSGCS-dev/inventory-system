@@ -72,6 +72,12 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **Payment batches:** each supervisor approval is recorded as a batch (`invoice_payment_batches`, `invoices.payment_batch_id`;
+  `add_payment_batches.sql`, independent of the other invoice SQL): a name (theirs, or "Payment run <date>"), who and when. A single
+  invoice approved from its PO page is a batch of one. The supervisor list shows "Recent payment batches" with paid progress; the
+  Invoices-to-Pay list has a batch filter (with "x of y paid"), a Batch column and a CSV column; the PO's panel shows the batch.
+  Approvals from before batches simply have none ("Approved before batches"). The app loads batches separately
+  (`loadPaymentBatches`), so everything still works, just without batches, until the SQL is run.
 - **Invoice approval flow:** invoice -> (receipt matched) -> **requisitioner reviews** -> **supervisor approves for payment**
   (batched) -> **accounting confirms paid** (date + reference) -> requisitioner closes the PO. `invoiceStage` in utils.js works the
   stage out from `invoices.reviewed / approved / paid / returned_at`; `canReviewInvoice`, `canApproveInvoice`, `canPayInvoice`,
@@ -118,7 +124,7 @@ Most recent first, all on `main`:
   Audit tab (demo); security hardening (`security_0*.sql`).
 
 SQL added in this round (run in this order if not already run): `add_part_images`, `add_app_settings`, `add_transfer_pos`
-(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`.
+(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`.
 
 ## What to build next
 
@@ -141,7 +147,7 @@ What exists today on that side, so new work extends it rather than duplicating i
 - **Inter-entity charges:** stock transfers now create closed POs (sender as vendor, part Last Cost as price, payment left
   Unpaid). Nothing yet settles or reports on those.
 - Open edges worth knowing: payment is recorded per invoice (date paid + reference, no method or amount paid), the supervisor
-  approves in batches but there is no batch record, there is no accounting export beyond the ledger / invoices-to-pay CSVs, and the
+  approves in recorded batches (no batch-level payment confirmation), there is no accounting export beyond the ledger / invoices-to-pay CSVs, and the
   transfer POs have no budget category.
 
 Other unfinished items, lower priority: the Accounting Audit tab (`AuditTab`) still runs on made-up data held in browser

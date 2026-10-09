@@ -274,6 +274,8 @@ function PurchaseOrdersTab({
   setPoDraftPrepaid,
   handleSetPrepaid,
   invoicesToReview,
+  paymentBatchesReady,
+  paymentBatchSummaries,
   handleReviewInvoice,
   handleApproveInvoicesForPayment,
   handleReturnInvoice,
@@ -1545,6 +1547,7 @@ function PurchaseOrdersTab({
               handleReviewInvoice={handleReviewInvoice}
               handleReturnInvoice={handleReturnInvoice}
               handleResubmitInvoice={handleResubmitInvoice}
+              paymentBatchSummaries={paymentBatchSummaries}
               poPdfRequest={withShownPoNumber(r)}
               poStamp={approvalStamp(users, r)}
             />
@@ -2289,6 +2292,7 @@ function PurchaseOrdersTab({
           handlePayInvoice={handlePayInvoice}
           poActionBusyId={poActionBusyId}
           users={users}
+          paymentBatchSummaries={paymentBatchSummaries}
         />
       ) : poView === 'vendors' ? (
         <VendorsToApproveTable
@@ -2312,6 +2316,9 @@ function PurchaseOrdersTab({
           handleApproveInvoicesForPayment={handleApproveInvoicesForPayment}
           handleReturnInvoice={handleReturnInvoice}
           poActionBusyId={poActionBusyId}
+          paymentBatchesReady={paymentBatchesReady}
+          paymentBatchSummaries={paymentBatchSummaries}
+          users={users}
         />
       ) : (
       <div className="card">

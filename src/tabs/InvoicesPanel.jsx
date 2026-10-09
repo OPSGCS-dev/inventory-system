@@ -246,11 +246,14 @@ function InvoicesPanel({
                             </select>
                           )}
                           {canAddReceipt && (
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                            // Stacked, not side by side: next to the file input the text gets squeezed into a
+                            // one-letter-wide column in this narrow cell and the row balloons.
+                            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, margin: 0 }}>
                               Add &amp; match:
                               <input
                                 type="file"
                                 accept="image/*,application/pdf"
+                                style={{ maxWidth: '100%' }}
                                 disabled={busy}
                                 onChange={(e) => {
                                   const file = e.target.files[0]

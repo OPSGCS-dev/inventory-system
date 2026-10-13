@@ -38,6 +38,8 @@ export const PO_HISTORY_EVENTS = {
   prepaid_changed: 'Pre-paid changed',
   invoice_reviewed: 'Invoice approved by requisitioner',
   review_withdrawn: 'Requisitioner approval withdrawn',
+  invoice_held: 'Invoice put on hold',
+  invoice_released: 'Invoice released from hold',
   invoice_returned: 'Invoice sent back',
   invoice_resubmitted: 'Invoice resubmitted',
   payment_batch_created: 'Payment batch created',
@@ -129,6 +131,8 @@ const FIELD_LABELS = {
   payment_reference: 'Payment reference',
   payment_batch_id: 'Payment batch',
   duplicate_reason: 'Duplicate invoice # allowed because',
+  held_by: 'Held by',
+  held_at: 'Held at',
   return_reason: 'Reason sent back',
   returned_stage: 'Sent back from',
   // vendors
@@ -286,6 +290,10 @@ export function summarize(row, ctx = {}) {
     case 'invoice_approved_for_payment':
     case 'payment_approval_withdrawn':
     case 'invoice_resubmitted':
+      return `${label}: ${inv}${amt}`
+    case 'invoice_held':
+      return `${label}: ${inv}${amt}${newOf(row, 'hold_reason') ? ` — ${newOf(row, 'hold_reason')}` : ''}`
+    case 'invoice_released':
       return `${label}: ${inv}${amt}`
     case 'invoice_returned':
       return `${label}: ${inv}${amt}${newOf(row, 'return_reason') ? ` — ${newOf(row, 'return_reason')}` : ''}`

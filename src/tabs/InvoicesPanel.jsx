@@ -14,6 +14,9 @@ import {
   canWithdrawApproval,
   canPayInvoice,
   canReturnInvoice,
+  canHoldInvoice,
+  canReleaseInvoice,
+  isInvoiceHeld,
   canResubmitInvoice,
   canDeleteInvoice,
   formatDateOnly,
@@ -25,6 +28,18 @@ import {
   isPrepaid,
   canSetPrepaid,
 } from '../utils'
+
+// Why an invoice is on hold, who held it and when.
+function HoldNote({ inv, users }) {
+  return (
+    <div>
+      <span style={{ color: 'var(--warn)', fontWeight: 600 }}>On hold</span>
+      <div className="sub" style={{ margin: 0 }}>
+        {inv.hold_reason || '—'} — {findUserName(users, inv.held_by)}, {new Date(inv.held_at).toLocaleDateString()}
+      </div>
+    </div>
+  )
+}
 
 // Receipts & Invoices table for a PO's detail view. The requisitioner
 // uploads receipts and Invoice Matching uploads/pairs invoices (and usually
@@ -42,6 +57,8 @@ function InvoicesPanel({
   handleApproveInvoice,
   handleReviewInvoice,
   handleReturnInvoice,
+  handleHoldInvoice,
+  handleReleaseInvoice,
   handleResubmitInvoice,
   paymentBatchSummaries,
   handlePayInvoice,
@@ -423,9 +440,23 @@ function InvoicesPanel({
                       ) : stage === 'payment_approval' ? (
                         canApproveInvoice(loggedInUser, inv, request) ? (
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            <button className="btn-primary" disabled={busy} onClick={() => handleApproveInvoice(inv, true)}>
-                              Approve for Payment
-                            </button>
+                            {isInvoiceHeld(inv) ? (
+                              <HoldNote inv={inv} users={users} />
+                            ) : (
+                              <button className="btn-primary" disabled={busy} onClick={() => handleApproveInvoice(inv, true)}>
+                                Approve for Payment
+                              </button>
+                            )}
+                            {canHoldInvoice(loggedInUser, inv, request) && (
+                              <button className="btn-secondary" disabled={busy} onClick={() => handleHoldInvoice(inv)}>
+                                Hold
+                              </button>
+                            )}
+                            {canReleaseInvoice(loggedInUser, inv, request) && (
+                              <button className="btn-secondary" disabled={busy} onClick={() => handleReleaseInvoice(inv)}>
+                                Release
+                              </button>
+                            )}
                             {canReturnInvoice(loggedInUser, inv, request) && (
                               <button
                                 className="btn-secondary"
@@ -438,9 +469,13 @@ function InvoicesPanel({
                             )}
                           </div>
                         ) : (
-                          <span className="sub" style={{ margin: 0 }}>
-                            Waiting on {usersWithRole(users, 'invoice_approval').join(', ') || 'a supervisor'}
-                          </span>
+                          isInvoiceHeld(inv) ? (
+                            <HoldNote inv={inv} users={users} />
+                          ) : (
+                            <span className="sub" style={{ margin: 0 }}>
+                              Waiting on {usersWithRole(users, 'invoice_approval').join(', ') || 'a supervisor'}
+                            </span>
+                          )
                         )
                       ) : (
                         <>
@@ -450,6 +485,23 @@ function InvoicesPanel({
                             <div className="sub" style={{ margin: 0 }}>
                               {paymentBatchLabel(batchOf(inv))}
                             </div>
+                          )}
+                          {stage === 'to_pay' && isInvoiceHeld(inv) && <HoldNote inv={inv} users={users} />}
+                          {canHoldInvoice(loggedInUser, inv, request) && (
+                            <>
+                              {' '}
+                              <button className="inv-undo" disabled={busy} onClick={() => handleHoldInvoice(inv)}>
+                                Hold
+                              </button>
+                            </>
+                          )}
+                          {stage === 'to_pay' && canReleaseInvoice(loggedInUser, inv, request) && (
+                            <>
+                              {' '}
+                              <button className="inv-undo" disabled={busy} onClick={() => handleReleaseInvoice(inv)}>
+                                Release
+                              </button>
+                            </>
                           )}
                           {canWithdrawApproval(loggedInUser, inv, request) && (
                             <>
@@ -464,7 +516,11 @@ function InvoicesPanel({
                     </td>
                     <td>
                       {stage === 'to_pay' ? (
-                        canPayInvoice(loggedInUser, inv, request) ? (
+                        isInvoiceHeld(inv) ? (
+                          <span className="sub" style={{ margin: 0 }}>
+                            On hold — can't be paid yet
+                          </span>
+                        ) : canPayInvoice(loggedInUser, inv, request) ? (
                           <PaymentConfirm busy={busy} onConfirm={(details) => handlePayInvoice(inv, true, details)} />
                         ) : (
                           <span className="sub" style={{ margin: 0 }}>

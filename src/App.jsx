@@ -40,6 +40,9 @@ import {
   paymentBatchLabel,
   canReviewInvoice,
   canReturnInvoice,
+  canHoldInvoice,
+  canReleaseInvoice,
+  isInvoiceHeld,
   canPayInvoice,
   invoiceStage,
   canReopenRejected,
@@ -1804,10 +1807,13 @@ function App() {
     const toIssue = purchaseRequests.filter(
       (r) => r.status === 'approved' && canIssuePurchaseOrder(loggedInUserWithScopes, r)
     ).length
+    // Held invoices are waiting on a decision already made, so they don't count as work to do.
     const invoicesToApprove = userHasRole(loggedInUserWithScopes, 'invoice_approval')
-      ? invoicesPendingApproval.length
+      ? invoicesPendingApproval.filter(({ invoice }) => !isInvoiceHeld(invoice)).length
       : 0
-    const invoicesToPayCount = canManagePayment(loggedInUserWithScopes) ? invoicesToPay.length : 0
+    const invoicesToPayCount = canManagePayment(loggedInUserWithScopes)
+      ? invoicesToPay.filter(({ invoice }) => !isInvoiceHeld(invoice)).length
+      : 0
     const vendorsToApprove = canApproveVendors(loggedInUserWithScopes)
       ? vendors.filter((v) => vendorApprovalStatus(v) === 'pending').length
       : 0
@@ -3220,6 +3226,10 @@ function App() {
       return false
     }
     if (pairs.length === 0) return false
+    if (pairs.some(({ invoice }) => isInvoiceHeld(invoice))) {
+      flashPoStatus('An invoice on hold can\'t be approved for payment — release it first.', false)
+      return false
+    }
     // A lone invoice approved from its own PO page locks just that PO's buttons.
     setPoActionBusyId(pairs.length === 1 ? pairs[0].invoice.purchase_request_id : 'invoice-batch')
     let batch = null
@@ -3307,6 +3317,8 @@ function App() {
           returned_at: new Date().toISOString(),
           return_reason: reason.trim(),
           returned_stage: invoiceStage(invoice, request),
+          // Sending it back ends any hold on it.
+          ...('held_at' in invoice ? { held_by: null, held_at: null, hold_reason: null } : {}),
         })
         .eq('id', invoice.id)
       if (error) throw error
@@ -3319,6 +3331,79 @@ function App() {
     } finally {
       setPoActionBusyId(null)
     }
+  }
+
+  // The supervisor puts an invoice on hold, with a reason: while it waits for payment approval, or
+  // after approval but before it is paid. It can't be approved or marked paid until released.
+  async function handleHoldInvoice(invoice) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    const request = purchaseRequests.find((r) => r.id === invoice.purchase_request_id)
+    if (!canHoldInvoice(loggedInUserWithScopes, invoice, request)) {
+      flashPoStatus("You can't put this invoice on hold from where it is now.", false)
+      return
+    }
+    const reason = window.prompt(`Why is invoice${invoiceTag(invoice)} being put on hold? (required)`)
+    if (reason === null) return
+    if (!reason.trim()) {
+      flashPoStatus('A reason is required to put an invoice on hold.', false)
+      return
+    }
+    setPoActionBusyId(invoice.purchase_request_id)
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ held_by: loggedInUser.id, held_at: new Date().toISOString(), hold_reason: reason.trim() })
+        .eq('id', invoice.id)
+      if (error) throw error
+      await logPoActivity(invoice.purchase_request_id, `Invoice put on hold${invoiceTag(invoice)}: ${reason.trim()}`)
+      flashPoStatus('Invoice put on hold — it can\'t be paid until it is released.', true)
+      await refreshPurchaseRequest(invoice.purchase_request_id)
+    } catch (error) {
+      console.error(error)
+      flashPoStatus(invoiceHoldError(error, 'Could not put the invoice on hold — check the console for details.'), false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  async function handleReleaseInvoice(invoice) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    const request = purchaseRequests.find((r) => r.id === invoice.purchase_request_id)
+    if (!canReleaseInvoice(loggedInUserWithScopes, invoice, request)) {
+      flashPoStatus("You can't release this invoice.", false)
+      return
+    }
+    setPoActionBusyId(invoice.purchase_request_id)
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ held_by: null, held_at: null, hold_reason: null })
+        .eq('id', invoice.id)
+      if (error) throw error
+      await logPoActivity(invoice.purchase_request_id, `Invoice released from hold${invoiceTag(invoice)}`)
+      flashPoStatus('Invoice released from hold.', true)
+      await refreshPurchaseRequest(invoice.purchase_request_id)
+    } catch (error) {
+      console.error(error)
+      flashPoStatus(invoiceHoldError(error, 'Could not release the invoice — check the console for details.'), false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // The database's own refusal is shown as is; a missing column means add_invoice_hold.sql hasn't been run.
+  function invoiceHoldError(error, fallback) {
+    if (dbRefusal(error)) return dbRefusal(error)
+    if (error?.code === '42703' || /held_|hold_reason/.test(error?.message || '')) {
+      return "Invoice holds aren't set up in the database yet — run add_invoice_hold.sql."
+    }
+    return fallback
   }
 
   // Accounting has fixed the problem (or re-matched the receipt): back to the requisitioner.
@@ -3348,6 +3433,10 @@ function App() {
   async function handleApproveInvoice(invoice, checked) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
+      return
+    }
+    if (checked && isInvoiceHeld(invoice)) {
+      flashPoStatus('This invoice is on hold — release it before approving it for payment.', false)
       return
     }
     // Approving one invoice is a batch of one, so it's recorded the same way.
@@ -3388,6 +3477,10 @@ function App() {
   async function handlePayInvoice(invoice, checked, details = {}) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
+      return
+    }
+    if (checked && isInvoiceHeld(invoice)) {
+      flashPoStatus('This invoice is on hold — it can\'t be marked paid until the supervisor releases it.', false)
       return
     }
     // The date/reference columns arrive with add_invoice_approval_flow.sql; before that, just paid/not.
@@ -4879,6 +4972,8 @@ function App() {
           handleReviewInvoice={handleReviewInvoice}
           handleApproveInvoicesForPayment={handleApproveInvoicesForPayment}
           handleReturnInvoice={handleReturnInvoice}
+          handleHoldInvoice={handleHoldInvoice}
+          handleReleaseInvoice={handleReleaseInvoice}
           handleResubmitInvoice={handleResubmitInvoice}
           logPoDocumentEvent={logPoDocumentEvent}
           onOpenPoHistory={(r) => {

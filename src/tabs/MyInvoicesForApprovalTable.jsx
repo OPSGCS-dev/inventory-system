@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { findUserName, formatMoney, paymentBatchLabel, todayLocal, totalsByCurrencyText } from '../utils'
+import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, todayLocal, totalsByCurrencyText } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 
 // "My Invoices for Payment Approval": the supervisor's list. Every invoice the
 // requisitioner has reviewed and approved piles up here; a few times a month the
 // supervisor ticks the ones to pay and approves them in one go, which releases them to
 // accounting as one named payment batch. A single invoice can instead be sent back to
-// accounting with a reason. Rows are { request, invoice } pairs.
+// accounting with a reason, or put on hold (with a reason) while something is sorted out: a held
+// invoice stays in the list but can't be ticked until it is released. Rows are { request, invoice } pairs.
 const reviewedAt = ({ invoice }) => invoice.reviewed_at || invoice.uploaded_at
 
 const amountsOf = (pairs) => pairs.map(({ request, invoice }) => ({ amount: invoice.amount, currency: request.currency }))
@@ -16,6 +17,8 @@ function MyInvoicesForApprovalTable({
   toggleExpandedPo,
   handleApproveInvoicesForPayment,
   handleReturnInvoice,
+  handleHoldInvoice,
+  handleReleaseInvoice,
   poActionBusyId,
   paymentBatchesReady,
   paymentBatchSummaries,
@@ -29,8 +32,11 @@ function MyInvoicesForApprovalTable({
   const [batchName, setBatchName] = useState('')
   const batchBusy = poActionBusyId === 'invoice-batch'
 
-  const chosen = listed.filter(({ invoice }) => ticked.has(invoice.id))
-  const allTicked = listed.length > 0 && chosen.length === listed.length
+  // Held invoices can't be approved, so they can't be ticked either.
+  const selectable = listed.filter(({ invoice }) => !isInvoiceHeld(invoice))
+  const heldCount = listed.length - selectable.length
+  const chosen = selectable.filter(({ invoice }) => ticked.has(invoice.id))
+  const allTicked = selectable.length > 0 && chosen.length === selectable.length
 
   function toggle(id) {
     setTicked((prev) => {
@@ -42,7 +48,7 @@ function MyInvoicesForApprovalTable({
   }
 
   function toggleAll() {
-    setTicked(allTicked ? new Set() : new Set(listed.map(({ invoice }) => invoice.id)))
+    setTicked(allTicked ? new Set() : new Set(selectable.map(({ invoice }) => invoice.id)))
   }
 
   async function approveChosen() {
@@ -68,6 +74,7 @@ function MyInvoicesForApprovalTable({
         {listed.length > 0 && (
           <div className="sub" style={{ margin: 0 }}>
             Total waiting: <strong>{totalsByCurrencyText(amountsOf(listed))}</strong>
+            {heldCount > 0 && <> — {heldCount} on hold</>}
           </div>
         )}
       </div>
@@ -110,12 +117,12 @@ function MyInvoicesForApprovalTable({
                 <col style={{ width: '13%' }} />
                 <col style={{ width: '14%' }} />
                 <col />
-                <col style={{ width: '170px' }} />
+                <col style={{ width: '240px' }} />
               </colgroup>
               <thead>
                 <tr className="header-row">
                   <th className="center-cell">
-                    <input type="checkbox" checked={allTicked} onChange={toggleAll} aria-label="Select all" />
+                    <input type="checkbox" checked={allTicked} onChange={toggleAll} disabled={selectable.length === 0} aria-label="Select all" />
                   </th>
                   <th>Invoice #</th>
                   <th className="center-cell">Amount</th>
@@ -132,21 +139,58 @@ function MyInvoicesForApprovalTable({
                     <td className="center-cell">
                       <input
                         type="checkbox"
-                        checked={ticked.has(invoice.id)}
+                        checked={ticked.has(invoice.id) && !isInvoiceHeld(invoice)}
+                        disabled={isInvoiceHeld(invoice)}
                         onChange={() => toggle(invoice.id)}
                         aria-label={`Select invoice ${invoice.invoice_number || invoice.id}`}
                       />
                     </td>
-                    <td>{invoice.invoice_number || '—'}</td>
+                    <td>
+                      {invoice.invoice_number || '—'}
+                      {isInvoiceHeld(invoice) && (
+                        <div style={{ color: 'var(--warn)', fontWeight: 600 }}>On hold</div>
+                      )}
+                    </td>
                     <td className="center-cell">{formatMoney(invoice.amount)}</td>
                     <td>{request.po_number || `#${request.id}`}</td>
                     <td className="nowrap-cell">{request.projects?.name || '—'}</td>
                     <td>{request.vendors?.name || '—'}</td>
-                    <td>{new Date(reviewedAt({ invoice })).toLocaleString()}</td>
+                    <td>
+                      {new Date(reviewedAt({ invoice })).toLocaleString()}
+                      {isInvoiceHeld(invoice) && (
+                        <div className="sub" style={{ margin: 0 }}>
+                          Held by {findUserName(users, invoice.held_by)}, {new Date(invoice.held_at).toLocaleDateString()}: {invoice.hold_reason || '—'}
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <button className="btn-secondary" onClick={() => toggleExpandedPo(request.id)}>
                         View
                       </button>{' '}
+                      {isInvoiceHeld(invoice)
+                        ? handleReleaseInvoice && (
+                            <>
+                              <button
+                                className="btn-secondary"
+                                onClick={() => handleReleaseInvoice(invoice)}
+                                disabled={batchBusy || poActionBusyId === request.id}
+                              >
+                                Release
+                              </button>{' '}
+                            </>
+                          )
+                        : handleHoldInvoice &&
+                          'held_at' in invoice && (
+                            <>
+                              <button
+                                className="btn-secondary"
+                                onClick={() => handleHoldInvoice(invoice)}
+                                disabled={batchBusy || poActionBusyId === request.id}
+                              >
+                                Hold
+                              </button>{' '}
+                            </>
+                          )}
                       {handleReturnInvoice && invoice.reviewed !== undefined && (
                         <button
                           className="btn-secondary"

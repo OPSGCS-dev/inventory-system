@@ -2,11 +2,12 @@
 // supervisor has approved for payment and that accounting hasn't confirmed paid yet.
 // Accounting pays them outside the system (in a batch), then comes back and confirms
 // each one here with the date it was paid and a reference. Like the approvals table its
-// rows are invoices, not purchase requests. The list can be narrowed to one payment batch.
+// rows are invoices, not purchase requests. The list can be narrowed to one payment batch. An invoice
+// the supervisor has put on hold stays listed but can't be confirmed paid until it is released.
 import { useState } from 'react'
 import Papa from 'papaparse'
 import { downloadCsv } from '../stockUtils'
-import { findUserName, paymentBatchLabel, totalsByCurrencyText } from '../utils'
+import { findUserName, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 import PaymentConfirm from './PaymentConfirm'
 
@@ -39,6 +40,7 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
   const range = useDateRange(inFilter, approvedAt)
   const listed = range.listed
   const total = listed.reduce((sum, { invoice }) => sum + Number(invoice.amount || 0), 0)
+  const heldCount = listed.filter(({ invoice }) => isInvoiceHeld(invoice)).length
   const chosenBatch = activeFilter && activeFilter !== NO_BATCH ? byId.get(Number(activeFilter)) : null
 
   const batchOf = (invoice) => byId.get(invoice.payment_batch_id)?.batch
@@ -54,6 +56,7 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
       Amount: Number(invoice.amount || 0).toFixed(2),
       Currency: request.currency || 'CAD',
       'Approved for payment': invoice.approved_at ? new Date(invoice.approved_at).toLocaleDateString() : '',
+      'On hold': isInvoiceHeld(invoice) ? invoice.hold_reason || 'Yes' : '',
       'Invoice file': invoice.file_url || '',
     }))
     downloadCsv(`invoices-to-pay-${new Date().toISOString().slice(0, 10)}.csv`, Papa.unparse(rows))
@@ -64,7 +67,12 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
       <div className="card-header">
         <h2>
           My Invoices to Pay ({listed.length})
-          {listed.length > 0 && <span className="sub"> — ${total.toFixed(2)} outstanding</span>}
+          {listed.length > 0 && (
+            <span className="sub">
+              {' '}
+              — ${total.toFixed(2)} outstanding{heldCount > 0 ? `, ${heldCount} on hold` : ''}
+            </span>
+          )}
         </h2>
         <div className="header-actions">
           {showBatches && (
@@ -131,7 +139,10 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
             <tbody>
               {listed.map(({ request, invoice }) => (
                 <tr key={invoice.id}>
-                  <td>{invoice.invoice_number || '—'}</td>
+                  <td>
+                    {invoice.invoice_number || '—'}
+                    {isInvoiceHeld(invoice) && <div style={{ color: 'var(--warn)', fontWeight: 600 }}>On hold</div>}
+                  </td>
                   <td className="center-cell">${Number(invoice.amount).toFixed(2)}</td>
                   <td>{request.po_number || `#${request.id}`}</td>
                   <td className="nowrap-cell">{request.projects?.name || '—'}</td>
@@ -150,10 +161,16 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
                       <button className="btn-secondary" onClick={() => toggleExpandedPo(request.id)}>
                         View
                       </button>
-                      <PaymentConfirm
-                        busy={poActionBusyId === request.id}
-                        onConfirm={(details) => handlePayInvoice(invoice, true, details)}
-                      />
+                      {isInvoiceHeld(invoice) ? (
+                        <span className="sub" style={{ margin: 0 }}>
+                          Held by {findUserName(users, invoice.held_by)}: {invoice.hold_reason || '—'}
+                        </span>
+                      ) : (
+                        <PaymentConfirm
+                          busy={poActionBusyId === request.id}
+                          onConfirm={(details) => handlePayInvoice(invoice, true, details)}
+                        />
+                      )}
                     </div>
                   </td>
                 </tr>

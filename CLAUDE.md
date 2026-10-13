@@ -72,6 +72,13 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **Invoice holds:** a supervisor (Payment Approval role) can put an invoice **on hold**, with a reason, while it waits for payment approval or
+  after approval but before it is paid (`invoices.held_by/_at`, `hold_reason`; `add_invoice_hold.sql`, run after `add_invoice_approval_flow.sql`, then
+  re-run `add_po_history.sql` for the "put on hold" / "released" events). A hold is a pause, not a stage: `invoiceStage` is unchanged, the invoice stays
+  in the supervisor's and accounting's lists (flagged "On hold", with the reason) but can't be ticked into a batch, approved or confirmed paid until
+  released (`canHoldInvoice` / `canReleaseInvoice` / `isInvoiceHeld` in utils.js; `handleHoldInvoice` / `handleReleaseInvoice`; the trigger
+  `fn_invoice_hold_guard` enforces it). Sending back clears the hold; an admin can release too. Held invoices don't count in the nav badges. Until the SQL
+  is run `invoiceHoldReady` is false and the Hold buttons don't appear.
 - **Duplicate invoice guard:** the same vendor can't have the same invoice number twice (case/space/punctuation ignored, any PO, voided POs
   excluded) unless the person adding it gives a reason (`invoices.duplicate_reason`, >= 5 chars, shown in PO History). Enforced by a trigger on
   `invoices` (`fn_invoice_duplicate_guard`; only on insert or when the number/PO changes, so existing invoices still approve and pay). Same vendor +
@@ -149,7 +156,7 @@ Most recent first, all on `main`:
   Audit tab (demo); security hardening (`security_0*.sql`).
 
 SQL added in this round (run in this order if not already run): `add_part_images`, `add_app_settings`, `add_transfer_pos`
-(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`, `add_vendor_deactivate`, `add_invoice_duplicate_guard`.
+(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`, `add_vendor_deactivate`, `add_invoice_duplicate_guard`, `add_invoice_hold` (then re-run `add_po_history`).
 
 ## What to build next
 

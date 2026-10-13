@@ -342,6 +342,8 @@ begin
       ev := case when coalesce((n ->> 'paid')::boolean, false) then 'invoice_paid' else 'payment_cleared' end; cat := 'payment';
     elsif o ->> 'returned_at' is distinct from n ->> 'returned_at' then
       ev := case when n ->> 'returned_at' is not null then 'invoice_returned' else 'invoice_resubmitted' end; cat := 'invoicing';
+    elsif o ->> 'held_at' is distinct from n ->> 'held_at' then
+      ev := case when n ->> 'held_at' is not null then 'invoice_held' else 'invoice_released' end; cat := 'approval';
     elsif o ->> 'approved' is distinct from n ->> 'approved' then
       ev := case when coalesce((n ->> 'approved')::boolean, false) then 'invoice_approved_for_payment' else 'payment_approval_withdrawn' end; cat := 'approval';
     elsif o ->> 'reviewed' is distinct from n ->> 'reviewed' then

@@ -281,6 +281,8 @@ function PurchaseOrdersTab({
   handleReviewInvoice,
   handleApproveInvoicesForPayment,
   handleReturnInvoice,
+  handleHoldInvoice,
+  handleReleaseInvoice,
   handleResubmitInvoice,
   logPoDocumentEvent,
   onOpenPoHistory,
@@ -1561,6 +1563,8 @@ function PurchaseOrdersTab({
               handleSetPrepaid={handleSetPrepaid}
               handleReviewInvoice={handleReviewInvoice}
               handleReturnInvoice={handleReturnInvoice}
+              handleHoldInvoice={handleHoldInvoice}
+              handleReleaseInvoice={handleReleaseInvoice}
               handleResubmitInvoice={handleResubmitInvoice}
               paymentBatchSummaries={paymentBatchSummaries}
               poPdfRequest={withShownPoNumber(r)}
@@ -2331,6 +2335,8 @@ function PurchaseOrdersTab({
           toggleExpandedPo={toggleExpandedPo}
           handleApproveInvoicesForPayment={handleApproveInvoicesForPayment}
           handleReturnInvoice={handleReturnInvoice}
+          handleHoldInvoice={handleHoldInvoice}
+          handleReleaseInvoice={handleReleaseInvoice}
           poActionBusyId={poActionBusyId}
           paymentBatchesReady={paymentBatchesReady}
           paymentBatchSummaries={paymentBatchSummaries}

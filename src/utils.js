@@ -779,7 +779,38 @@ export function canReviewInvoice(user, invoice, request) {
 
 // Taking back the requisitioner's approval, while the supervisor hasn't acted on it yet.
 export function canUndoReview(user, invoice, request) {
-  return invoiceFlowReady(invoice) && invoiceStage(invoice, request) === 'payment_approval' && isRequisitioner(user, request)
+  return (
+    invoiceFlowReady(invoice) &&
+    !isInvoiceHeld(invoice) &&
+    invoiceStage(invoice, request) === 'payment_approval' &&
+    isRequisitioner(user, request)
+  )
+}
+
+// A supervisor can put an invoice on hold -- while it waits for payment approval, or once approved
+// but not yet paid -- and release it later (add_invoice_hold.sql). A held invoice stays where it is
+// in the list, but can't be approved or confirmed paid until it is released; sending it back to
+// accounting clears the hold. `invoiceHoldReady` is false until that SQL has been run.
+export function invoiceHoldReady(invoice) {
+  return Boolean(invoice) && 'held_at' in invoice
+}
+
+export function isInvoiceHeld(invoice) {
+  return Boolean(invoice?.held_at)
+}
+
+export function canHoldInvoice(user, invoice, request) {
+  return (
+    invoiceHoldReady(invoice) &&
+    !isInvoiceHeld(invoice) &&
+    ['payment_approval', 'to_pay'].includes(invoiceStage(invoice, request)) &&
+    isPaymentApprover(user, request)
+  )
+}
+
+// The supervisor who holds it releases it; an admin can too, so a hold can't get stuck.
+export function canReleaseInvoice(user, invoice, request) {
+  return isInvoiceHeld(invoice) && (isPaymentApprover(user, request) || isAdmin(user))
 }
 
 export function canApproveInvoice(user, invoice, request) {

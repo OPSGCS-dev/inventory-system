@@ -2428,7 +2428,7 @@ function PurchaseOrdersTab({
             </div>
             <table className="sheet po-summary-table">
               <colgroup>
-                <col style={{ width: '36px' }} />
+                <col style={{ width: '60px' }} />
                 <col style={{ width: '100px' }} />
                 <col style={{ width: '190px' }} />
                 <col style={{ width: '100px' }} />
@@ -2479,7 +2479,7 @@ function PurchaseOrdersTab({
                   const paymentStatus = computePaymentStatus(r)
                   return (
                     <tr key={r.id}>
-                      <td className="row-head">{r.id}</td>
+                      <td className="row-head nowrap-cell">{r.id}</td>
                       <td className="nowrap-cell">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
                       <td className="nowrap-cell" title={r.description || undefined}>
                         {r.description ? truncate(r.description, PO_DESCRIPTION_MAX_LEN) : '—'}

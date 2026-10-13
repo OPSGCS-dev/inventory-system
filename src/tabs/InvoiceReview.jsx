@@ -4,6 +4,9 @@
 // the figures that disagree boxed. Differences only ever warn: the invoice can
 // always be added, since the reading can be wrong. See scrape/comparePo.js.
 
+import { formatMoney } from '../utils'
+import { isBlockingDuplicate, MIN_DUPLICATE_REASON } from '../invoiceDuplicates'
+
 const STATUS_LABEL = { ok: '✓ Matches', warn: '⚠ Check', info: 'ℹ Note' }
 
 function DocView({ title, images, boxes }) {
@@ -30,11 +33,23 @@ function DocView({ title, images, boxes }) {
   )
 }
 
-export default function InvoiceReview({ pending, request, busy, onChange, onSubmit, onCancel }) {
+const poLabel = (m) => m.po_number || 'a draft PO'
+const matchLine = (m) =>
+  `${poLabel(m)} — invoice ${m.invoice_number ? `#${m.invoice_number}` : '(no number)'}, ${formatMoney(m.amount)}, added ${new Date(m.uploaded_at).toLocaleDateString()}${m.paid ? ', paid' : ''}${m.po_status === 'voided' ? ' (voided PO)' : ''}`
+
+export default function InvoiceReview({ pending, dupes, request, busy, onChange, onSubmit, onCancel }) {
   const { file, receiptId, number, amount, scan, review } = pending
   const typedNumber = number.trim().toLowerCase()
-  const duplicate =
-    typedNumber && (request.invoices || []).some((inv) => (inv.invoice_number || '').trim().toLowerCase() === typedNumber)
+  // Until add_invoice_duplicate_guard.sql is run there is no vendor-wide check, only this PO's invoices.
+  const checked = dupes?.ready === true
+  const samePoDuplicate =
+    !checked &&
+    typedNumber &&
+    (request.invoices || []).some((inv) => (inv.invoice_number || '').trim().toLowerCase() === typedNumber)
+  const sameNumber = checked ? dupes.matches.filter((m) => m.same_number) : []
+  const sameAmount = checked ? dupes.matches.filter((m) => !m.same_number) : []
+  const mustExplain = sameNumber.some(isBlockingDuplicate)
+  const reasonShort = mustExplain && (pending.dupReason || '').trim().length < MIN_DUPLICATE_REASON
 
   return (
     <div className="inv-review">
@@ -63,8 +78,44 @@ export default function InvoiceReview({ pending, request, busy, onChange, onSubm
         </div>
       </div>
       {pending.error && <p className="inv-warn-text">{pending.error}</p>}
-      {duplicate && (
+      {samePoDuplicate && (
         <p className="inv-warn-text">⚠ Invoice #{number.trim()} is already on this PO — check this isn't a duplicate.</p>
+      )}
+      {sameNumber.length > 0 && (
+        <div className="inv-warn-text" style={{ margin: '8px 0' }}>
+          ⚠ Invoice #{number.trim()} from this vendor is already on file:
+          <ul style={{ margin: '4px 0 0', paddingLeft: 20 }}>
+            {sameNumber.map((m) => (
+              <li key={m.invoice_id}>{matchLine(m)}</li>
+            ))}
+          </ul>
+          {mustExplain && (
+            <div style={{ marginTop: 8 }}>
+              <label htmlFor="inv_review_dup_reason">This is a separate invoice, because…</label>
+              <input
+                id="inv_review_dup_reason"
+                type="text"
+                className={pending.error && reasonShort ? 'field-invalid' : undefined}
+                placeholder="e.g. second invoice for the same number from the vendor's other branch"
+                value={pending.dupReason || ''}
+                onChange={(e) => onChange('dupReason', e.target.value)}
+              />
+              <span className="sub" style={{ margin: 0 }}>
+                Required to add it. Saved with the invoice and shown in the PO History.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+      {sameAmount.length > 0 && (
+        <div className="inv-warn-text" style={{ margin: '8px 0' }}>
+          ⚠ Same vendor, same amount ({formatMoney(amount)}) in the last 90 days — check this isn't the same bill twice:
+          <ul style={{ margin: '4px 0 0', paddingLeft: 20 }}>
+            {sameAmount.map((m) => (
+              <li key={m.invoice_id}>{matchLine(m)}</li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {review && review.hasText && (

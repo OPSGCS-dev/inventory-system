@@ -2417,6 +2417,7 @@ function App() {
       // The draft is already saved by now, so a failed invoice upload is
       // reported on its own instead of looking like the whole save failed.
       let invoiceFailed = false
+      let invoiceRefusal = null
       if (wantsInvoice) {
         try {
           await uploadAndInsertInvoice(requestId, {
@@ -2427,13 +2428,14 @@ function App() {
         } catch (invoiceError) {
           console.error(invoiceError)
           invoiceFailed = true
+          invoiceRefusal = dbRefusal(invoiceError)
         }
       }
 
       closePoDraftForm()
       flashPoStatus(
         invoiceFailed
-          ? 'Draft saved, but the invoice could not be attached — add it from the request instead.'
+          ? `Draft saved, but the invoice could not be attached${invoiceRefusal ? ` — ${invoiceRefusal}` : ' — add it from the request instead.'}`
           : `Draft saved — vendor: ${vendors.find((v) => v.id === poDraftVendorId)?.name || '—'}.`,
         !invoiceFailed
       )
@@ -3052,7 +3054,9 @@ function App() {
   // Shared by the Invoices panel (handleAddInvoice) and the invoice slot on
   // the purchase request form: uploads the PDF, inserts the invoices row and
   // logs it. Throws on failure -- callers do their own flash/refresh.
-  async function uploadAndInsertInvoice(requestId, { invoiceNumber, amount, file, matchToReceiptId }) {
+  // `duplicateReason` is only sent when the same vendor already has an invoice with this number
+  // (add_invoice_duplicate_guard.sql refuses that without a reason).
+  async function uploadAndInsertInvoice(requestId, { invoiceNumber, amount, file, matchToReceiptId, duplicateReason }) {
     const ext = file.name.split('.').pop() || 'pdf'
     const path = `po-${requestId}-${Date.now()}.${ext}`
     const { error: uploadError } = await supabase.storage
@@ -3068,8 +3072,14 @@ function App() {
       file_name: file.name,
       uploaded_by: loggedInUser.id,
       matched_receipt_id: matchToReceiptId || null,
+      // Left out when there is none, so this still works before the SQL has been run.
+      ...(duplicateReason ? { duplicate_reason: duplicateReason } : {}),
     })
-    if (error) throw error
+    if (error) {
+      // Don't leave the PDF behind in Storage when the row was refused.
+      await removeStorageFile('invoices', urlData.publicUrl)
+      throw error
+    }
     await logPoActivity(
       requestId,
       `Invoice added${invoiceNumber ? ` (#${invoiceNumber})` : ''}: $${amount.toFixed(2)}`
@@ -3080,7 +3090,7 @@ function App() {
   // requisitioner adding a receipt (handleAddReceipt below) -- neither
   // blocks the other. They start out unpaired; handleMatchInvoiceReceipt
   // pairs a specific invoice with a specific receipt afterward.
-  async function handleAddInvoice(request, { invoiceNumber, amount, file, matchToReceiptId }) {
+  async function handleAddInvoice(request, { invoiceNumber, amount, file, matchToReceiptId, duplicateReason }) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
@@ -3105,13 +3115,14 @@ function App() {
         amount: numericAmount,
         file,
         matchToReceiptId,
+        duplicateReason,
       })
       flashPoStatus(matchToReceiptId ? 'Invoice added and matched.' : 'Invoice added.', true)
       await refreshPurchaseRequest(request.id)
       return true
     } catch (error) {
       console.error(error)
-      flashPoStatus('Could not add the invoice — check the console for details.', false)
+      flashPoStatus(dbRefusal(error) || 'Could not add the invoice — check the console for details.', false)
       return false
     } finally {
       setPoActionBusyId(null)

@@ -128,6 +128,7 @@ const FIELD_LABELS = {
   paid_date: 'Date paid',
   payment_reference: 'Payment reference',
   payment_batch_id: 'Payment batch',
+  duplicate_reason: 'Duplicate invoice # allowed because',
   return_reason: 'Reason sent back',
   returned_stage: 'Sent back from',
   // vendors
@@ -275,6 +276,7 @@ export function summarize(row, ctx = {}) {
       bits.push(...changedNames(row))
       break
     case 'invoice_added':
+      return `${label}: ${inv}${amt}${newOf(row, 'duplicate_reason') ? ` — duplicate # allowed: ${newOf(row, 'duplicate_reason')}` : ''}`
     case 'invoice_deleted':
     case 'invoice_edited':
     case 'invoice_matched':

@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import InvoiceReview from './InvoiceReview'
+import { findDuplicateInvoices, isBlockingDuplicate, MIN_DUPLICATE_REASON } from '../invoiceDuplicates'
 import PaymentConfirm from './PaymentConfirm'
 import {
   canMatchInvoices,
@@ -73,6 +74,25 @@ function InvoicesPanel({
   const [pending, setPending] = useState(null)
   const scanToken = useRef(0)
 
+  // Other invoices from this vendor that look like the one being added (any PO), re-checked as
+  // the number and amount are typed. { ready: false } until add_invoice_duplicate_guard.sql is run.
+  const [dupes, setDupes] = useState({ ready: null, matches: [] })
+  const pendingOpen = Boolean(pending)
+  const pendingNumber = pending?.number
+  const pendingAmount = pending?.amount
+  useEffect(() => {
+    if (!pendingOpen) return undefined
+    let stale = false
+    const timer = setTimeout(async () => {
+      const result = await findDuplicateInvoices({ vendorId: request.vendor_id, number: pendingNumber, amount: pendingAmount })
+      if (!stale) setDupes(result)
+    }, 350)
+    return () => {
+      stale = true
+      clearTimeout(timer)
+    }
+  }, [pendingOpen, pendingNumber, pendingAmount, request.vendor_id])
+
   const unmatchedReceiptIds = new Set(receipts.map((r) => r.id))
   for (const inv of invoices) {
     if (inv.matched_receipt_id) unmatchedReceiptIds.delete(inv.matched_receipt_id)
@@ -92,7 +112,8 @@ function InvoicesPanel({
     if (!file) return
     const token = ++scanToken.current
     const fresh = (patch) => setPending((p) => (p && token === scanToken.current ? { ...p, ...patch } : p))
-    setPending({ file, receiptId, number: '', amount: '', scan: { busy: true }, review: null, error: '' })
+    setDupes({ ready: null, matches: [] })
+    setPending({ file, receiptId, number: '', amount: '', dupReason: '', scan: { busy: true }, review: null, error: '' })
     if (file.type !== 'application/pdf') {
       fresh({ scan: { note: 'Please choose a PDF file.' } })
       return
@@ -141,11 +162,25 @@ function InvoicesPanel({
       setPending((p) => ({ ...p, error: 'Enter a valid invoice amount.' }))
       return
     }
+    // Ask again now rather than trust what the last keystroke showed: the same invoice number from
+    // this vendor has to be explained before it can go in (the database insists on it too).
+    const check = await findDuplicateInvoices({ vendorId: request.vendor_id, number: pending.number, amount: pending.amount })
+    const clash = check.matches.some(isBlockingDuplicate)
+    const reason = (pending.dupReason || '').trim()
+    if (clash && reason.length < MIN_DUPLICATE_REASON) {
+      setDupes(check)
+      setPending((p) => ({
+        ...p,
+        error: `This invoice number is already on file for this vendor. If it really is a separate invoice, say why below (at least ${MIN_DUPLICATE_REASON} characters).`,
+      }))
+      return
+    }
     const ok = await handleAddInvoice(request, {
       invoiceNumber: pending.number,
       amount: pending.amount,
       file: pending.file,
       matchToReceiptId: pending.receiptId,
+      duplicateReason: clash ? reason : null,
     })
     if (ok) {
       scanToken.current++
@@ -493,6 +528,7 @@ function InvoicesPanel({
       {pending && (
         <InvoiceReview
           pending={pending}
+          dupes={dupes}
           request={request}
           busy={busy}
           onChange={(field, value) => setPending((p) => ({ ...p, [field]: value, error: '' }))}

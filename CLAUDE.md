@@ -72,6 +72,11 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **Duplicate invoice guard:** the same vendor can't have the same invoice number twice (case/space/punctuation ignored, any PO, voided POs
+  excluded) unless the person adding it gives a reason (`invoices.duplicate_reason`, >= 5 chars, shown in PO History). Enforced by a trigger on
+  `invoices` (`fn_invoice_duplicate_guard`; only on insert or when the number/PO changes, so existing invoices still approve and pay). Same vendor +
+  same amount in the last 90 days is only a warning. `fn_find_duplicate_invoices` is what the app asks (`src/invoiceDuplicates.js`, shown in
+  `InvoiceReview`); until `add_invoice_duplicate_guard.sql` is run the app falls back to its old same-PO warning. Run after `add_po_history.sql`.
 - **Vendors are deactivated, not deleted:** `vendors.active` (+ `deactivated_by/_at`, `deactivation_reason`; `add_vendor_deactivate.sql`, run after
   `add_vendor_approval_guard.sql`). Admin > Vendors has Deactivate / Reactivate (`handleSetVendorActive`, which also switches off the vendor's
   logon). A deactivated vendor drops out of the PO form's vendor list, can't be used to approve a request or issue a PO (`vendorBlockReason` /
@@ -144,7 +149,7 @@ Most recent first, all on `main`:
   Audit tab (demo); security hardening (`security_0*.sql`).
 
 SQL added in this round (run in this order if not already run): `add_part_images`, `add_app_settings`, `add_transfer_pos`
-(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`, `add_vendor_deactivate`.
+(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`, `add_vendor_deactivate`, `add_invoice_duplicate_guard`.
 
 ## What to build next
 

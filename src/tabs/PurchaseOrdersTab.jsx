@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import PdfReadPanel from './PdfReadPanel.jsx'
 import {
   poStatusLabel,
@@ -33,9 +33,10 @@ import {
   computePaymentStatus,
   canMarkPaymentPaid,
   PAYMENT_STATUS_LABELS,
-  PO_PROGRESS_STAGES,
   PO_PROGRESS_STAGE_LABELS,
   computePoProgressStage,
+  poStatusText,
+  requisitionerName,
   lineTotal,
   filterPartsForSearch,
   describeLineInventory,
@@ -74,6 +75,7 @@ import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
 import MyInvoicesToReviewTable from './MyInvoicesToReviewTable'
 import MyInvoicesToPayTable from './MyInvoicesToPayTable'
 import { localDay } from './DateRange'
+import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
 import InvoiceMatchChip from './InvoiceMatchChip'
 import VendorRequestPanel from './VendorRequestPanel'
 import VendorsToApproveTable from './VendorsToApproveTable'
@@ -159,40 +161,74 @@ const SHORT_WORK_LABELS = {
   partial: 'Part. Complete',
 }
 
-// The summary list's progress stepper only covers the "in flight" statuses —
-// a draft hasn't entered the workflow yet, so every dot starts unfilled.
-// 'in_progress'/'paid' aren't real status values -- they're display-only
-// stages computed from the Work Status / Payment Status dropdowns while a
-// PO sits at 'issued' (see computePoProgressStage).
-const PO_PROGRESS_ALL_LABELS = PO_PROGRESS_STAGES.map((s) => PO_PROGRESS_STAGE_LABELS[s])
-
-function PoProgressStepper({ request }) {
-  if (request.status === 'voided') {
-    return (
-      <span className="po-badge po-badge-voided" title={request.void_reason || undefined}>
-        Voided
-      </span>
-    )
-  }
-  if (request.status === 'rejected') {
-    return (
-      <span className="po-badge po-badge-rejected" title={request.rejection_reason || undefined}>
-        Rejected
-      </span>
-    )
-  }
-  const stage = computePoProgressStage(request)
-  const currentIndex = PO_PROGRESS_STAGES.indexOf(stage)
-  const labels = PO_PROGRESS_ALL_LABELS
-  const filled = PO_PROGRESS_STAGES.map((_, i) => i <= currentIndex)
+// The Status column: just the word for where the PO is (a voided or rejected PO shows its reason on hover).
+function PoStatusBadge({ request }) {
+  const stage = request.status === 'voided' || request.status === 'rejected' ? request.status : computePoProgressStage(request)
+  const reason = request.status === 'voided' ? request.void_reason : request.status === 'rejected' ? request.rejection_reason : null
   return (
-    <div className="po-progress">
-      {labels.map((label, i) => (
-        <Fragment key={label}>
-          {i > 0 && <span className={`po-progress-line${filled[i] ? ' filled' : ''}`} />}
-          <span className={`po-progress-dot${filled[i] ? ' filled' : ''}`} title={label} />
-        </Fragment>
-      ))}
+    <span className={'po-badge po-badge-' + stage} title={reason || undefined}>
+      {poStatusText(request)}
+    </span>
+  )
+}
+
+// A voided PO keeps its invoices and receipts: nothing more can be done with them, but they can still be opened.
+function VoidedAttachments({ request, users }) {
+  const invoices = request.invoices || []
+  const receipts = request.receipts || []
+  if (invoices.length === 0 && receipts.length === 0) return null
+  const open = (url, label) =>
+    url ? (
+      <a href={url} target="_blank" rel="noreferrer">
+        {label} ↗
+      </a>
+    ) : (
+      <span className="sub" style={{ margin: 0 }}>
+        No file
+      </span>
+    )
+  const added = (row) => findUserName(users, row.uploaded_by) + (row.uploaded_at ? ' — ' + new Date(row.uploaded_at).toLocaleDateString() : '')
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <div className="card-header">
+        <h2>Receipts &amp; Invoices</h2>
+      </div>
+      <p className="sub" style={{ margin: '0 0 8px' }}>
+        This PO was voided, so these are kept for reference only.
+      </p>
+      <div className="sheet-wrap">
+        <table className="sheet">
+          <thead>
+            <tr className="header-row">
+              <th>Type</th>
+              <th>Document</th>
+              <th className="center-cell">Amount</th>
+              <th>Added</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoices.map((inv) => (
+              <tr key={'i' + inv.id}>
+                <td>Invoice</td>
+                <td>{open(inv.file_url, inv.invoice_number ? '#' + inv.invoice_number : inv.file_name || 'Invoice')}</td>
+                <td className="center-cell">{formatMoney(inv.amount)}</td>
+                <td>{added(inv)}</td>
+                <td>{inv.paid ? 'Paid' : inv.approved ? 'Approved for payment' : '—'}</td>
+              </tr>
+            ))}
+            {receipts.map((rc) => (
+              <tr key={'r' + rc.id}>
+                <td>Receipt</td>
+                <td>{open(rc.file_url, rc.file_name || 'Receipt')}</td>
+                <td className="center-cell">—</td>
+                <td>{added(rc)}</td>
+                <td>—</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -355,6 +391,50 @@ function PurchaseOrdersTab({
     const dir = poDateSort === 'asc' ? 1 : -1
     return [...list].sort((a, b) => (new Date(a.created_at) - new Date(b.created_at)) * dir)
   }, [visiblePurchaseRequests, poDateFrom, poDateTo, poDateSort])
+  // Excel-style filters on the list's columns (the ▾ on each heading): they narrow what the dates and the
+  // header dropdowns already let through, and start clean on each view (My POs for Approval, ...).
+  const poColumns = useMemo(
+    () => [
+      { key: 'id', label: 'ID', values: (r) => r.id },
+      {
+        key: 'date',
+        label: 'Date',
+        values: (r) => (r.created_at ? new Date(r.created_at).toLocaleDateString() : ''),
+        sort: (a, b) => (Date.parse(b) || 0) - (Date.parse(a) || 0),
+      },
+      { key: 'description', label: 'Description', values: (r) => r.description },
+      { key: 'entity', label: 'Entity', values: (r) => r.projects?.name },
+      { key: 'vendor', label: 'Vendor', values: (r) => r.vendors?.name },
+      {
+        key: 'amount',
+        label: 'Amount',
+        values: (r) => formatMoney(computePoTotals(r).grandTotal) + (r.currency && r.currency.toUpperCase() !== 'CAD' ? ' ' + r.currency.toUpperCase() : ''),
+        sort: byAmount,
+      },
+      { key: 'status', label: 'Status', values: (r) => poStatusText(r) },
+      {
+        key: 'work',
+        label: 'Work',
+        values: (r) =>
+          r.status === 'issued' || r.status === 'closed'
+            ? workStatusEntries(r).map((entry, _i, all) =>
+                all.length > 1 ? entry.label + ': ' + (SHORT_WORK_LABELS[entry.status] || workStatusLabel(entry.status)) : workStatusLabel(entry.status)
+              )
+            : '',
+      },
+      {
+        key: 'payment',
+        label: 'Payment',
+        values: (r) => (r.status === 'issued' || r.status === 'closed' ? paymentStatusLabel(computePaymentStatus(r)) : ''),
+      },
+      { key: 'requestor', label: 'Requestor', values: (r) => findUserName(users, r.requested_by) },
+      { key: 'next', label: 'Responsible for Next Action', values: (r) => nextStepInfo(r, users).who },
+      { key: 'po', label: 'PO #', values: (r) => r.po_number },
+    ],
+    [users]
+  )
+  const poFilters = useColumnFilters(listedPurchaseRequests, poColumns, poView)
+  const shownPurchaseRequests = poFilters.filtered
   // Markup and shipping only apply to a PO with part lines; Not to Exceed only
   // to one with service lines -- the form shows each only then.
   const formHasParts = linesHaveParts(poDraftLines)
@@ -385,20 +465,14 @@ function PurchaseOrdersTab({
   }, [peekId, peekNeeded])
   const shownPoNumber = (r) => r.po_number || (peekedPo?.id === r.id ? peekedPo.number : null)
   // The request as it should be printed or emailed, with the number it will be issued with.
-  const withShownPoNumber = (r) => (shownPoNumber(r) && !r.po_number ? { ...r, po_number: shownPoNumber(r) } : r)
+  const withShownPoNumber = (r) => ({
+    ...(shownPoNumber(r) && !r.po_number ? { ...r, po_number: shownPoNumber(r) } : r),
+    requisitioner_name: requisitionerName(users, r),
+  })
 
   // Collapsed by default -- the activity log is a secondary, rarely-needed
   // view, not something that should add height to every PO's detail page.
   const [showActivity, setShowActivity] = useState(false)
-
-  // The Status heading + flow legend live above the table (so they can run
-  // wider than the narrow Status column itself), but still need to sit
-  // horizontally centered directly over that column — so its pixel center is
-  // measured from the real header cell and used to offset the heading block,
-  // recomputed on resize since the column widths are percentage-based.
-  const sheetWrapRef = useRef(null)
-  const statusHeaderRef = useRef(null)
-  const [statusCenter, setStatusCenter] = useState(null)
 
   // Attaching a quote or invoice PDF reads it in the browser (see ../scrape):
   //  - on the invoice picker, the invoice # and total pre-fill the empty
@@ -697,18 +771,6 @@ function PurchaseOrdersTab({
     const applied = await applyPdfReadToDraft(selection)
     if (applied) setPdfRead(null)
   }
-
-  useLayoutEffect(() => {
-    function recompute() {
-      if (!sheetWrapRef.current || !statusHeaderRef.current) return
-      const wrapRect = sheetWrapRef.current.getBoundingClientRect()
-      const thRect = statusHeaderRef.current.getBoundingClientRect()
-      setStatusCenter(thRect.left - wrapRect.left + sheetWrapRef.current.scrollLeft + thRect.width / 2)
-    }
-    recompute()
-    window.addEventListener('resize', recompute)
-    return () => window.removeEventListener('resize', recompute)
-  }, [poLoading, visiblePurchaseRequests.length])
 
   if (viewingRequest) {
     const r = viewingRequest
@@ -1109,6 +1171,10 @@ function PurchaseOrdersTab({
                       <tr>
                         <th>PO #</th>
                         <td>{shownPoNumber(r) || `#${r.id}`}</td>
+                      </tr>
+                      <tr>
+                        <th>Requisitioner</th>
+                        <td>{requisitionerName(users, r) || '—'}</td>
                       </tr>
                       <tr>
                         <th>Budget Category</th>
@@ -1571,6 +1637,7 @@ function PurchaseOrdersTab({
               poStamp={approvalStamp(users, r)}
             />
           )}
+          {r.status === 'voided' && <VoidedAttachments request={r} users={users} />}
         </div>
       </>
     )
@@ -2351,7 +2418,7 @@ function PurchaseOrdersTab({
               : poView === 'my-issue'
               ? 'My POs to Issue'
               : 'Purchase Requests'}{' '}
-            {poLoading ? '' : `(${listedPurchaseRequests.length})`}
+            {poLoading ? '' : `(${shownPurchaseRequests.length})`}
           </h2>
           <div className="header-actions">
             <label className="po-date-filter" title="Show POs created on or after this date">
@@ -2393,39 +2460,30 @@ function PurchaseOrdersTab({
           </div>
         </div>
 
-        {poView === 'my-approvals' && !poLoading && listedPurchaseRequests.length > 0 && (
+        {poView === 'my-approvals' && !poLoading && shownPurchaseRequests.length > 0 && (
           <div className="sub" style={{ margin: '0 0 8px' }}>
             Total pending approval:{' '}
             <strong>
               {totalsByCurrencyText(
-                listedPurchaseRequests.map((r) => ({ amount: computePoTotals(r).grandTotal, currency: r.currency }))
+                shownPurchaseRequests.map((r) => ({ amount: computePoTotals(r).grandTotal, currency: r.currency }))
               )}
             </strong>
           </div>
         )}
 
+        {!poLoading && <ColumnFilterBar filters={poFilters} shown={shownPurchaseRequests.length} />}
         {poLoading ? (
           <div className="empty">Loading...</div>
-        ) : listedPurchaseRequests.length === 0 ? (
-          <div className="empty">{visiblePurchaseRequests.length === 0 ? 'No purchase requests yet.' : 'No purchase requests match the date range.'}</div>
+        ) : shownPurchaseRequests.length === 0 ? (
+          <div className="empty">
+            {visiblePurchaseRequests.length === 0
+              ? 'No purchase requests yet.'
+              : poFilters.activeKeys.length > 0
+              ? 'No purchase requests match the column filters.'
+              : 'No purchase requests match the date range.'}
+          </div>
         ) : (
-          <div className="sheet-wrap" ref={sheetWrapRef}>
-            <div className="po-progress-heading-block">
-              <div
-                className="po-progress-heading-inner"
-                style={{ marginLeft: statusCenter ?? '50%', transform: 'translateX(-50%)' }}
-              >
-                <div className="po-progress-heading">Status</div>
-                <div className="po-progress-flow-legend">
-                  {PO_PROGRESS_ALL_LABELS.map((label, i) => (
-                    <Fragment key={label}>
-                      {i > 0 && <span className="po-progress-flow-arrow">→</span>}
-                      <span>{label}</span>
-                    </Fragment>
-                  ))}
-                </div>
-              </div>
-            </div>
+          <div className="sheet-wrap">
             <table className="sheet po-summary-table">
               <colgroup>
                 <col style={{ width: '60px' }} />
@@ -2445,8 +2503,10 @@ function PurchaseOrdersTab({
               </colgroup>
               <thead>
                 <tr className="header-row">
-                  <th className="row-head">ID</th>
-                  <th aria-sort={poDateSort === 'asc' ? 'ascending' : 'descending'}>
+                  <FilterTh filters={poFilters} col="id" className="row-head">
+                    ID
+                  </FilterTh>
+                  <FilterTh filters={poFilters} col="date" aria-sort={poDateSort === 'asc' ? 'ascending' : 'descending'}>
                     <button
                       type="button"
                       className="sort-btn"
@@ -2455,25 +2515,45 @@ function PurchaseOrdersTab({
                     >
                       Date {poDateSort === 'asc' ? '▲' : '▼'}
                     </button>
-                  </th>
-                  <th>Description</th>
-                  <th>Entity</th>
-                  <th>Vendor</th>
-                  {poView === 'my-approvals' && <th className="center-cell">Amount</th>}
-                  <th ref={statusHeaderRef} className="center-cell">
+                  </FilterTh>
+                  <FilterTh filters={poFilters} col="description">
+                    Description
+                  </FilterTh>
+                  <FilterTh filters={poFilters} col="entity">
+                    Entity
+                  </FilterTh>
+                  <FilterTh filters={poFilters} col="vendor">
+                    Vendor
+                  </FilterTh>
+                  {poView === 'my-approvals' && (
+                    <FilterTh filters={poFilters} col="amount" className="center-cell">
+                      Amount
+                    </FilterTh>
+                  )}
+                  <FilterTh filters={poFilters} col="status" className="center-cell">
                     Status
-                  </th>
-                  <th className="center-cell">Work</th>
-                  <th className="center-cell">Payment</th>
-                  <th>Requestor</th>
-                  <th>Responsible for Next Action</th>
-                  <th>PO #</th>
+                  </FilterTh>
+                  <FilterTh filters={poFilters} col="work" className="center-cell">
+                    Work
+                  </FilterTh>
+                  <FilterTh filters={poFilters} col="payment" className="center-cell">
+                    Payment
+                  </FilterTh>
+                  <FilterTh filters={poFilters} col="requestor">
+                    Requestor
+                  </FilterTh>
+                  <FilterTh filters={poFilters} col="next">
+                    Responsible for Next Action
+                  </FilterTh>
+                  <FilterTh filters={poFilters} col="po">
+                    PO #
+                  </FilterTh>
                   <th>Action</th>
                   <th className="col-last"></th>
                 </tr>
               </thead>
               <tbody>
-                {listedPurchaseRequests.map((r) => {
+                {shownPurchaseRequests.map((r) => {
                   const next = nextStepInfo(r, users)
                   const busy = poActionBusyId === r.id
                   const paymentStatus = computePaymentStatus(r)
@@ -2493,7 +2573,7 @@ function PurchaseOrdersTab({
                         </td>
                       )}
                       <td className="center-cell">
-                        <PoProgressStepper request={r} />
+                        <PoStatusBadge request={r} />
                       </td>
                       <td className="center-cell">
                         {(r.status === 'issued' || r.status === 'closed') && (

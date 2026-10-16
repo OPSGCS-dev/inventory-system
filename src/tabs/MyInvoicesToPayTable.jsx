@@ -4,15 +4,25 @@
 // each one here with the date it was paid and a reference. Like the approvals table its
 // rows are invoices, not purchase requests. The list can be narrowed to one payment batch. An invoice
 // the supervisor has put on hold stays listed but can't be confirmed paid until it is released.
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Papa from 'papaparse'
 import { downloadCsv } from '../stockUtils'
-import { findUserName, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText } from '../utils'
+import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
+import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
 import PaymentConfirm from './PaymentConfirm'
 
 const approvedAt = ({ invoice }) => invoice.approved_at
 const NO_BATCH = 'none'
+
+// Excel-style column filters (see ColumnFilter.jsx).
+const COLUMNS = [
+  { key: 'invoice', label: 'Invoice #', values: ({ invoice }) => invoice.invoice_number },
+  { key: 'amount', label: 'Amount', values: ({ invoice }) => formatMoney(invoice.amount), sort: byAmount },
+  { key: 'po', label: 'PO #', values: ({ request }) => request.po_number || '#' + request.id },
+  { key: 'entity', label: 'Entity', values: ({ request }) => request.projects?.name },
+  { key: 'vendor', label: 'Vendor', values: ({ request }) => request.vendors?.name },
+]
 
 const amountsOf = (pairs) => pairs.map(({ request, invoice }) => ({ amount: invoice.amount, currency: request.currency }))
 
@@ -38,7 +48,13 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
     return String(invoice.payment_batch_id) === activeFilter
   })
   const range = useDateRange(inFilter, approvedAt)
-  const listed = range.listed
+  const columns = useMemo(
+    () => (showBatches ? [...COLUMNS, { key: 'batch', label: 'Batch', values: ({ invoice }) => (byId.get(invoice.payment_batch_id) ? paymentBatchLabel(byId.get(invoice.payment_batch_id).batch) : '') }] : COLUMNS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- byId is rebuilt from paymentBatchSummaries each render
+    [showBatches, paymentBatchSummaries]
+  )
+  const filters = useColumnFilters(range.listed, columns)
+  const listed = filters.filtered
   const total = listed.reduce((sum, { invoice }) => sum + Number(invoice.amount || 0), 0)
   const heldCount = listed.filter(({ invoice }) => isInvoiceHeld(invoice)).length
   const chosenBatch = activeFilter && activeFilter !== NO_BATCH ? byId.get(Number(activeFilter)) : null
@@ -105,11 +121,12 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
         </p>
       )}
 
+      <ColumnFilterBar filters={filters} shown={listed.length} />
       {listed.length === 0 ? (
         <div className="empty">
           {invoicesToPay.length === 0
             ? 'No invoices approved for payment are waiting.'
-            : 'No invoices match the batch or date range.'}
+            : 'No invoices match the batch, date range or column filters.'}
         </div>
       ) : (
         <div className="sheet-wrap">
@@ -126,12 +143,16 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
             </colgroup>
             <thead>
               <tr className="header-row">
-                <th>Invoice #</th>
-                <th className="center-cell">Amount</th>
-                <th>PO #</th>
-                <th>Entity</th>
-                <th>Vendor</th>
-                {showBatches && <th>Batch</th>}
+                <FilterTh filters={filters} col="invoice">Invoice #</FilterTh>
+                <FilterTh filters={filters} col="amount" className="center-cell">Amount</FilterTh>
+                <FilterTh filters={filters} col="po">PO #</FilterTh>
+                <FilterTh filters={filters} col="entity">Entity</FilterTh>
+                <FilterTh filters={filters} col="vendor">Vendor</FilterTh>
+                {showBatches && (
+                  <FilterTh filters={filters} col="batch">
+                    Batch
+                  </FilterTh>
+                )}
                 <DateSortHeader range={range} label="Approved" />
                 <th></th>
               </tr>

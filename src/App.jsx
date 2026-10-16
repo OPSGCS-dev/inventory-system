@@ -1761,6 +1761,7 @@ function App() {
   const invoicesToReview = useMemo(() => {
     const pairs = []
     for (const r of purchaseRequests) {
+      if (r.status === 'voided') continue // its invoices stay on file, but nothing more happens to them
       if (r.requested_by !== loggedInUserWithScopes?.id) continue
       for (const invoice of r.invoices || []) {
         if (canReviewInvoice(loggedInUserWithScopes, invoice, r)) pairs.push({ request: r, invoice })
@@ -1772,6 +1773,7 @@ function App() {
   const invoicesPendingApproval = useMemo(() => {
     const pairs = []
     for (const r of purchaseRequests) {
+      if (r.status === 'voided') continue
       for (const invoice of r.invoices || []) {
         // The supervisor's step: invoices the requisitioner has reviewed. Payment approval can be
         // limited to certain entities, like the other steps (canApproveInvoice checks).
@@ -1788,6 +1790,7 @@ function App() {
   const invoicesToPay = useMemo(() => {
     const pairs = []
     for (const r of purchaseRequests) {
+      if (r.status === 'voided') continue
       for (const invoice of r.invoices || []) {
         if (canPayInvoice(loggedInUserWithScopes, invoice, r)) {
           pairs.push({ request: r, invoice })

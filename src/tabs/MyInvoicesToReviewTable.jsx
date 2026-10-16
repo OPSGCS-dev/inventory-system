@@ -1,5 +1,6 @@
 import { totalsByCurrencyText, formatMoney } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
+import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
 
 // "My Invoices to Review": invoices on POs the person raised that accounting has
 // matched to a receipt (or that are on a pre-paid PO) and that are now waiting for
@@ -8,9 +9,19 @@ import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 // Rows are { request, invoice } pairs.
 const uploadedAt = ({ invoice }) => invoice.uploaded_at
 
+// Excel-style column filters (see ColumnFilter.jsx).
+const COLUMNS = [
+  { key: 'invoice', label: 'Invoice #', values: ({ invoice }) => invoice.invoice_number },
+  { key: 'amount', label: 'Amount', values: ({ invoice }) => formatMoney(invoice.amount), sort: byAmount },
+  { key: 'po', label: 'PO #', values: ({ request }) => request.po_number || '#' + request.id },
+  { key: 'entity', label: 'Entity', values: ({ request }) => request.projects?.name },
+  { key: 'vendor', label: 'Vendor', values: ({ request }) => request.vendors?.name },
+]
+
 function MyInvoicesToReviewTable({ invoicesToReview, toggleExpandedPo, handleReviewInvoice, handleReturnInvoice, poActionBusyId }) {
   const range = useDateRange(invoicesToReview, uploadedAt)
-  const listed = range.listed
+  const filters = useColumnFilters(range.listed, COLUMNS)
+  const listed = filters.filtered
   return (
     <div className="card">
       <div className="card-header">
@@ -31,9 +42,14 @@ function MyInvoicesToReviewTable({ invoicesToReview, toggleExpandedPo, handleRev
         Open the PO to see the invoice and receipt side by side. Approving sends the invoice to the supervisor for payment approval.
       </p>
 
+      <ColumnFilterBar filters={filters} shown={listed.length} />
       {listed.length === 0 ? (
         <div className="empty">
-          {invoicesToReview.length === 0 ? 'No invoices waiting on your review.' : 'No invoices match the date range.'}
+          {invoicesToReview.length === 0
+            ? 'No invoices waiting on your review.'
+            : filters.activeKeys.length > 0
+            ? 'No invoices match the column filters.'
+            : 'No invoices match the date range.'}
         </div>
       ) : (
         <div className="sheet-wrap">
@@ -49,11 +65,11 @@ function MyInvoicesToReviewTable({ invoicesToReview, toggleExpandedPo, handleRev
             </colgroup>
             <thead>
               <tr className="header-row">
-                <th>Invoice #</th>
-                <th className="center-cell">Amount</th>
-                <th>PO #</th>
-                <th>Entity</th>
-                <th>Vendor</th>
+                <FilterTh filters={filters} col="invoice">Invoice #</FilterTh>
+                <FilterTh filters={filters} col="amount" className="center-cell">Amount</FilterTh>
+                <FilterTh filters={filters} col="po">PO #</FilterTh>
+                <FilterTh filters={filters} col="entity">Entity</FilterTh>
+                <FilterTh filters={filters} col="vendor">Vendor</FilterTh>
                 <DateSortHeader range={range} label="Uploaded" />
                 <th></th>
               </tr>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
 import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, todayLocal, totalsByCurrencyText } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 
@@ -9,6 +10,15 @@ import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 // accounting with a reason, or put on hold (with a reason) while something is sorted out: a held
 // invoice stays in the list but can't be ticked until it is released. Rows are { request, invoice } pairs.
 const reviewedAt = ({ invoice }) => invoice.reviewed_at || invoice.uploaded_at
+
+// Excel-style column filters (see ColumnFilter.jsx).
+const COLUMNS = [
+  { key: 'invoice', label: 'Invoice #', values: ({ invoice }) => invoice.invoice_number },
+  { key: 'amount', label: 'Amount', values: ({ invoice }) => formatMoney(invoice.amount), sort: byAmount },
+  { key: 'po', label: 'PO #', values: ({ request }) => request.po_number || '#' + request.id },
+  { key: 'entity', label: 'Entity', values: ({ request }) => request.projects?.name },
+  { key: 'vendor', label: 'Vendor', values: ({ request }) => request.vendors?.name },
+]
 
 const amountsOf = (pairs) => pairs.map(({ request, invoice }) => ({ amount: invoice.amount, currency: request.currency }))
 
@@ -25,7 +35,8 @@ function MyInvoicesForApprovalTable({
   users,
 }) {
   const range = useDateRange(invoicesPendingApproval, reviewedAt)
-  const listed = range.listed
+  const filters = useColumnFilters(range.listed, COLUMNS)
+  const listed = filters.filtered
   // Ticked invoice ids. Kept apart from the list so a changed date range or a refreshed
   // list can't leave an invoice ticked that's no longer on screen (see `chosen` below).
   const [ticked, setTicked] = useState(() => new Set())
@@ -79,10 +90,13 @@ function MyInvoicesForApprovalTable({
         )}
       </div>
 
+      <ColumnFilterBar filters={filters} shown={listed.length} />
       {listed.length === 0 ? (
         <div className="empty">
           {invoicesPendingApproval.length === 0
             ? 'No invoices waiting on payment approval.'
+            : filters.activeKeys.length > 0
+            ? 'No invoices match the column filters.'
             : 'No invoices match the date range.'}
         </div>
       ) : (
@@ -124,11 +138,11 @@ function MyInvoicesForApprovalTable({
                   <th className="center-cell">
                     <input type="checkbox" checked={allTicked} onChange={toggleAll} disabled={selectable.length === 0} aria-label="Select all" />
                   </th>
-                  <th>Invoice #</th>
-                  <th className="center-cell">Amount</th>
-                  <th>PO #</th>
-                  <th>Entity</th>
-                  <th>Vendor</th>
+                  <FilterTh filters={filters} col="invoice">Invoice #</FilterTh>
+                  <FilterTh filters={filters} col="amount" className="center-cell">Amount</FilterTh>
+                  <FilterTh filters={filters} col="po">PO #</FilterTh>
+                  <FilterTh filters={filters} col="entity">Entity</FilterTh>
+                  <FilterTh filters={filters} col="vendor">Vendor</FilterTh>
                   <DateSortHeader range={range} label="Reviewed" />
                   <th></th>
                 </tr>

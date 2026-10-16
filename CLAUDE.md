@@ -72,6 +72,16 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **PO list round (status words, filters, voids, transfers):** (1) **Transfer POs start at the request stage** -- `add_transfer_po_request_stage.sql`
+  (run after `add_transfer_pos.sql`) replaces `inv_private.create_transfer_po` so a Stock Transfer's PO is created *Requested* (the person who did the
+  transfer is the requester) instead of Closed, and has to be approved/issued/received/closed by hand; the stock still moves with the transfer, and
+  `inventory_action = 'transfer'` lines are never added to stock again on receiving. Older transfer POs stay closed. (2) **Voiding a PO no longer requires
+  removing its invoices/receipts** (`voidBlockReason`: only parts-already-received, a paid invoice or an invoice approved for payment block it); a voided
+  PO shows a read-only "Receipts & Invoices" list (`VoidedAttachments`) so the files stay openable, and its invoices drop out of the My Invoices lists.
+  (3) The printed/PDF PO shows the **Requisitioner** (`requisitionerName`, `requisitioner_name` on the request passed to `buildPoPdf`). (4) **Excel-style
+  column filters** (`tabs/ColumnFilter.jsx`: `useColumnFilters`, `FilterTh`, `ColumnFilterBar`) on the PO list and the three My Invoices lists: a ▾ on
+  each heading opens a tick-list with search; columns narrow each other's lists; filters reset when the view changes. (5) The Status column shows just the
+  word (`poStatusText`, `PoStatusBadge`); the dots and the legend above the table are gone.
 - **Invoice holds:** a supervisor (Payment Approval role) can put an invoice **on hold**, with a reason, while it waits for payment approval or
   after approval but before it is paid (`invoices.held_by/_at`, `hold_reason`; `add_invoice_hold.sql`, run after `add_invoice_approval_flow.sql`, then
   re-run `add_po_history.sql` for the "put on hold" / "released" events). A hold is a pause, not a stage: `invoiceStage` is unchanged, the invoice stays
@@ -156,7 +166,7 @@ Most recent first, all on `main`:
   Audit tab (demo); security hardening (`security_0*.sql`).
 
 SQL added in this round (run in this order if not already run): `add_part_images`, `add_app_settings`, `add_transfer_pos`
-(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`, `add_vendor_deactivate`, `add_invoice_duplicate_guard`, `add_invoice_hold` (then re-run `add_po_history`).
+(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`, `add_vendor_deactivate`, `add_invoice_duplicate_guard`, `add_invoice_hold` (then re-run `add_po_history`), `add_transfer_po_request_stage` (after `add_transfer_pos`).
 
 ## What to build next
 

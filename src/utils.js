@@ -256,6 +256,15 @@ export const PO_PROGRESS_STAGE_LABELS = {
   closed: 'Closed',
 }
 
+// The one word the PO list shows for where a PO is: Draft, Requested, Approved, PO Issued, In Progress,
+// Paid, Closed, or Rejected / Voided.
+export function poStatusText(request) {
+  const status = request?.status
+  if (!status) return ''
+  if (status === 'draft' || status === 'voided' || status === 'rejected') return poStatusLabel(status)
+  return PO_PROGRESS_STAGE_LABELS[computePoProgressStage(request)] || poStatusLabel(status)
+}
+
 export function computePoProgressStage(request) {
   if (request?.status !== 'issued') return request?.status
   const workDone = isWorkFullyDone(request)
@@ -507,6 +516,12 @@ export function approvalStamp(users, request) {
   }
 }
 
+// Who raised the PO (printed on it as the Requisitioner); blank until it has been submitted.
+export function requisitionerName(users, request) {
+  const user = request?.requested_by ? (users || []).find((u) => u.id === request.requested_by) : null
+  return user ? userDisplayName(user) : ''
+}
+
 // Roles are strictly additive and independent — admin included. Admin only
 // grants Admin-tab editing; it does NOT imply any other capability, so a
 // user who should also approve, receive, etc. needs those roles ticked too.
@@ -582,15 +597,17 @@ export function canViewAudit(user) {
 // as delete was. Refused once stock or money has moved: parts received (stock
 // was already added) or any invoice/receipt on file -- those have to be
 // reversed first. A closed PO is finished, so it can't be voided either.
+// Invoices and receipts that are merely attached (not approved for payment or paid) don't stop a void:
+// they stay on the voided PO, where they can still be opened.
 export function voidBlockReason(user, request) {
   if (!request || !isAdmin(user)) return 'Only an admin can void a PO.'
   if (['draft', 'voided', 'closed'].includes(request.status)) return 'This PO cannot be voided.'
   if (poHasParts(request) && request.received_at) {
     return 'Its parts have been received into stock — reverse that with an inventory adjustment first.'
   }
-  if ((request.invoices || []).length > 0 || (request.receipts || []).length > 0) {
-    return 'It has invoices or receipts on file — remove them first.'
-  }
+  const invoices = request.invoices || []
+  if (invoices.some((inv) => inv.paid)) return 'An invoice on it has been paid — clear that payment first.'
+  if (invoices.some((inv) => inv.approved)) return 'An invoice on it is approved for payment — withdraw that approval first.'
   return null
 }
 

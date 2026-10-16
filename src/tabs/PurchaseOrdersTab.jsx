@@ -2443,6 +2443,7 @@ function PurchaseOrdersTab({
             )}
             <select value={poStatusFilter} onChange={(e) => setPoStatusFilter(e.target.value)}>
               <option value="">All Statuses</option>
+              <option value="open">Open (not closed)</option>
               {PO_STATUS_ORDER.map((s) => (
                 <option value={s} key={s}>
                   {poStatusLabel(s)}

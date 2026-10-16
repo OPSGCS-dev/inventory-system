@@ -70,7 +70,15 @@ import OwnershipTab from './tabs/OwnershipTab'
 import PhysicalLocationTab from './tabs/PhysicalLocationTab'
 import HistoryPanel from './tabs/HistoryPanel'
 import { fetchAllRows } from './stockUtils'
-import { PART_IMAGE_BUCKET, partImagePath, shrinkImageToJpeg } from './imageUtils'
+import {
+  PART_IMAGE_BUCKET,
+  PART_DATASHEET_BUCKET,
+  MAX_DATASHEET_BYTES,
+  cleanDatasheetUrl,
+  partDatasheetPath,
+  partImagePath,
+  shrinkImageToJpeg,
+} from './imageUtils'
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import PoLedgerTab from './tabs/PoLedgerTab'
 import AuditTab from './tabs/AuditTab'
@@ -364,6 +372,7 @@ function App() {
   // straight away rather than waiting for "Save Changes" -- the picture is its own file, and
   // this also works from the plain Master List view.
   async function handlePartImage(gcsId, file) {
+    if (!canEditInventory(loggedInUser)) return
     const part = parts.find((p) => p.gcs_id === gcsId)
     if (!part) return
     setImageBusyId(gcsId)
@@ -405,6 +414,61 @@ function App() {
       )
     } finally {
       setImageBusyId(null)
+    }
+  }
+
+  // --- Part datasheets (Master List) ---
+  const [datasheetBusyId, setDatasheetBusyId] = useState(null)
+
+  // Attach a datasheet to a part: `change` is { file } (a PDF, uploaded to the part-datasheets bucket),
+  // { url } (a link to one elsewhere) or null to remove it. Saves straight away, like the picture.
+  async function handlePartDatasheet(gcsId, change) {
+    if (!canEditInventory(loggedInUser)) return
+    const part = parts.find((p) => p.gcs_id === gcsId)
+    if (!part) return
+    setDatasheetBusyId(gcsId)
+    let uploadedPath = null
+    try {
+      let newUrl = null
+      if (change?.file) {
+        if (change.file.size > MAX_DATASHEET_BYTES) throw new Error('That file is over 25 MB.')
+        const ext = ((change.file.name.split('.').pop() || 'pdf').toLowerCase().replace(/[^a-z0-9]/g, '') || 'pdf').slice(0, 8)
+        uploadedPath = gcsId + '-' + crypto.randomUUID() + '.' + ext
+        const { error: uploadError } = await supabase.storage
+          .from(PART_DATASHEET_BUCKET)
+          .upload(uploadedPath, change.file, { contentType: change.file.type || 'application/pdf' })
+        if (uploadError) throw uploadError
+        newUrl = supabase.storage.from(PART_DATASHEET_BUCKET).getPublicUrl(uploadedPath).data.publicUrl
+      } else if (change?.url) {
+        newUrl = cleanDatasheetUrl(change.url)
+      }
+      const { data: saved, error } = await supabase
+        .from('parts')
+        .update({ datasheet_url: newUrl })
+        .eq('gcs_id', gcsId)
+        .select('gcs_id')
+      if (error) throw error
+      if (!saved || saved.length === 0) throw new Error('The database did not apply the change (no rows were updated).')
+      uploadedPath = null // saved: it's referenced now
+
+      // An uploaded file that has been replaced or removed goes; a link to somewhere else has no file of ours.
+      const oldPath = partDatasheetPath(part.datasheet_url)
+      if (oldPath && part.datasheet_url !== newUrl) await supabase.storage.from(PART_DATASHEET_BUCKET).remove([oldPath])
+
+      setParts((prev) => prev.map((p) => (p.gcs_id === gcsId ? { ...p, datasheet_url: newUrl } : p)))
+      setDraftParts((prev) => prev.map((r) => (r._existing && r.gcs_id === gcsId ? { ...r, datasheet_url: newUrl } : r)))
+      flashStatus(change ? 'Datasheet saved.' : 'Datasheet removed.', true)
+    } catch (error) {
+      console.error(error)
+      if (uploadedPath) await supabase.storage.from(PART_DATASHEET_BUCKET).remove([uploadedPath])
+      flashStatus(
+        /datasheet_url|bucket/i.test(error?.message || '')
+          ? "Datasheets are not set up yet. Run supabase/add_part_datasheets.sql in the Inventory project's SQL editor first."
+          : error?.message || 'Could not save the datasheet.',
+        false
+      )
+    } finally {
+      setDatasheetBusyId(null)
     }
   }
 
@@ -509,10 +573,10 @@ function App() {
     }
     setStockStatus(null)
 
-    // where each part physically is: { storage, barn, site: { [entity id]: qty } }
+    // where each part physically is: { storage (Oshawa), barn, office, site: { [entity id]: qty } }
     const locByPart = new Map()
     for (const row of locRes.data ?? []) {
-      if (!locByPart.has(row.part_gcs_id)) locByPart.set(row.part_gcs_id, { storage: 0, barn: 0, site: {} })
+      if (!locByPart.has(row.part_gcs_id)) locByPart.set(row.part_gcs_id, { storage: 0, barn: 0, office: 0, site: {} })
       const entry = locByPart.get(row.part_gcs_id)
       if (row.location === 'site') entry.site[row.project_id] = (entry.site[row.project_id] || 0) + row.quantity
       else entry[row.location] += row.quantity
@@ -546,7 +610,7 @@ function App() {
           perProject: entry.perProject,
           targetSum: computeTargetSum(values),
           onHandSum,
-          loc: locByPart.get(entry.gcs_id) || { storage: 0, barn: 0, site: {} },
+          loc: locByPart.get(entry.gcs_id) || { storage: 0, barn: 0, office: 0, site: {} },
         }
       })
       .sort((a, b) => a.gcs_id - b.gcs_id)
@@ -966,6 +1030,8 @@ function App() {
   const incomingByKey = useMemo(() => incomingStockByKey(purchaseRequests), [purchaseRequests])
 
   function runAction(action) {
+    // Everyone can look at the inventory; only the Inventory role changes anything.
+    if (['edit', 'import-parts', 'project-edit'].includes(action.type) && !canEditInventory(loggedInUser)) return
     if (action.type === 'edit') {
       setDraftParts(parts.map((p) => ({ ...p, _existing: true })))
       setFilters(emptyFilters)
@@ -1023,6 +1089,7 @@ function App() {
   }
 
   async function handleSaveEdits() {
+    if (!canEditInventory(loggedInUser)) return
     const newRows = draftParts.filter((r) => !r._existing)
     for (const row of newRows) {
       if (!(row.gcs_part_id || '').trim()) {
@@ -1101,6 +1168,7 @@ function App() {
       Category: p.spare_category || '',
       'Used By': (usedByByPart.get(p.gcs_id) || []).map((e) => e.name).join('; '),
       Description: p.description || '',
+      Datasheet: p.datasheet_url || '',
     }))
     const csv = Papa.unparse(rows)
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -1545,6 +1613,7 @@ function App() {
   }
 
   async function handleConfirmImport() {
+    if (!canEditInventory(loggedInUser)) return
     if (!importPreview || importPreview.rows.length === 0) return
     setImporting(true)
     try {
@@ -1636,6 +1705,7 @@ function App() {
   )
 
   async function handleSaveProjectEdits() {
+    if (!canEditInventory(loggedInUser)) return
     setSavingProjectEdits(true)
     try {
       const toDelete = draftProjectItems.filter((r) => !r.required && r.project_part_id)
@@ -1733,7 +1803,9 @@ function App() {
     if (poView === 'my-issue') {
       list = list.filter((r) => r.status === 'approved' && canIssuePurchaseOrder(loggedInUserWithScopes, r))
     }
-    if (poStatusFilter) list = list.filter((r) => r.status === poStatusFilter)
+    // 'open' = anything that isn't closed (drafts through issued; voided and rejected too, which the Status column filter can untick)
+    if (poStatusFilter === 'open') list = list.filter((r) => r.status !== 'closed')
+    else if (poStatusFilter) list = list.filter((r) => r.status === poStatusFilter)
     if (poProjectFilter) list = list.filter((r) => String(r.project_id) === poProjectFilter)
     return list
   }, [purchaseRequests, poStatusFilter, poProjectFilter, loggedInUserWithScopes, poView])
@@ -4757,6 +4829,8 @@ function App() {
           removeDraftRow={removeDraftRow}
           onPartImage={handlePartImage}
           imageBusyId={imageBusyId}
+          onPartDatasheet={handlePartDatasheet}
+          datasheetBusyId={datasheetBusyId}
         />
       )}
 

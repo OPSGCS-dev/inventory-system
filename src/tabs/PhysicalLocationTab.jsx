@@ -3,10 +3,11 @@ import Papa from 'papaparse'
 import { supabase } from '../supabaseClient'
 import { shortProjectName } from '../utils'
 import {
-  BARN, STORAGE, allLocationKeys, downloadCsv, locLabel, offSiteUnits, parseLocKey, qtyAt, rpcErrorText, siteKey,
+  BARN, OFFICE, STORAGE, allLocationKeys, downloadCsv, hasSiteStock, locLabel, offSiteUnits, parseLocKey, qtyAt, rpcErrorText, siteKey,
 } from '../stockUtils'
 
-// Where every part physically sits: Storage, the Barn, or on an entity's own site.
+// Where every part physically sits: Oshawa, the Barn, the Office, or on an entity's own site (an entity
+// that has no site -- FLOPS, Firelight -- has no column here).
 // A site can only hold parts that entity owns, so moving a part between sites means
 // transferring ownership first (Stock Transfer on the Ownership tab, which moves them
 // together). Update Location moves units between places; Record Part Use takes units out.
@@ -38,8 +39,18 @@ function PhysicalLocationTab({
     setTimeout(() => setStatus(null), ok ? 3500 : 9000)
   }
 
-  const keys = useMemo(() => allLocationKeys(projects), [projects])
-  const placeCols = keys // Storage, Barn, then each site
+  // Oshawa, Barn, Office, then each site. A site that holds nothing and belongs to an entity with no site is
+  // left out; one that still has units on it (before add_office_location.sql moves them) is shown so they can be seen.
+  const keys = useMemo(() => {
+    const leftovers = projects
+      .filter((p) => !hasSiteStock(p))
+      .map((p) => siteKey(p.id))
+      .filter((k) => stockItems.some((i) => qtyAt(i, k) > 0))
+    return [...allLocationKeys(projects), ...leftovers]
+  }, [projects, stockItems])
+  const placeCols = keys
+  const colHead = (k) =>
+    k === STORAGE ? 'Oshawa' : k === BARN ? 'Barn' : k === OFFICE ? 'Office' : shortProjectName(projects.find((p) => siteKey(p.id) === k)?.name || '')
   const label = (k) => locLabel(k, projects)
 
   const items = useMemo(() => {
@@ -86,6 +97,7 @@ function PhysicalLocationTab({
     if (k === fromKey) return { disabled: true, why: '' }
     const { location, projectId } = parseLocKey(k)
     if (location === 'site') {
+      if (!hasSiteStock(projects.find((p) => p.id === projectId))) return { disabled: true, why: ' (no site)' }
       if (fromKey.startsWith('site:')) return { disabled: true, why: ' (transfer ownership first)' }
       if (offSiteUnits(item, projectId) <= 0) return { disabled: true, why: ' (owns none off-site)' }
     }
@@ -151,7 +163,7 @@ function PhysicalLocationTab({
   }
 
   // ---- export ----
-  // Exports what the Location dropdown is set to: one place (Storage, the Barn, or an entity's
+  // Exports what the Location dropdown is set to: one place (Oshawa, the Barn, the Office, or an entity's
   // own site), or every place when it's on "All locations". Only that place's rows are written.
   function exportCsv() {
     const date = new Date().toISOString().slice(0, 10)
@@ -227,7 +239,7 @@ function PhysicalLocationTab({
             </div>
             {!mode && (
               <p className="sub" style={{ margin: 0 }}>
-                Where each part physically is. A site can only hold parts that entity owns. Click a part to see who owns it.
+                Where each part physically is: Oshawa, the Barn, the Office, or an entity&apos;s own site (which can only hold parts that entity owns). Click a part to see who owns it.
               </p>
             )}
             {mode === 'move' && (
@@ -237,7 +249,7 @@ function PhysicalLocationTab({
             )}
             {mode === 'use' && (
               <p className="sub" style={{ margin: 0 }}>
-                Take units out where they were used. On a site, the count that goes down is that site&apos;s entity. From Storage or the Barn, choose whose count it comes from.
+                Take units out where they were used. On a site, the count that goes down is that site&apos;s entity. From Oshawa, the Barn or the Office, choose whose count it comes from.
               </p>
             )}
           </div>
@@ -261,7 +273,7 @@ function PhysicalLocationTab({
                     <th>Description</th>
                     {placeCols.map((k) => (
                       <th key={k} className="center-cell" title={label(k)} style={placeFilter === k ? { background: '#dbeafe' } : undefined}>
-                        {k === STORAGE ? 'Storage' : k === BARN ? 'Barn' : shortProjectName(projects.find((p) => siteKey(p.id) === k)?.name || '')}
+                        {colHead(k)}
                       </th>
                     ))}
                     <th className="center-cell total-col">Total</th>

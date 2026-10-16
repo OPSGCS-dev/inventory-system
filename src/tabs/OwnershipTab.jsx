@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '../supabaseClient'
 import { computeTargetSum, shortProjectName, normalizeHeader } from '../utils'
-import { downloadCsv, offSiteUnits, ownedBy, rpcErrorText, totalOwned } from '../stockUtils'
+import { downloadCsv, hasSiteStock, offSiteUnits, ownedBy, rpcErrorText, totalOwned } from '../stockUtils'
 
 const INCOMING_BG = '#fff3a8'
 
@@ -193,6 +193,9 @@ function OwnershipTab({
     if (!fromId || !toId) return flash('Choose both the sending and the receiving entity.', false)
     if (!transferNote.trim()) return flash('A reason is required before saving.', false)
     if (!qty || qty <= 0) return flash('Enter a quantity greater than zero.', false)
+    // A receiver with no site of its own (FLOPS, Firelight) can't have units "on its site": they go to Oshawa.
+    const receiver = projects.find((p) => String(p.id) === String(toId))
+    const endLoc = toLoc === 'site' && receiver && !hasSiteStock(receiver) ? 'storage' : toLoc
     setBusyPart(item.gcs_id)
     const { data: journalId, error } = await supabase.rpc('fn_stock_transfer', {
       p_part: item.gcs_id,
@@ -201,7 +204,7 @@ function OwnershipTab({
       p_qty: qty,
       p_note: transferNote.trim(),
       p_from_loc: fromLoc || null,
-      p_to_loc: toLoc,
+      p_to_loc: endLoc,
     })
     setBusyPart(null)
     if (error) {
@@ -390,18 +393,24 @@ function OwnershipTab({
               <span className="sub" style={{ margin: 0 }}>Units are being taken from:</span>
               <select value={fromLoc} onChange={(e) => setFromLoc(e.target.value)}>
                 <option value="">Wherever they are (automatic)</option>
-                <option value="site">{fromProject ? `${shortProjectName(fromProject.name)}'s own site` : "The sender's own site"}</option>
-                <option value="storage">Storage</option>
+                {(!fromProject || hasSiteStock(fromProject)) && (
+                  <option value="site">{fromProject ? `${shortProjectName(fromProject.name)}'s own site` : "The sender's own site"}</option>
+                )}
+                <option value="storage">Oshawa</option>
                 <option value="barn">Barn</option>
+                <option value="office">Office</option>
               </select>
               <span className="sub" style={{ margin: 0 }}>and end up in:</span>
-              <select value={toLoc} onChange={(e) => setToLoc(e.target.value)}>
-                <option value="site">{toProject ? `${shortProjectName(toProject.name)}'s own site` : "The receiver's own site"}</option>
-                <option value="storage">Storage</option>
+              <select value={toLoc === 'site' && toProject && !hasSiteStock(toProject) ? 'storage' : toLoc} onChange={(e) => setToLoc(e.target.value)}>
+                {(!toProject || hasSiteStock(toProject)) && (
+                  <option value="site">{toProject ? `${shortProjectName(toProject.name)}'s own site` : "The receiver's own site"}</option>
+                )}
+                <option value="storage">Oshawa</option>
                 <option value="barn">Barn</option>
+                <option value="office">Office</option>
               </select>
               <span className="sub" style={{ margin: 0 }}>
-                The move is assumed to have already happened, so the owner and the location change together. Each saved transfer also creates a closed PO from the sender to the receiver.
+                The move is assumed to have already happened, so the owner and the location change together. Each saved transfer also creates a PO from the sender to the receiver, which starts at the Requested stage and is taken through approval by hand.
               </span>
             </div>
           </>
@@ -418,7 +427,7 @@ function OwnershipTab({
             <h2>Update Count</h2>
             <p className="sub" style={{ margin: 0 }}>
               A count sets how many an entity owns. Extra units appear on that entity's own site; removed units come off its own site first,
-              then Storage, then the Barn. Every change is recorded in History.
+              then Oshawa, the Barn, then the Office. (An entity with no site of its own gets extra units in Oshawa.) Every change is recorded in History.
             </p>
           </div>
           <div className="edit-toolbar">
@@ -511,12 +520,12 @@ function OwnershipTab({
             )}
             {editMode && (
               <p className="sub" style={{ margin: 0 }}>
-                Each cell is how many that entity owns. Editing a count changes the units on its own site (up) or removes them from its site first, then Storage, then the Barn (down).
+                Each cell is how many that entity owns. Editing a count changes the units on its own site (up) or removes them from its site first, then Oshawa, the Barn, then the Office (down). An entity with no site of its own gets extra units in Oshawa.
               </p>
             )}
             {transferMode && (
               <p className="sub" style={{ margin: 0 }}>
-                The sender and receiver columns are highlighted. Enter a quantity and press Transfer on the part's row. &quot;Site / off&quot; is how many of the sender&apos;s units are on its own site and how many are in Storage or the Barn.
+                The sender and receiver columns are highlighted. Enter a quantity and press Transfer on the part's row. &quot;Site / off&quot; is how many of the sender&apos;s units are on its own site and how many are in Oshawa, the Barn or the Office.
               </p>
             )}
           </div>

@@ -2,6 +2,34 @@
 
 export const PART_IMAGE_BUCKET = 'part-images'
 
+// A datasheet is a file in this bucket (an uploaded PDF) or just a link to one somewhere else.
+export const PART_DATASHEET_BUCKET = 'part-datasheets'
+export const MAX_DATASHEET_BYTES = 25 * 1024 * 1024
+
+// What was typed or pasted as a datasheet link, as a full web address; throws a message for the screen if
+// it isn't one.
+export function cleanDatasheetUrl(text) {
+  let t = (text || '').trim()
+  if (!t) throw new Error('Paste the link to the datasheet.')
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(t)) t = 'https://' + t
+  let u
+  try {
+    u = new URL(t)
+  } catch {
+    throw new Error("That doesn't look like a web address.")
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('The link has to start with http:// or https://.')
+  return u.toString()
+}
+
+// The object path inside the datasheet bucket, from a public URL (null for a link that points elsewhere).
+export function partDatasheetPath(url) {
+  if (!url) return null
+  const marker = '/' + PART_DATASHEET_BUCKET + '/'
+  const i = url.indexOf(marker)
+  return i === -1 ? null : decodeURIComponent(url.slice(i + marker.length).split('?')[0])
+}
+
 // Shrinks a picked image to at most `maxSize` px on its longest side and re-encodes it as a
 // JPEG, so a 12 MB phone photo becomes ~100 KB and the popup loads instantly. Throws a message
 // fit for the screen if the browser can't read the file (HEIC from some phones, for instance).

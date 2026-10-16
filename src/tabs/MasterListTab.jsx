@@ -2,6 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { emptyFilters, shortProjectName } from '../utils'
 import PartsHistoryPanel from './PartsHistoryPanel'
 
+// Small document icon. Opens the part's datasheet (a link or an uploaded PDF) in a new tab.
+function DatasheetIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="M9 13h6M9 17h6" />
+    </svg>
+  )
+}
+
 // Small picture icon. Opens the part's reference image in a popup.
 function ImageIcon() {
   return (
@@ -47,10 +58,14 @@ function MasterListTab({
   removeDraftRow,
   onPartImage,
   imageBusyId,
+  onPartDatasheet,
+  datasheetBusyId,
 }) {
   const [previewPart, setPreviewPart] = useState(null)
   const fileInput = useRef(null)
   const pickFor = useRef(null)
+  const sheetInput = useRef(null)
+  const sheetFor = useRef(null)
 
   useEffect(() => {
     if (!previewPart) return undefined
@@ -67,6 +82,51 @@ function MasterListTab({
     const file = e.target.files?.[0]
     e.target.value = '' // so picking the same file again still fires
     if (file && pickFor.current !== null) onPartImage(pickFor.current, file)
+  }
+
+  function chooseDatasheetFile(gcsId) {
+    sheetFor.current = gcsId
+    sheetInput.current?.click()
+  }
+  function onDatasheetChosen(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (file && sheetFor.current !== null) onPartDatasheet(sheetFor.current, { file })
+  }
+  function linkDatasheet(p) {
+    const text = window.prompt('Paste the link to the datasheet (a web address):', p.datasheet_url || '')
+    if (text && text.trim()) onPartDatasheet(p.gcs_id, { url: text })
+  }
+
+  // The datasheet cell: a link icon when the part has one; in edit mode also Upload (a PDF), Link (paste an
+  // address) and Remove.
+  const datasheetCell = (p) => {
+    const busy = datasheetBusyId === p.gcs_id
+    if (editMode && p._existing === false) return <span className="sub" style={{ margin: 0 }} title="Save the new part first, then attach its datasheet">—</span>
+    return (
+      <span className="img-cell">
+        {p.datasheet_url && (
+          <a className="img-btn" href={p.datasheet_url} target="_blank" rel="noreferrer" title="Open the datasheet" aria-label={'Open the datasheet for part ' + p.gcs_id}>
+            <DatasheetIcon />
+          </a>
+        )}
+        {editMode && (
+          <>
+            <button type="button" className="img-edit-btn" disabled={busy} title="Upload a PDF" onClick={() => chooseDatasheetFile(p.gcs_id)}>
+              {busy ? '…' : 'PDF'}
+            </button>
+            <button type="button" className="img-edit-btn" disabled={busy} title="Paste a link to the datasheet" onClick={() => linkDatasheet(p)}>
+              Link
+            </button>
+            {p.datasheet_url && !busy && (
+              <button type="button" className="img-edit-btn" title="Remove datasheet" onClick={() => onPartDatasheet(p.gcs_id, null)}>
+                ✕
+              </button>
+            )}
+          </>
+        )}
+      </span>
+    )
   }
 
   // The image cell: the icon (opens the popup) when the part has a picture; in edit mode also
@@ -119,7 +179,6 @@ function MasterListTab({
         ))}
       </datalist>
 
-      {canEditInventory && (
       <div className="card">
         {masterPanel ? (
           <div className="edit-toolbar">
@@ -129,15 +188,19 @@ function MasterListTab({
           </div>
         ) : !editMode ? (
           <div className="edit-toolbar">
-            <button className="btn-primary" onClick={() => runAction({ type: 'edit' })}>
-              Edit List
-            </button>
+            {canEditInventory && (
+              <button className="btn-primary" onClick={() => runAction({ type: 'edit' })}>
+                Edit List
+              </button>
+            )}
             <button className="btn-primary" onClick={() => runAction({ type: 'export-parts' })}>
               Export List
             </button>
-            <button className="btn-primary" onClick={() => runAction({ type: 'import-parts' })}>
-              Import List
-            </button>
+            {canEditInventory && (
+              <button className="btn-primary" onClick={() => runAction({ type: 'import-parts' })}>
+                Import List
+              </button>
+            )}
             <button className="btn-primary" onClick={() => runAction({ type: 'parts-history' })}>
               Change History
             </button>
@@ -157,7 +220,6 @@ function MasterListTab({
         )}
         {status && <div className={'status ' + (status.ok ? 'ok' : 'err')}>{status.msg}</div>}
       </div>
-      )}
 
       {masterPanel === 'import' && (
         <div className="card">
@@ -248,18 +310,21 @@ function MasterListTab({
               <colgroup>
                 <col className="col-rowhead" />
                 <col style={{ width: editMode ? '110px' : '44px' }} />
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '13%' }} />
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '12%' }} />
+                <col style={{ width: editMode ? '156px' : '44px' }} />
+                {/* tighter in edit mode, so Description keeps its room next to the two attachment columns */}
+                <col style={{ width: editMode ? '9%' : '11%' }} />
+                <col style={{ width: editMode ? '10%' : '13%' }} />
+                <col style={{ width: editMode ? '10%' : '11%' }} />
+                <col style={{ width: editMode ? '10%' : '11%' }} />
+                <col style={{ width: editMode ? '9%' : '12%' }} />
                 <col />
-                <col style={{ width: '9%' }} />
+                <col style={{ width: editMode ? '8%' : '9%' }} />
                 {editMode && <col className="col-last" />}
               </colgroup>
               <thead>
                 <tr>
                   <th className="row-head"></th>
+                  <th></th>
                   <th></th>
                   <th>A</th>
                   <th>B</th>
@@ -273,6 +338,7 @@ function MasterListTab({
                 <tr className="header-row">
                   <th className="row-head">GCS P/N</th>
                   <th title="Reference picture">Pic</th>
+                  <th title="Datasheet">Data</th>
                   <th>Part ID</th>
                   <th>Mfr Part #</th>
                   <th>Manufacturer</th>
@@ -297,6 +363,7 @@ function MasterListTab({
                         ))}
                       </select>
                     </th>
+                    <th></th>
                     <th></th>
                     <th>
                       <input
@@ -368,7 +435,7 @@ function MasterListTab({
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="empty" colSpan={editMode ? 10 : 9}>
+                    <td className="empty" colSpan={editMode ? 11 : 10}>
                       {parts.length === 0 ? 'No parts yet.' : 'No parts match your filters.'}
                     </td>
                   </tr>
@@ -377,6 +444,7 @@ function MasterListTab({
                     <tr key={editMode ? p._tempId || p.gcs_id : p.gcs_id}>
                       <td className="row-head">{p._existing !== false ? p.gcs_id : 'new'}</td>
                       <td className="center-cell">{imageCell(p)}</td>
+                      <td className="center-cell">{datasheetCell(p)}</td>
                       {editMode && !p._existing ? (
                         <>
                           <td>
@@ -463,6 +531,7 @@ function MasterListTab({
       )}
 
       <input ref={fileInput} type="file" accept="image/*" hidden onChange={onImageChosen} />
+      <input ref={sheetInput} type="file" accept=".pdf,application/pdf,image/*" hidden onChange={onDatasheetChosen} />
 
       {previewPart && (
         <div className="img-modal-backdrop" onClick={() => setPreviewPart(null)} role="dialog" aria-modal="true" aria-label="Part picture">

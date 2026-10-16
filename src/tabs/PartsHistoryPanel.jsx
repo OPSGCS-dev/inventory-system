@@ -16,6 +16,7 @@ const FIELD_LABELS = {
   description: 'Description',
   last_cost: 'Last Cost',
   image_url: 'Picture',
+  datasheet_url: 'Datasheet',
   primary_location: 'Primary location',
   common_spare_part: 'Common spare',
   max_stock: 'Max stock',
@@ -28,6 +29,7 @@ const fieldLabel = (k) => FIELD_LABELS[k] || k
 function showValue(field, v) {
   if (v === null || v === undefined || v === '') return '(blank)'
   if (field === 'image_url') return 'a picture'
+  if (field === 'datasheet_url') return 'a link'
   if (field === 'last_cost') return '$' + Number(v).toFixed(2)
   if (typeof v === 'boolean') return v ? 'Yes' : 'No'
   return String(v)
@@ -43,7 +45,7 @@ function ChangeLines({ row }) {
       {entries.map(([field, c]) => {
         const label = fieldLabel(field)
         if (row.action === 'update') {
-          if (field === 'image_url') {
+          if (field === 'image_url' || field === 'datasheet_url') {
             return <div key={field}>{label}: {c.new ? (c.old ? 'changed' : 'added') : 'removed'}</div>
           }
           return (
@@ -55,7 +57,7 @@ function ChangeLines({ row }) {
         const v = row.action === 'insert' ? c.new : c.old
         return (
           <div key={field}>
-            {label}: {field === 'image_url' ? 'picture' : showValue(field, v)}
+            {label}: {field === 'image_url' ? 'picture' : field === 'datasheet_url' ? 'link' : showValue(field, v)}
           </div>
         )
       })}

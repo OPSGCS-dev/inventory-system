@@ -72,6 +72,18 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **Inventory locations, permissions and datasheets:** (1) **Locations** are Oshawa, Barn and Office, plus an entity's own site. `'storage'` is still the stored
+  name but is **labelled Oshawa** everywhere (`locLabel`); `'office'` is new. `add_office_location.sql` (after `add_transfer_po_request_stage.sql`) widens the
+  `stock_location` check and replaces `fn_stock_transfer`, `fn_move_location`, `fn_record_use`, `fn_apply_count`, `fn_receive_po_parts` and `assert_part_ok`.
+  (2) **Entities with no site:** `projects.has_site_stock` (false for FLOPS and Firelight, set once by that file; no admin screen for it yet). They still own
+  parts but have no site column on Physical Location, the database refuses anything placed on their site (rule R3 in `assert_part_ok`), and units for them (PO
+  receiving, count increases, a transfer defaulting to "own site") go to Oshawa; the SQL moved any units already on such a site to Oshawa with a History
+  entry. `hasSiteStock(project)` in stockUtils. (3) **Permissions:** every signed-in user can see Master List, Required Inventory, Ownership, Physical
+  Location, History and Change History; only the `inventory` role changes anything (`canEditInventory`; handlers also check it). The stock functions already
+  required the role in the database; `add_inventory_write_permission.sql` adds `is_inventory_editor()` and makes writes to `parts` and `project_parts` need
+  it too. (4) **Datasheets:** `parts.datasheet_url` + public bucket `part-datasheets` (`add_part_datasheets.sql`); in Edit List each part has PDF (upload) /
+  Link (paste an address) / remove; the Master List shows a document icon that opens it (`handlePartDatasheet`). (5) PO list status filter has **Open (not
+  closed)**.
 - **PO list round (status words, filters, voids, transfers):** (1) **Transfer POs start at the request stage** -- `add_transfer_po_request_stage.sql`
   (run after `add_transfer_pos.sql`) replaces `inv_private.create_transfer_po` so a Stock Transfer's PO is created *Requested* (the person who did the
   transfer is the requester) instead of Closed, and has to be approved/issued/received/closed by hand; the stock still moves with the transfer, and
@@ -166,7 +178,7 @@ Most recent first, all on `main`:
   Audit tab (demo); security hardening (`security_0*.sql`).
 
 SQL added in this round (run in this order if not already run): `add_part_images`, `add_app_settings`, `add_transfer_pos`
-(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`, `add_vendor_deactivate`, `add_invoice_duplicate_guard`, `add_invoice_hold` (then re-run `add_po_history`), `add_transfer_po_request_stage` (after `add_transfer_pos`).
+(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`, `add_vendor_deactivate`, `add_invoice_duplicate_guard`, `add_invoice_hold` (then re-run `add_po_history`), `add_transfer_po_request_stage` (after `add_transfer_pos`), `add_office_location`, `add_inventory_write_permission`, `add_part_datasheets`.
 
 ## What to build next
 

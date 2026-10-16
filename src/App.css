@@ -900,7 +900,7 @@ table.po-summary-table {
 .po-signed-label { font-size: 11px; color: #555; margin-top: 2px; }
 
 /* Master List: reference picture icon, edit buttons and popup */
-.img-cell { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.img-cell { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
 .img-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 6px;
@@ -908,8 +908,8 @@ table.po-summary-table {
 }
 .img-btn:hover { background: #eef4fc; border-color: var(--accent); }
 .img-edit-btn {
-  padding: 2px 8px; border: 1px solid var(--border); border-radius: 6px;
-  background: var(--card); color: var(--ink); font-size: 12px; cursor: pointer;
+  padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--card); color: var(--ink); font-size: 12px; cursor: pointer; white-space: nowrap;
 }
 .img-edit-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .img-edit-btn:disabled { opacity: 0.6; cursor: default; }

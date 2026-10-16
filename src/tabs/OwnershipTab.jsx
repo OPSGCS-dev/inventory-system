@@ -466,7 +466,7 @@ function OwnershipTab({
                       <tr key={i}>
                         <td className="row-head">{r.gcs_id}</td>
                         <td>{r.project_name}</td>
-                        <td>{r.part?.description || '—'}</td>
+                        <td className="desc-lines">{r.part?.description || '—'}</td>
                         <td className="center-cell">{r.previous ?? '—'}</td>
                         <td className="center-cell">{r.quantity}</td>
                       </tr>
@@ -585,7 +585,7 @@ function OwnershipTab({
                         return (
                           <tr key={row.gcs_id}>
                             <td className="row-head">{row.gcs_id}</td>
-                            <td>{row.part?.description || '—'}</td>
+                            <td className="desc-lines">{row.part?.description || '—'}</td>
                             {projects.map((p) => (
                               <td className="center-cell" key={p.id}>
                                 {Object.prototype.hasOwnProperty.call(row.qtyByProject, p.id) ? (
@@ -620,7 +620,7 @@ function OwnershipTab({
                           tabIndex={clickable ? 0 : undefined}
                           title={clickable ? 'Show where this part physically is' : undefined}>
                           <td className="row-head">{item.gcs_id}</td>
-                          <td>{item.part?.description || '—'}</td>
+                          <td className="desc-lines">{item.part?.description || '—'}</td>
                           {shownProjects.map((p) => {
                             const entry = item.perProject[p.id]
                             const inc = entry ? incomingAt(p.id, item.gcs_id) : null

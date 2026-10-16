@@ -145,7 +145,7 @@ function RequiredInventoryTab({
                         <td className="row-head">{item.parts?.gcs_id}</td>
                         <td>{item.parts?.gcs_part_id}</td>
                         <td>{item.parts?.manufacturer || '—'}</td>
-                        <td>{item.parts?.description || '—'}</td>
+                        <td className="desc-lines">{item.parts?.description || '—'}</td>
                         <td className="center-cell">{item.target_stock ?? '—'}</td>
                         <td className="center-cell">
                           {item.shared ? (
@@ -214,7 +214,7 @@ function RequiredInventoryTab({
                         <td className="row-head">{row.gcs_id}</td>
                         <td>{row.part.gcs_part_id}</td>
                         <td>{row.part.manufacturer || '—'}</td>
-                        <td>{row.part.description || '—'}</td>
+                        <td className="desc-lines">{row.part.description || '—'}</td>
                         <td className="center-cell">
                           <input
                             type="checkbox"

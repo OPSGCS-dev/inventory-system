@@ -294,7 +294,7 @@ function AuditCountsPanel({ stockItems, stockLoading, parts, userName }) {
                       <Fragment key={r.id}>
                         <tr style={flagged ? { background: '#fdf0ed' } : undefined}>
                           <td className="row-head">{r.id}</td>
-                          <td>{r.part?.description || '—'}</td>
+                          <td className="desc-lines">{r.part?.description || '—'}</td>
                           <td className="center-cell">{r.inv}</td>
                           <td className="center-cell">{r.acc === null ? '—' : r.acc}</td>
                           <td className="center-cell" style={{ fontWeight: 700, color: r.acc === null ? AMBER : r.diff === 0 ? 'var(--muted)' : flagged ? RED : GREEN }}>

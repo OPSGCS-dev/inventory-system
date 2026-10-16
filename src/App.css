@@ -900,6 +900,9 @@ table.po-summary-table {
 .po-signed-label { font-size: 11px; color: #555; margin-top: 2px; }
 
 /* Master List: reference picture icon, edit buttons and popup */
+/* A part's description is up to three lines (what it is / model and rating / other details), kept as line breaks. */
+.desc-lines { white-space: pre-line; }
+.desc-edit { width: 100%; box-sizing: border-box; min-height: 64px; resize: vertical; font: inherit; }
 .img-cell { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
 .img-btn {
   display: inline-flex; align-items: center; justify-content: center;

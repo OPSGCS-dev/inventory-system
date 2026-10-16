@@ -32,7 +32,7 @@ function lineLabel(line) {
   if (line.line_type === 'part') {
     const p = line.parts
     const id = p?.gcs_part_id || line.part_gcs_id || ''
-    return [id, p?.description || line.description].filter(Boolean).join(' — ') || 'Part'
+    return [id, descriptionOneLine(p?.description) || line.description].filter(Boolean).join(' — ') || 'Part'
   }
   return line.description || 'Service'
 }

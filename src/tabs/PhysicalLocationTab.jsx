@@ -311,7 +311,7 @@ function PhysicalLocationTab({
                           tabIndex={clickable ? 0 : undefined}
                           title={clickable ? 'Show who owns this part' : undefined}>
                           <td className="row-head">{item.gcs_id}</td>
-                          <td>{item.part?.description || '—'}</td>
+                          <td className="desc-lines">{item.part?.description || '—'}</td>
                           {placeCols.map((k) => {
                             const q = qtyAt(item, k)
                             return (

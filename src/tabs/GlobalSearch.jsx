@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { descriptionOneLine } from '../utils'
 
 // Searches whatever's already loaded in memory (purchase requests + parts)
 // -- no new queries -- so it's cheap to keep mounted everywhere. Covers PO
@@ -85,7 +86,7 @@ export default function GlobalSearch({ purchaseRequests, parts, onSelectPo, onSe
                     setOpen(false)
                   }}
                 >
-                  <strong>{p.gcs_part_id}</strong> — {p.description}
+                  <strong>{p.gcs_part_id}</strong> — {descriptionOneLine(p.description)}
                 </button>
               ))}
             </div>

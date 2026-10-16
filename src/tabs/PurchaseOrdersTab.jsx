@@ -1213,7 +1213,7 @@ function PurchaseOrdersTab({
                     <tr key={l.id}>
                       <td className="center-cell">{idx + 1}</td>
                       <td className="center-cell">{l.quantity}</td>
-                      <td>
+                      <td className="desc-lines">
                         {l.line_type === 'part'
                           ? l.parts?.description
                             ? `${l.parts.description}${l.description ? ` (${l.description})` : ''}`

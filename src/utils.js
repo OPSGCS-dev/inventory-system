@@ -18,6 +18,15 @@ export function journalEntryTypeLabel(entryType) {
   return JOURNAL_ENTRY_TYPE_LABELS[entryType] || 'Adjustment'
 }
 
+// A part description is up to three lines (what it is / model and rating / other details). For a single-line
+// place (a search result, a PO line label) the lines are joined with a dash.
+export function descriptionOneLine(description) {
+  return String(description ?? '')
+    .split(/\s*\n\s*/)
+    .filter(Boolean)
+    .join(' — ')
+}
+
 // A part needs some text in its gcs_part_id column (it can't be empty in the database) even though the Master List
 // no longer shows or asks for it: a new part gets its manufacturer part number, or failing that its description.
 export function derivePartLabel(manufacturerPartNumber, description) {
@@ -1098,7 +1107,7 @@ export function buildPoMailto(request) {
   const lineLines = (request.purchase_request_lines || []).map((l) => {
     const label =
       l.line_type === 'part'
-        ? `${l.parts?.gcs_id ?? l.part_gcs_id} — ${l.parts?.gcs_part_id || ''} — ${l.parts?.description || ''}`
+        ? `${l.parts?.gcs_id ?? l.part_gcs_id} — ${l.parts?.gcs_part_id || ''} — ${descriptionOneLine(l.parts?.description)}`
         : l.description || 'Service'
     const cost = l.unit_cost !== null && l.unit_cost !== undefined ? ` @ $${l.unit_cost}` : ''
     return `  - ${label} (Qty ${l.quantity}${cost})`

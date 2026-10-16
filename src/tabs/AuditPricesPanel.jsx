@@ -335,7 +335,7 @@ function AuditPricesPanel({ stockItems, stockLoading, parts, userName }) {
                       <Fragment key={r.key}>
                         <tr style={flagged ? { background: '#fdf0ed' } : undefined}>
                           <td className="row-head">{r.id ?? '—'}</td>
-                          <td>{r.part?.description || (r.part ? '—' : `Listed as “${r.label}”`)}</td>
+                          <td className="desc-lines">{r.part?.description || (r.part ? '—' : `Listed as “${r.label}”`)}</td>
                           <td className="center-cell">{r.inv === null ? '—' : money(r.inv)}</td>
                           <td className="center-cell">{r.acc === null ? '—' : money(r.acc)}</td>
                           <td className="center-cell" style={{ fontWeight: 700, color: !comparable ? AMBER : Math.abs(r.diff) < CENT ? 'var(--muted)' : flagged ? RED : GREEN }}>

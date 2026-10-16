@@ -216,6 +216,9 @@ function MasterListTab({
             <button className="btn-secondary" onClick={handleCancelEdits} disabled={savingEdits}>
               Cancel
             </button>
+            <span className="sub" style={{ margin: 0 }}>
+              Description, up to 3 lines (Enter for a new line): 1. what it is (Relay, Contactor ...)  2. model and rating  3. anything else.
+            </span>
           </div>
         )}
         {status && <div className={'status ' + (status.ok ? 'ok' : 'err')}>{status.msg}</div>}
@@ -266,7 +269,7 @@ function MasterListTab({
                         <td>{r.action === 'insert' ? 'Add new' : 'Update'}</td>
                         <td>{r.manufacturer_part_number || '—'}</td>
                         <td>{r.manufacturer || '—'}</td>
-                        <td>{r.description || '—'}</td>
+                        <td className="desc-lines">{r.description || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -465,8 +468,10 @@ function MasterListTab({
                           </td>
                           <td title="Set by each entity's Required Inventory list">{usedByCell(p)}</td>
                           <td>
-                            <input
-                              type="text"
+                            <textarea
+                              className="desc-edit"
+                              rows={3}
+                              placeholder={'What it is\nModel and rating\nOther details'}
                               value={p.description || ''}
                               onChange={(e) => updateDraftField(i, 'description', e.target.value)}
                             />
@@ -486,7 +491,7 @@ function MasterListTab({
                           <td>{p.manufacturer || '—'}</td>
                           <td>{p.spare_category || '—'}</td>
                           <td>{usedByCell(p)}</td>
-                          <td>{p.description || '—'}</td>
+                          <td className="desc-lines">{p.description || '—'}</td>
                           <td>{p.last_cost != null ? `$${Number(p.last_cost).toFixed(2)}` : '—'}</td>
                         </>
                       )}
@@ -521,7 +526,7 @@ function MasterListTab({
               <strong>
                 {previewPart.gcs_id}{previewPart.manufacturer_part_number ? ' · ' + previewPart.manufacturer_part_number : ''}
               </strong>
-              {previewPart.description ? <div>{previewPart.description}</div> : null}
+              {previewPart.description ? <div className="desc-lines">{previewPart.description}</div> : null}
             </div>
           </div>
         </div>

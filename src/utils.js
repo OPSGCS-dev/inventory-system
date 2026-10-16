@@ -18,6 +18,12 @@ export function journalEntryTypeLabel(entryType) {
   return JOURNAL_ENTRY_TYPE_LABELS[entryType] || 'Adjustment'
 }
 
+// A part needs some text in its gcs_part_id column (it can't be empty in the database) even though the Master List
+// no longer shows or asks for it: a new part gets its manufacturer part number, or failing that its description.
+export function derivePartLabel(manufacturerPartNumber, description) {
+  return (manufacturerPartNumber || '').trim() || (description || '').trim() || 'New part'
+}
+
 export const emptyFilters = {
   gcs_id: '',
   gcs_part_id: '',

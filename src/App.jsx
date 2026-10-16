@@ -6,6 +6,7 @@ import './App.css'
 import {
   emptyFilters,
   blankDraftRow,
+  derivePartLabel,
   uniqueSorted,
   computeTargetSum,
   normalizeHeader,
@@ -1092,8 +1093,8 @@ function App() {
     if (!canEditInventory(loggedInUser)) return
     const newRows = draftParts.filter((r) => !r._existing)
     for (const row of newRows) {
-      if (!(row.gcs_part_id || '').trim()) {
-        flashStatus('Every new row needs a Part ID.', false)
+      if (!(row.manufacturer_part_number || '').trim() && !(row.description || '').trim()) {
+        flashStatus('Every new row needs a Mfr Part # or a description.', false)
         return
       }
     }
@@ -1135,7 +1136,7 @@ function App() {
       if (newRows.length) {
         const { error } = await supabase.from('parts').insert(
           newRows.map((r) => ({
-            gcs_part_id: r.gcs_part_id.trim(),
+            gcs_part_id: derivePartLabel(r.manufacturer_part_number, r.description),
             manufacturer_part_number: (r.manufacturer_part_number || '').trim() || null,
             manufacturer: (r.manufacturer || '').trim() || null,
             spare_category: (r.spare_category || '').trim() || null,
@@ -1162,7 +1163,6 @@ function App() {
   function handleExportParts() {
     const rows = parts.map((p) => ({
       'GCS P/N': p.gcs_id,
-      'Part ID': p.gcs_part_id || '',
       'Mfr Part #': p.manufacturer_part_number || '',
       Manufacturer: p.manufacturer || '',
       Category: p.spare_category || '',
@@ -1573,21 +1573,12 @@ function App() {
     const categoryKey = fieldMap['category'] || fieldMap['sparecategory']
     const descKey = fieldMap['description']
 
-    if (!partIdKey) {
-      setImportErrors(['CSV must have a "Part ID" column.'])
-      return
-    }
-
     const errors = []
     const rows = []
     parsed.data.forEach((row, i) => {
       const rowNum = i + 2
       const gcsRaw = gcsKey ? (row[gcsKey] || '').trim() : ''
-      const partId = (row[partIdKey] || '').trim()
-      if (!partId) {
-        errors.push(`Row ${rowNum}: Part ID is required.`)
-        return
-      }
+      const partId = partIdKey ? (row[partIdKey] || '').trim() : ''
       let existing = null
       if (gcsRaw) {
         const gcsId = parseInt(gcsRaw, 10)
@@ -1597,10 +1588,16 @@ function App() {
           return
         }
       }
+      const mfrPartNo = mfrPartKey ? (row[mfrPartKey] || '').trim() : ''
+      const descText = descKey ? (row[descKey] || '').trim() : ''
+      if (!existing && !partId && !mfrPartNo && !descText) {
+        errors.push(`Row ${rowNum}: a new part needs a Mfr Part # or a description.`)
+        return
+      }
       rows.push({
         gcs_id: existing?.gcs_id ?? null,
         action: existing ? 'update' : 'insert',
-        gcs_part_id: partId,
+        gcs_part_id: partId, // only used if the file still has a Part ID column
         manufacturer_part_number: mfrPartKey ? (row[mfrPartKey] || '').trim() : '',
         manufacturer: mfrKey ? (row[mfrKey] || '').trim() : '',
         spare_category: categoryKey ? (row[categoryKey] || '').trim() : '',
@@ -1625,7 +1622,8 @@ function App() {
         const { error } = await supabase
           .from('parts')
           .update({
-            gcs_part_id: row.gcs_part_id,
+            // the Part ID is left as it is unless the file supplies one
+            ...(row.gcs_part_id ? { gcs_part_id: row.gcs_part_id } : {}),
             manufacturer_part_number: row.manufacturer_part_number || null,
             manufacturer: row.manufacturer || null,
             spare_category: row.spare_category || null,
@@ -1639,7 +1637,7 @@ function App() {
       if (inserts.length) {
         const { error } = await supabase.from('parts').insert(
           inserts.map((r) => ({
-            gcs_part_id: r.gcs_part_id,
+            gcs_part_id: r.gcs_part_id || derivePartLabel(r.manufacturer_part_number, r.description),
             manufacturer_part_number: r.manufacturer_part_number || null,
             manufacturer: r.manufacturer || null,
             spare_category: r.spare_category || null,
@@ -4702,7 +4700,7 @@ function App() {
           }}
           onSelectPart={(part) => {
             setActiveTab('master')
-            setFilters((f) => ({ ...f, gcs_part_id: part.gcs_part_id || '' }))
+            setFilters({ ...emptyFilters, gcs_id: String(part.gcs_id) })
           }}
         />
         <span className="sub" style={{ margin: 0, alignSelf: 'center' }}>

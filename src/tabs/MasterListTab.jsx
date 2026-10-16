@@ -226,7 +226,7 @@ function MasterListTab({
           <div className="card-header">
             <h2>Import List</h2>
             <p className="sub" style={{ margin: 0 }}>
-              CSV with columns: GCS P/N, Part ID, Mfr Part #, Manufacturer, Category,
+              CSV with columns: GCS P/N, Mfr Part #, Manufacturer, Category,
               Description. Rows with a matching GCS P/N update that part; rows with GCS P/N left
               blank add a new part.
             </p>
@@ -254,7 +254,7 @@ function MasterListTab({
                     <tr className="header-row">
                       <th className="row-head">GCS P/N</th>
                       <th>Action</th>
-                      <th>Part ID</th>
+                      <th>Mfr Part #</th>
                       <th>Manufacturer</th>
                       <th>Description</th>
                     </tr>
@@ -264,7 +264,7 @@ function MasterListTab({
                       <tr key={i}>
                         <td className="row-head">{r.gcs_id ?? '—'}</td>
                         <td>{r.action === 'insert' ? 'Add new' : 'Update'}</td>
-                        <td>{r.gcs_part_id}</td>
+                        <td>{r.manufacturer_part_number || '—'}</td>
                         <td>{r.manufacturer || '—'}</td>
                         <td>{r.description || '—'}</td>
                       </tr>
@@ -312,11 +312,10 @@ function MasterListTab({
                 <col style={{ width: editMode ? '110px' : '44px' }} />
                 <col style={{ width: editMode ? '156px' : '44px' }} />
                 {/* tighter in edit mode, so Description keeps its room next to the two attachment columns */}
-                <col style={{ width: editMode ? '9%' : '11%' }} />
+                <col style={{ width: editMode ? '11%' : '15%' }} />
+                <col style={{ width: editMode ? '11%' : '14%' }} />
+                <col style={{ width: editMode ? '11%' : '13%' }} />
                 <col style={{ width: editMode ? '10%' : '13%' }} />
-                <col style={{ width: editMode ? '10%' : '11%' }} />
-                <col style={{ width: editMode ? '10%' : '11%' }} />
-                <col style={{ width: editMode ? '9%' : '12%' }} />
                 <col />
                 <col style={{ width: editMode ? '8%' : '9%' }} />
                 {editMode && <col className="col-last" />}
@@ -332,14 +331,12 @@ function MasterListTab({
                   <th>D</th>
                   <th>E</th>
                   <th>F</th>
-                  <th>G</th>
                   {editMode && <th className="col-last"></th>}
                 </tr>
                 <tr className="header-row">
                   <th className="row-head">GCS P/N</th>
                   <th title="Reference picture">Pic</th>
                   <th title="Datasheet">Data</th>
-                  <th>Part ID</th>
                   <th>Mfr Part #</th>
                   <th>Manufacturer</th>
                   <th>Category</th>
@@ -365,14 +362,6 @@ function MasterListTab({
                     </th>
                     <th></th>
                     <th></th>
-                    <th>
-                      <input
-                        type="text"
-                        placeholder="Filter..."
-                        value={filters.gcs_part_id}
-                        onChange={(e) => updateFilter('gcs_part_id', e.target.value)}
-                      />
-                    </th>
                     <th>
                       <input
                         type="text"
@@ -435,7 +424,7 @@ function MasterListTab({
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="empty" colSpan={editMode ? 11 : 10}>
+                    <td className="empty" colSpan={editMode ? 10 : 9}>
                       {parts.length === 0 ? 'No parts yet.' : 'No parts match your filters.'}
                     </td>
                   </tr>
@@ -446,27 +435,15 @@ function MasterListTab({
                       <td className="center-cell">{imageCell(p)}</td>
                       <td className="center-cell">{datasheetCell(p)}</td>
                       {editMode && !p._existing ? (
-                        <>
-                          <td>
-                            <input
-                              type="text"
-                              value={p.gcs_part_id || ''}
-                              onChange={(e) => updateDraftField(i, 'gcs_part_id', e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="text"
-                              value={p.manufacturer_part_number || ''}
-                              onChange={(e) => updateDraftField(i, 'manufacturer_part_number', e.target.value)}
-                            />
-                          </td>
-                        </>
+                        <td>
+                          <input
+                            type="text"
+                            value={p.manufacturer_part_number || ''}
+                            onChange={(e) => updateDraftField(i, 'manufacturer_part_number', e.target.value)}
+                          />
+                        </td>
                       ) : (
-                        <>
-                          <td>{p.gcs_part_id}</td>
-                          <td>{p.manufacturer_part_number || '—'}</td>
-                        </>
+                        <td>{p.manufacturer_part_number || '—'}</td>
                       )}
                       {editMode ? (
                         <>
@@ -539,10 +516,10 @@ function MasterListTab({
             <button type="button" className="img-modal-close" onClick={() => setPreviewPart(null)} aria-label="Close">
               ×
             </button>
-            <img src={previewPart.image_url} alt={previewPart.gcs_part_id || `Part ${previewPart.gcs_id}`} />
+            <img src={previewPart.image_url} alt={previewPart.manufacturer_part_number || `Part ${previewPart.gcs_id}`} />
             <div className="img-modal-caption">
               <strong>
-                {previewPart.gcs_id} · {previewPart.gcs_part_id}
+                {previewPart.gcs_id}{previewPart.manufacturer_part_number ? ' · ' + previewPart.manufacturer_part_number : ''}
               </strong>
               {previewPart.description ? <div>{previewPart.description}</div> : null}
             </div>

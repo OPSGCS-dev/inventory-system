@@ -72,6 +72,14 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **Audit prices, Part ID, PO list columns:** the Audit page (`AuditTab`) is now two views: **Inventory Counts** (`AuditCountsPanel`, the old screen) and **Prices**
+  (`AuditPricesPanel`): accounting uploads a part-number + unit-cost file and it is compared with every part's Last Cost (`parts.last_cost`), with the same
+  needs-review / adjust-and-confirm / sign-off flow, a "value of the differences" tile (difference x units on hand) and CSV export. A plain-number part number
+  is the GCS P/N; text is looked up as the Part ID or Mfr Part #. **Still a preview, like the counts view: it opens on made-up prices and nothing is saved**
+  (it doesn't change Last Cost). The **Part ID column is gone from the Master List** (table, filter, edit rows, export, import preview); the database column
+  `parts.gcs_part_id` is still there (NOT NULL, used by search, PO line labels, ...), so a new part gets `derivePartLabel(mfr part #, description)` and an import
+  only changes a Part ID if the file supplies one. Global search now jumps to a part by GCS P/N. The PO list no longer has the **Work and Payment columns**
+  (still on the PO's own page).
 - **Inventory locations, permissions and datasheets:** (1) **Locations** are Oshawa, Barn and Office, plus an entity's own site. `'storage'` is still the stored
   name but is **labelled Oshawa** everywhere (`locLabel`); `'office'` is new. `add_office_location.sql` (after `add_transfer_po_request_stage.sql`) widens the
   `stock_location` check and replaces `fn_stock_transfer`, `fn_move_location`, `fn_record_use`, `fn_apply_count`, `fn_receive_po_parts` and `assert_part_ok`.

@@ -155,12 +155,6 @@ function TicketLinkEditor({ request, canEdit, busy, onSave }) {
 
 const PO_DESCRIPTION_MAX_LEN = 50
 
-// Shorter wording for the list's Work column when a mixed PO stacks two badges.
-const SHORT_WORK_LABELS = {
-  partially_received: 'Part. Received',
-  partial: 'Part. Complete',
-}
-
 // The Status column: just the word for where the PO is (a voided or rejected PO shows its reason on hover).
 function PoStatusBadge({ request }) {
   const stage = request.status === 'voided' || request.status === 'rejected' ? request.status : computePoProgressStage(request)
@@ -412,21 +406,6 @@ function PurchaseOrdersTab({
         sort: byAmount,
       },
       { key: 'status', label: 'Status', values: (r) => poStatusText(r) },
-      {
-        key: 'work',
-        label: 'Work',
-        values: (r) =>
-          r.status === 'issued' || r.status === 'closed'
-            ? workStatusEntries(r).map((entry, _i, all) =>
-                all.length > 1 ? entry.label + ': ' + (SHORT_WORK_LABELS[entry.status] || workStatusLabel(entry.status)) : workStatusLabel(entry.status)
-              )
-            : '',
-      },
-      {
-        key: 'payment',
-        label: 'Payment',
-        values: (r) => (r.status === 'issued' || r.status === 'closed' ? paymentStatusLabel(computePaymentStatus(r)) : ''),
-      },
       { key: 'requestor', label: 'Requestor', values: (r) => findUserName(users, r.requested_by) },
       { key: 'next', label: 'Responsible for Next Action', values: (r) => nextStepInfo(r, users).who },
       { key: 'po', label: 'PO #', values: (r) => r.po_number },
@@ -2489,16 +2468,14 @@ function PurchaseOrdersTab({
               <colgroup>
                 <col style={{ width: '60px' }} />
                 <col style={{ width: '100px' }} />
-                <col style={{ width: '190px' }} />
-                <col style={{ width: '100px' }} />
-                <col style={{ width: '85px' }} />
+                <col style={{ width: '250px' }} />
+                <col style={{ width: '130px' }} />
+                <col style={{ width: '130px' }} />
                 {poView === 'my-approvals' && <col style={{ width: '120px' }} />}
-                <col style={{ width: '170px' }} />
-                <col style={{ width: '170px' }} />
                 <col style={{ width: '120px' }} />
-                <col style={{ width: '90px' }} />
                 <col style={{ width: '110px' }} />
-                <col style={{ width: '75px' }} />
+                <col style={{ width: '140px' }} />
+                <col style={{ width: '110px' }} />
                 <col style={{ width: '130px' }} />
                 <col className="col-last" />
               </colgroup>
@@ -2534,12 +2511,6 @@ function PurchaseOrdersTab({
                   <FilterTh filters={poFilters} col="status" className="center-cell">
                     Status
                   </FilterTh>
-                  <FilterTh filters={poFilters} col="work" className="center-cell">
-                    Work
-                  </FilterTh>
-                  <FilterTh filters={poFilters} col="payment" className="center-cell">
-                    Payment
-                  </FilterTh>
                   <FilterTh filters={poFilters} col="requestor">
                     Requestor
                   </FilterTh>
@@ -2557,7 +2528,6 @@ function PurchaseOrdersTab({
                 {shownPurchaseRequests.map((r) => {
                   const next = nextStepInfo(r, users)
                   const busy = poActionBusyId === r.id
-                  const paymentStatus = computePaymentStatus(r)
                   return (
                     <tr key={r.id}>
                       <td className="row-head nowrap-cell">{r.id}</td>
@@ -2575,29 +2545,6 @@ function PurchaseOrdersTab({
                       )}
                       <td className="center-cell">
                         <PoStatusBadge request={r} />
-                      </td>
-                      <td className="center-cell">
-                        {(r.status === 'issued' || r.status === 'closed') && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-                            {workStatusEntries(r).map((entry, _i, all) => (
-                              <span key={entry.kind} className={`po-badge po-work-badge-${entry.status}`}>
-                                {all.length > 1
-                                  ? `${entry.label}: ${SHORT_WORK_LABELS[entry.status] || workStatusLabel(entry.status)}`
-                                  : workStatusLabel(entry.status)}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="center-cell">
-                        {(r.status === 'issued' || r.status === 'closed') && (
-                          <>
-                            <span className={`po-badge po-payment-badge-${paymentStatus}`}>
-                              {paymentStatusLabel(paymentStatus)}
-                            </span>
-                            <InvoiceMatchChip request={r} />
-                          </>
-                        )}
                       </td>
                       <td className="nowrap-cell">{findUserName(users, r.requested_by)}</td>
                       <td className="nowrap-cell">{next.who || '—'}</td>

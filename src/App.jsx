@@ -1599,14 +1599,25 @@ function App() {
         errors.push(`Row ${rowNum}: a new part needs a Mfr Part # or a description.`)
         return
       }
+      // A column the file doesn't have is undefined, and an update leaves that field exactly as it is
+      // (so a file with just GCS P/N and Description only changes descriptions).
+      const cell = (key) => (key ? (row[key] || '').trim() : undefined)
       rows.push({
         gcs_id: existing?.gcs_id ?? null,
         action: existing ? 'update' : 'insert',
         gcs_part_id: partId, // only used if the file still has a Part ID column
-        manufacturer_part_number: mfrPartKey ? (row[mfrPartKey] || '').trim() : '',
-        manufacturer: mfrKey ? (row[mfrKey] || '').trim() : '',
-        spare_category: categoryKey ? (row[categoryKey] || '').trim() : '',
-        description: descKey ? (row[descKey] || '').trim() : '',
+        manufacturer_part_number: cell(mfrPartKey),
+        manufacturer: cell(mfrKey),
+        spare_category: cell(categoryKey),
+        // line breaks inside a description are kept (a description is up to three lines)
+        description: descKey
+          ? (row[descKey] || '')
+              .replace(/\r\n?/g, '\n')
+              .split('\n')
+              .map((l) => l.trim())
+              .filter(Boolean)
+              .join('\n')
+          : undefined,
       })
     })
 
@@ -1629,10 +1640,11 @@ function App() {
           .update({
             // the Part ID is left as it is unless the file supplies one
             ...(row.gcs_part_id ? { gcs_part_id: row.gcs_part_id } : {}),
-            manufacturer_part_number: row.manufacturer_part_number || null,
-            manufacturer: row.manufacturer || null,
-            spare_category: row.spare_category || null,
-            description: row.description || null,
+            // ...and so is any column the file doesn't have
+            ...(row.manufacturer_part_number !== undefined ? { manufacturer_part_number: row.manufacturer_part_number || null } : {}),
+            ...(row.manufacturer !== undefined ? { manufacturer: row.manufacturer || null } : {}),
+            ...(row.spare_category !== undefined ? { spare_category: row.spare_category || null } : {}),
+            ...(row.description !== undefined ? { description: row.description || null } : {}),
             updated_at: nowIso,
           })
           .eq('gcs_id', row.gcs_id)

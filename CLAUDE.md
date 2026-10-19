@@ -80,9 +80,10 @@ Most recent first, all on `main`:
 - **Part descriptions are three lines:** (1) what it is -- a generic term (Relay, Contactor, Circuit Breaker, Fuse ...), (2) model and ratings, (3) anything else
   (optional), kept in the one `parts.description` field with line breaks. The Master List shows them on separate lines (`.desc-lines`, `white-space: pre-line`) and
   edits them in a 3-row textarea; one-line places use `descriptionOneLine`. Import List/Export List carry the line breaks in a quoted CSV cell. The existing 378
-  descriptions were redrafted into this form in a review workbook (`build/description_review/master-list-descriptions-review.xlsx`, not committed), awaiting
-  answers on the flagged parts before anything is imported -- when importing, remember Import List overwrites Mfr Part #, Manufacturer and Category with whatever
-  the file has, so build the file from a fresh Export List.
+  descriptions were redrafted into this form (review workbook `build/description_review/master-list-descriptions-review.xlsx` with a Status/Note per part; 60 parts
+  still carry a question for someone who knows the parts; not committed). **Import List now only changes the columns the file has** (a file with just GCS P/N and
+  Description changes only descriptions), so `master-list-descriptions-IMPORT.csv` (377 rows, new text) and `...-ORIGINAL-rollback.csv` (old text) in that folder can
+  be imported without touching Manufacturer / Mfr Part # / Category. They were built from the repo's test-database snapshot, so P/N 379 (live only) is not in them.
 - **Audit prices, Part ID, PO list columns:** the Audit page (`AuditTab`) is now two views: **Inventory Counts** (`AuditCountsPanel`, the old screen) and **Prices**
   (`AuditPricesPanel`): accounting uploads a part-number + unit-cost file and it is compared with every part's Last Cost (`parts.last_cost`), with the same
   needs-review / adjust-and-confirm / sign-off flow, a "value of the differences" tile (difference x units on hand) and CSV export. A plain-number part number

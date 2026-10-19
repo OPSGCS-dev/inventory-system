@@ -231,7 +231,8 @@ function MasterListTab({
             <p className="sub" style={{ margin: 0 }}>
               CSV with columns: GCS P/N, Mfr Part #, Manufacturer, Category,
               Description. Rows with a matching GCS P/N update that part; rows with GCS P/N left
-              blank add a new part.
+              blank add a new part. A column the file doesn&apos;t have is left as it is, so a file
+              with just GCS P/N and Description only changes descriptions.
             </p>
           </div>
           <input type="file" accept=".csv" onChange={handleImportFileChange} />
@@ -267,9 +268,9 @@ function MasterListTab({
                       <tr key={i}>
                         <td className="row-head">{r.gcs_id ?? '—'}</td>
                         <td>{r.action === 'insert' ? 'Add new' : 'Update'}</td>
-                        <td>{r.manufacturer_part_number || '—'}</td>
-                        <td>{r.manufacturer || '—'}</td>
-                        <td className="desc-lines">{r.description || '—'}</td>
+                        <td>{r.manufacturer_part_number === undefined ? '(unchanged)' : r.manufacturer_part_number || '—'}</td>
+                        <td>{r.manufacturer === undefined ? '(unchanged)' : r.manufacturer || '—'}</td>
+                        <td className="desc-lines">{r.description === undefined ? '(unchanged)' : r.description || '—'}</td>
                       </tr>
                     ))}
                   </tbody>

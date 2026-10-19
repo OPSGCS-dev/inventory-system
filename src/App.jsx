@@ -7,6 +7,7 @@ import {
   emptyFilters,
   blankDraftRow,
   derivePartLabel,
+  suggestionPageFor,
   uniqueSorted,
   computeTargetSum,
   normalizeHeader,
@@ -83,6 +84,7 @@ import {
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import PoLedgerTab from './tabs/PoLedgerTab'
 import AuditTab from './tabs/AuditTab'
+import SuggestionsTab from './tabs/SuggestionsTab'
 import PoHistoryTab from './tabs/PoHistoryTab'
 import UsersTab from './tabs/UsersTab'
 import SignatureCard from './tabs/SignatureCard'
@@ -121,6 +123,9 @@ function App() {
   const [changePasswordBusy, setChangePasswordBusy] = useState(false)
 
   const [activeTab, setActiveTab] = useState('master')
+  // Suggestions tab: the page the person was on when they opened it, and (for the admin) how many are still new.
+  const [suggestFrom, setSuggestFrom] = useState('')
+  const [newSuggestionCount, setNewSuggestionCount] = useState(0)
   // The PO History tab narrowed to one PO ({ id, label }), or null for all of them.
   const [poHistoryFocus, setPoHistoryFocus] = useState(null)
 
@@ -4469,6 +4474,18 @@ function App() {
     }
   }
 
+  // How many suggestions are still New, for the badge on the admin's Suggestions tab. Quietly shows nothing until
+  // add_suggestions.sql has been run.
+  async function refreshSuggestionCount() {
+    if (!isAdmin(loggedInUser)) return
+    const { count, error } = await supabase.from('suggestions').select('id', { count: 'exact', head: true }).eq('status', 'new')
+    if (!error) setNewSuggestionCount(count || 0)
+  }
+  useEffect(() => {
+    refreshSuggestionCount()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, loggedInUser])
+
   // Guard the Users tab itself (not just the tab button) in case activeTab
   // ever gets set to 'users' some other way for a non-admin.
   useEffect(() => {
@@ -4620,6 +4637,8 @@ function App() {
           ? 'Accounting Audit'
           : activeTab === 'poHistory'
           ? 'PO History'
+          : activeTab === 'suggestions'
+          ? 'Suggestions'
           : 'Purchase Orders'}
       </h1>
       <p className="sub">Backed by Supabase — data lives in the cloud, not just this page.</p>
@@ -4687,6 +4706,18 @@ function App() {
             onClick={() => setActiveTab('users')}
           >
             Admin
+          </button>
+        )}
+        {!isVendorUser(loggedInUser) && (
+          <button
+            className={'tab-btn' + (activeTab === 'suggestions' ? ' active' : '')}
+            onClick={() => {
+              if (activeTab !== 'suggestions') setSuggestFrom(suggestionPageFor(activeTab))
+              setActiveTab('suggestions')
+            }}
+          >
+            Suggestions
+            {isAdmin(loggedInUser) && newSuggestionCount > 0 && <span className="nav-badge">{newSuggestionCount}</span>}
           </button>
         )}
         <span style={{ flex: 1 }} />
@@ -5080,6 +5111,10 @@ function App() {
             }
           }}
         />
+      )}
+
+      {activeTab === 'suggestions' && !isVendorUser(loggedInUser) && (
+        <SuggestionsTab isAdmin={isAdmin(loggedInUser)} defaultPage={suggestFrom} onChanged={refreshSuggestionCount} />
       )}
 
       {activeTab === 'audit' && canViewAudit(loggedInUser) && (

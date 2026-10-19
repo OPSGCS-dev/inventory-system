@@ -72,6 +72,11 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **Suggestions tab:** every signed-in user (not vendor logons) has a **Suggestions** tab to send in something broken / disliked / an idea (type, page of the site, text);
+  `suggestions` table, `add_suggestions.sql` (needs the security files for `is_app_admin()` / `is_active_app_user()`). Only the admin sees everyone's, in a list
+  filtered by status (New / Looking at it / Planned / Done / Won't do), with a reply box (the sender sees the status and reply on their own list), delete and CSV
+  export; the admin's tab shows a badge with the count of New ones (`refreshSuggestionCount` in App.jsx). Who sent it and when are stamped by the trigger
+  `fn_suggestion_stamp`, not the browser; new ones always start as New. `SuggestionsTab.jsx`. Until the SQL is run the tab says to run it.
 - **Part descriptions are three lines:** (1) what it is -- a generic term (Relay, Contactor, Circuit Breaker, Fuse ...), (2) model and ratings, (3) anything else
   (optional), kept in the one `parts.description` field with line breaks. The Master List shows them on separate lines (`.desc-lines`, `white-space: pre-line`) and
   edits them in a 3-row textarea; one-line places use `descriptionOneLine`. Import List/Export List carry the line breaks in a quoted CSV cell. The existing 378

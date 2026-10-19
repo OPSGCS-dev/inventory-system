@@ -18,6 +18,32 @@ export function journalEntryTypeLabel(entryType) {
   return JOURNAL_ENTRY_TYPE_LABELS[entryType] || 'Adjustment'
 }
 
+// The Suggestions form's "which page" choice for the tab a person was on.
+export function suggestionPageFor(tab) {
+  switch (tab) {
+    case 'master':
+      return 'Master List'
+    case 'projects':
+      return 'Required Inventory'
+    case 'ownership':
+    case 'location':
+    case 'stockHistory':
+      return 'Inventory On Hand'
+    case 'po':
+      return 'Purchase Orders'
+    case 'poHistory':
+      return 'PO History'
+    case 'audit':
+      return 'Audit'
+    case 'ledger':
+      return 'PO Ledger'
+    case 'users':
+      return 'Admin'
+    default:
+      return ''
+  }
+}
+
 // A part description is up to three lines (what it is / model and rating / other details). For a single-line
 // place (a search result, a PO line label) the lines are joined with a dash.
 export function descriptionOneLine(description) {

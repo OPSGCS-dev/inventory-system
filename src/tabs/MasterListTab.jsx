@@ -317,12 +317,12 @@ function MasterListTab({
                 <col className="col-rowhead" />
                 <col style={{ width: editMode ? '110px' : '44px' }} />
                 <col style={{ width: editMode ? '156px' : '44px' }} />
-                {/* tighter in edit mode, so Description keeps its room next to the two attachment columns */}
+                {/* the middle columns are tighter in edit mode, so Description keeps its room next to the two attachment columns */}
                 <col style={{ width: editMode ? '11%' : '13%' }} />
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '10%' }} />
+                <col style={{ width: editMode ? '11%' : '13%' }} />
                 <col />
+                <col style={{ width: editMode ? '10%' : '11%' }} />
+                <col style={{ width: '10%' }} />
                 <col style={{ width: '8%' }} />
                 {editMode && <col className="col-last" />}
               </colgroup>
@@ -343,11 +343,11 @@ function MasterListTab({
                   <th className="row-head">GCS P/N</th>
                   <th title="Reference picture">Pic</th>
                   <th title="Datasheet">Data</th>
-                  <th>Mfr Part #</th>
                   <th>Manufacturer</th>
+                  <th>Mfr Part #</th>
+                  <th>Description</th>
                   <th>Category</th>
                   <th>Used By</th>
-                  <th>Description</th>
                   <th>Last Cost</th>
                   {editMode && <th></th>}
                 </tr>
@@ -369,14 +369,6 @@ function MasterListTab({
                     <th></th>
                     <th></th>
                     <th>
-                      <input
-                        type="text"
-                        placeholder="Filter..."
-                        value={filters.manufacturer_part_number}
-                        onChange={(e) => updateFilter('manufacturer_part_number', e.target.value)}
-                      />
-                    </th>
-                    <th>
                       <select
                         value={filters.manufacturer}
                         onChange={(e) => updateFilter('manufacturer', e.target.value)}
@@ -388,6 +380,22 @@ function MasterListTab({
                           </option>
                         ))}
                       </select>
+                    </th>
+                    <th>
+                      <input
+                        type="text"
+                        placeholder="Filter..."
+                        value={filters.manufacturer_part_number}
+                        onChange={(e) => updateFilter('manufacturer_part_number', e.target.value)}
+                      />
+                    </th>
+                    <th>
+                      <input
+                        type="text"
+                        placeholder="Filter..."
+                        value={filters.description}
+                        onChange={(e) => updateFilter('description', e.target.value)}
+                      />
                     </th>
                     <th>
                       <select
@@ -415,14 +423,6 @@ function MasterListTab({
                         ))}
                       </select>
                     </th>
-                    <th>
-                      <input
-                        type="text"
-                        placeholder="Filter..."
-                        value={filters.description}
-                        onChange={(e) => updateFilter('description', e.target.value)}
-                      />
-                    </th>
                     <th></th>
                   </tr>
                 )}
@@ -440,6 +440,18 @@ function MasterListTab({
                       <td className="row-head">{p._existing !== false ? p.gcs_id : 'new'}</td>
                       <td className="center-cell">{imageCell(p)}</td>
                       <td className="center-cell">{datasheetCell(p)}</td>
+                      {editMode ? (
+                        <td>
+                          <input
+                            type="text"
+                            list="manufacturer-options"
+                            value={p.manufacturer || ''}
+                            onChange={(e) => updateDraftField(i, 'manufacturer', e.target.value)}
+                          />
+                        </td>
+                      ) : (
+                        <td>{p.manufacturer || '—'}</td>
+                      )}
                       {editMode && !p._existing ? (
                         <td>
                           <input
@@ -452,51 +464,47 @@ function MasterListTab({
                         <td>{p.manufacturer_part_number || '—'}</td>
                       )}
                       {editMode ? (
-                        <>
-                          <td>
-                            <input
-                              type="text"
-                              list="manufacturer-options"
-                              value={p.manufacturer || ''}
-                              onChange={(e) => updateDraftField(i, 'manufacturer', e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="text"
-                              list="category-options"
-                              value={p.spare_category || ''}
-                              onChange={(e) => updateDraftField(i, 'spare_category', e.target.value)}
-                            />
-                          </td>
-                          <td title="Set by each entity's Required Inventory list">{usedByCell(p)}</td>
-                          <td>
-                            <textarea
-                              className="desc-edit"
-                              rows={3}
-                              placeholder={'What it is\nModel and rating\nOther details'}
-                              value={p.description || ''}
-                              onChange={(e) => updateDraftField(i, 'description', e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={p.last_cost ?? ''}
-                              onChange={(e) => updateDraftField(i, 'last_cost', e.target.value)}
-                            />
-                          </td>
-                        </>
+                        <td>
+                          <textarea
+                            className="desc-edit"
+                            rows={3}
+                            placeholder={'What it is\nModel and rating\nOther details'}
+                            value={p.description || ''}
+                            onChange={(e) => updateDraftField(i, 'description', e.target.value)}
+                          />
+                        </td>
                       ) : (
-                        <>
-                          <td>{p.manufacturer || '—'}</td>
-                          <td>{p.spare_category || '—'}</td>
-                          <td>{usedByCell(p)}</td>
-                          <td><PartDescription text={p.description || '—'} /></td>
-                          <td>{p.last_cost != null ? `$${Number(p.last_cost).toFixed(2)}` : '—'}</td>
-                        </>
+                        <td><PartDescription text={p.description || '—'} /></td>
+                      )}
+                      {editMode ? (
+                        <td>
+                          <input
+                            type="text"
+                            list="category-options"
+                            value={p.spare_category || ''}
+                            onChange={(e) => updateDraftField(i, 'spare_category', e.target.value)}
+                          />
+                        </td>
+                      ) : (
+                        <td>{p.spare_category || '—'}</td>
+                      )}
+                      {editMode ? (
+                        <td title="Set by each entity's Required Inventory list">{usedByCell(p)}</td>
+                      ) : (
+                        <td>{usedByCell(p)}</td>
+                      )}
+                      {editMode ? (
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={p.last_cost ?? ''}
+                            onChange={(e) => updateDraftField(i, 'last_cost', e.target.value)}
+                          />
+                        </td>
+                      ) : (
+                        <td>{p.last_cost != null ? `$${Number(p.last_cost).toFixed(2)}` : '—'}</td>
                       )}
                       {editMode && (
                         <td className="col-last">

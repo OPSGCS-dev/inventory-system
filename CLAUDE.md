@@ -72,6 +72,10 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **One-off clean-up scripts (not migrations):** `supabase/reset_purchase_orders.sql` deletes every PO (with lines, invoices, receipts, activity), payment batches, the
+  whole PO History and the PO number counters, and restarts ids at 1; it does nothing until its first line is changed to `true`, pauses and then restores the
+  PO History protections, and leaves parts, stock, vendors, users and the inventory History alone. Uploaded PDFs in Storage and ticket-system links to the deleted POs are
+  not touched. `restore_parts_after_blank_import.sql` refills Manufacturer / Mfr Part # / Category from `parts_history` after an import that blanked them.
 - **Suggestions tab:** every signed-in user (not vendor logons) has a **Suggestions** tab to send in something broken / disliked / an idea (type, page of the site, text);
   `suggestions` table, `add_suggestions.sql` (needs the security files for `is_app_admin()` / `is_active_app_user()`). Only the admin sees everyone's, in a list
   filtered by status (New / Looking at it / Planned / Done / Won't do), with a reply box (the sender sees the status and reply on their own list), delete and CSV

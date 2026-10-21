@@ -14,6 +14,8 @@ import { AMBER, Badge, GREEN, RED, Tile } from './AuditShared'
 // browser only. Nothing is written to inventory or to accounting.
 
 // Stable pseudo-random number (0-99) from a part number, so the sample data doesn't change on reload.
+import PartDescription from './PartDescription'
+
 const roll = (gcs) => (Math.imul(gcs * 2654435761, 1597334677) >>> 0) % 100
 
 // Made-up accounting books, built from the real inventory so the demo shows a believable mix:
@@ -294,7 +296,7 @@ function AuditCountsPanel({ stockItems, stockLoading, parts, userName }) {
                       <Fragment key={r.id}>
                         <tr style={flagged ? { background: '#fdf0ed' } : undefined}>
                           <td className="row-head">{r.id}</td>
-                          <td className="desc-lines">{r.part?.description || '—'}</td>
+                          <td><PartDescription text={r.part?.description || '—'} /></td>
                           <td className="center-cell">{r.inv}</td>
                           <td className="center-cell">{r.acc === null ? '—' : r.acc}</td>
                           <td className="center-cell" style={{ fontWeight: 700, color: r.acc === null ? AMBER : r.diff === 0 ? 'var(--muted)' : flagged ? RED : GREEN }}>

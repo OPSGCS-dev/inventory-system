@@ -78,7 +78,8 @@ Most recent first, all on `main`:
   export; the admin's tab shows a badge with the count of New ones (`refreshSuggestionCount` in App.jsx). Who sent it and when are stamped by the trigger
   `fn_suggestion_stamp`, not the browser; new ones always start as New. `SuggestionsTab.jsx`. Until the SQL is run the tab says to run it.
 - **Part descriptions are three lines:** (1) what it is -- a generic term (Relay, Contactor, Circuit Breaker, Fuse ...), (2) model and ratings, (3) anything else
-  (optional), kept in the one `parts.description` field with line breaks. The Master List shows them on separate lines (`.desc-lines`, `white-space: pre-line`) and
+  (optional), kept in the one `parts.description` field with line breaks. Lists show them with `PartDescription` (three blocks: what it is in bold, model and rating, other details muted; an old one-line
+  description shows plain; `.desc-lines` is the plain pre-line fallback used on PO lines) and the Master List
   edits them in a 3-row textarea; one-line places use `descriptionOneLine`. Import List/Export List carry the line breaks in a quoted CSV cell. The existing 378
   descriptions were redrafted into this form (review workbook `build/description_review/master-list-descriptions-review.xlsx` with a Status/Note per part; 60 parts
   still carry a question for someone who knows the parts; not committed). **Import List now only changes the columns the file has** (a file with just GCS P/N and

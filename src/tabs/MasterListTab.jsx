@@ -3,6 +3,8 @@ import { emptyFilters, shortProjectName } from '../utils'
 import PartsHistoryPanel from './PartsHistoryPanel'
 
 // Small document icon. Opens the part's datasheet (a link or an uploaded PDF) in a new tab.
+import PartDescription from './PartDescription'
+
 function DatasheetIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -270,7 +272,7 @@ function MasterListTab({
                         <td>{r.action === 'insert' ? 'Add new' : 'Update'}</td>
                         <td>{r.manufacturer_part_number === undefined ? '(unchanged)' : r.manufacturer_part_number || '—'}</td>
                         <td>{r.manufacturer === undefined ? '(unchanged)' : r.manufacturer || '—'}</td>
-                        <td className="desc-lines">{r.description === undefined ? '(unchanged)' : r.description || '—'}</td>
+                        <td><PartDescription text={r.description === undefined ? '(unchanged)' : r.description || '—'} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -316,12 +318,12 @@ function MasterListTab({
                 <col style={{ width: editMode ? '110px' : '44px' }} />
                 <col style={{ width: editMode ? '156px' : '44px' }} />
                 {/* tighter in edit mode, so Description keeps its room next to the two attachment columns */}
-                <col style={{ width: editMode ? '11%' : '15%' }} />
-                <col style={{ width: editMode ? '11%' : '14%' }} />
                 <col style={{ width: editMode ? '11%' : '13%' }} />
-                <col style={{ width: editMode ? '10%' : '13%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '10%' }} />
                 <col />
-                <col style={{ width: editMode ? '8%' : '9%' }} />
+                <col style={{ width: '8%' }} />
                 {editMode && <col className="col-last" />}
               </colgroup>
               <thead>
@@ -492,7 +494,7 @@ function MasterListTab({
                           <td>{p.manufacturer || '—'}</td>
                           <td>{p.spare_category || '—'}</td>
                           <td>{usedByCell(p)}</td>
-                          <td className="desc-lines">{p.description || '—'}</td>
+                          <td><PartDescription text={p.description || '—'} /></td>
                           <td>{p.last_cost != null ? `$${Number(p.last_cost).toFixed(2)}` : '—'}</td>
                         </>
                       )}
@@ -527,7 +529,7 @@ function MasterListTab({
               <strong>
                 {previewPart.gcs_id}{previewPart.manufacturer_part_number ? ' · ' + previewPart.manufacturer_part_number : ''}
               </strong>
-              {previewPart.description ? <div className="desc-lines">{previewPart.description}</div> : null}
+              {previewPart.description ? <div><PartDescription text={previewPart.description} /></div> : null}
             </div>
           </div>
         </div>

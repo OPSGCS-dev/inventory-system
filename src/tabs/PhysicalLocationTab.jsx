@@ -11,6 +11,8 @@ import {
 // A site can only hold parts that entity owns, so moving a part between sites means
 // transferring ownership first (Stock Transfer on the Ownership tab, which moves them
 // together). Update Location moves units between places; Record Part Use takes units out.
+import PartDescription from './PartDescription'
+
 function PhysicalLocationTab({
   canEdit,
   projects,
@@ -311,7 +313,7 @@ function PhysicalLocationTab({
                           tabIndex={clickable ? 0 : undefined}
                           title={clickable ? 'Show who owns this part' : undefined}>
                           <td className="row-head">{item.gcs_id}</td>
-                          <td className="desc-lines">{item.part?.description || '—'}</td>
+                          <td><PartDescription text={item.part?.description || '—'} /></td>
                           {placeCols.map((k) => {
                             const q = qtyAt(item, k)
                             return (

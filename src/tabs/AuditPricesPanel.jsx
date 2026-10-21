@@ -14,6 +14,8 @@ import { AMBER, Badge, GREEN, RED, Tile } from './AuditShared'
 // DEMO SCREEN, like the counts view: it opens with made-up books data, and resolving / signing off is held
 // in the browser only. Nothing is written to the Master List or to accounting.
 
+import PartDescription from './PartDescription'
+
 const CENT = 0.005 // prices that agree to the cent match
 
 // Stable pseudo-random number (0-99) from a part number, so the sample data doesn't change on reload.
@@ -335,7 +337,7 @@ function AuditPricesPanel({ stockItems, stockLoading, parts, userName }) {
                       <Fragment key={r.key}>
                         <tr style={flagged ? { background: '#fdf0ed' } : undefined}>
                           <td className="row-head">{r.id ?? '—'}</td>
-                          <td className="desc-lines">{r.part?.description || (r.part ? '—' : `Listed as “${r.label}”`)}</td>
+                          <td><PartDescription text={r.part?.description || (r.part ? '—' : `Listed as “${r.label}”`)} /></td>
                           <td className="center-cell">{r.inv === null ? '—' : money(r.inv)}</td>
                           <td className="center-cell">{r.acc === null ? '—' : money(r.acc)}</td>
                           <td className="center-cell" style={{ fontWeight: 700, color: !comparable ? AMBER : Math.abs(r.diff) < CENT ? 'var(--muted)' : flagged ? RED : GREEN }}>

@@ -982,3 +982,9 @@ th.center-cell .colfilter-head { justify-content: center; }
 .colfilter-empty { padding: 8px; color: var(--muted); font-size: 13px; }
 .colfilter-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .colfilter-bar { display: flex; align-items: center; gap: 12px; margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+
+/* "Vendor contacted" marker on issued POs (list: under the status; PO page: beside Email Vendor) */
+.vendor-contact { display: inline-block; font-size: 12px; font-weight: 600; white-space: nowrap; }
+td .vendor-contact { display: block; margin-top: 4px; }
+.vendor-contact-yes { color: var(--success); }
+.vendor-contact-no { color: var(--warn); }

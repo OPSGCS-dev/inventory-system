@@ -107,6 +107,8 @@ const FIELD_LABELS = {
   void_reason: 'Void reason',
   rejection_reason: 'Rejection reason',
   po_category: 'PO category',
+  vendor_contacted_at: 'Vendor contacted',
+  vendor_contacted_how: 'Vendor contacted how',
   ticket_system_ticket_id: 'Ticket',
   ticket_system_ticket_number: 'Ticket number',
   ticket_system_ticket_code: 'Ticket code',

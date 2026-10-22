@@ -3044,6 +3044,47 @@ function App() {
     }
   }
 
+  // Mark a PO's vendor as contacted (or clear the mark). how = 'email' when Email Vendor was pressed, 'manual' for
+  // a vendor reached outside the site. The database stamps who and when (add_vendor_contacted.sql).
+  // `quiet` skips the green message, for the automatic mark that follows Email Vendor.
+  async function handleSetVendorContacted(request, contacted, how = 'manual', quiet = false) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return false
+    }
+    const fields = contacted
+      ? { vendor_contacted_at: new Date().toISOString(), vendor_contacted_how: how }
+      : { vendor_contacted_at: null }
+    setPoActionBusyId(request.id)
+    try {
+      const { data, error } = await supabase.from('purchase_requests').update(fields).eq('id', request.id).select('id')
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error('The database did not apply the change (no rows were updated).')
+      await logPoActivity(
+        request.id,
+        !contacted
+          ? 'Vendor-contacted mark cleared'
+          : how === 'email'
+          ? 'Vendor emailed from the site (email draft downloaded)'
+          : 'Marked as contacted outside the site'
+      )
+      if (!quiet) flashPoStatus(contacted ? 'Marked: vendor contacted.' : 'Vendor-contacted mark cleared.', true)
+      await refreshPurchaseRequest(request.id)
+      return true
+    } catch (error) {
+      console.error(error)
+      flashPoStatus(
+        /vendor_contacted/.test(error?.message || '')
+          ? "The vendor-contacted marker isn't set up yet. Run supabase/add_vendor_contacted.sql in the Inventory project's SQL editor first."
+          : 'Could not update the vendor-contacted mark — check the console for details.',
+        false
+      )
+      return false
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
   // A plain dropdown -- no evidence file required for any transition. A PO's
   // parts and its services are tracked separately: `kind` is 'parts'
   // (ordering/receiving) or 'service' (doing the work). Moving the parts into
@@ -5062,6 +5103,7 @@ function App() {
           handleCreatePurchaseRequest={handleCreatePurchaseRequest}
           handleSubmitPurchaseRequest={handleSubmitPurchaseRequest}
           handleSetTicketLink={handleSetTicketLink}
+          handleSetVendorContacted={handleSetVendorContacted}
           handleApprovePurchaseRequest={handleApprovePurchaseRequest}
           handleHoldPurchaseRequest={handleHoldPurchaseRequest}
           handleResumeFromHold={handleResumeFromHold}

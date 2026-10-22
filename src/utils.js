@@ -729,6 +729,27 @@ export function canIssuePurchaseOrder(user, request) {
   return isEntityAllowed(user, 'po_issue', request.project_id)
 }
 
+// "Vendor contacted" marker on an issued PO (add_vendor_contacted.sql): set when Email Vendor is pressed
+// ('email') or by hand for a vendor reached outside the site ('manual'). The columns only exist once the SQL
+// has been run, so the marker is hidden until then.
+export function vendorContactReady(request) {
+  return !!request && 'vendor_contacted_at' in request
+}
+
+export function isVendorContacted(request) {
+  return !!request?.vendor_contacted_at
+}
+
+// Same people who can issue it can say the vendor has been told, once it has its PO number.
+export function canMarkVendorContacted(user, request) {
+  return (
+    vendorContactReady(request) &&
+    !!request.po_number &&
+    (request.status === 'issued' || request.status === 'closed') &&
+    canIssuePurchaseOrder(user, request)
+  )
+}
+
 // Whoever created the purchase request is the one who must confirm its
 // receipt (Work Status) and the one who can add receipts to the new
 // Receipts & Invoices table below — not just anyone holding the general

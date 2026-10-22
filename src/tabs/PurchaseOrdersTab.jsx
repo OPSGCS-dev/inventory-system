@@ -69,6 +69,9 @@ import {
   isVendorActive,
   vendorBlockReason,
   voidBlockReason,
+  vendorContactReady,
+  isVendorContacted,
+  canMarkVendorContacted,
 } from '../utils'
 import InvoicesPanel from './InvoicesPanel'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
@@ -162,6 +165,31 @@ function PoStatusBadge({ request }) {
   return (
     <span className={'po-badge po-badge-' + stage} title={reason || undefined}>
       {poStatusText(request)}
+    </span>
+  )
+}
+
+// Has the vendor been told about this PO? Only issued (and later) POs carry it; nothing shows until
+// add_vendor_contacted.sql has been run. Green once marked (by Email Vendor or by hand), amber while an
+// issued PO has not been. `full` adds who and when (the PO's own page); the list shows the short form.
+function VendorContactedBadge({ request, users, full }) {
+  if (!vendorContactReady(request) || !request.po_number) return null
+  if (request.status !== 'issued' && request.status !== 'closed') return null
+  if (!isVendorContacted(request)) {
+    if (request.status !== 'issued') return null
+    return (
+      <span className="vendor-contact vendor-contact-no" title="This PO has been issued but nobody has marked the vendor as contacted yet.">
+        {full ? '✉ Vendor not contacted yet' : '✉ Not contacted'}
+      </span>
+    )
+  }
+  const who = request.vendor_contacted_by ? findUserName(users, request.vendor_contacted_by) : ''
+  const when = new Date(request.vendor_contacted_at).toLocaleString()
+  const how = request.vendor_contacted_how === 'email' ? 'emailed from the site' : 'contacted outside the site'
+  const detail = `Vendor ${how}${who ? ' by ' + who : ''}, ${when}`
+  return (
+    <span className="vendor-contact vendor-contact-yes" title={detail}>
+      {full ? '✓ ' + detail : '✓ Vendor contacted'}
     </span>
   )
 }
@@ -330,6 +358,7 @@ function PurchaseOrdersTab({
   handleCreatePurchaseRequest,
   handleSubmitPurchaseRequest,
   handleSetTicketLink,
+  handleSetVendorContacted,
   handleApprovePurchaseRequest,
   handleHoldPurchaseRequest,
   handleResumeFromHold,
@@ -523,6 +552,8 @@ function PurchaseOrdersTab({
         text: `Open the downloaded file: it opens in your email program as a draft to ${r.vendors.email} with the PO PDF attached.`,
       })
       logPoDocumentEvent(r, 'po_email_drafted', `to ${r.vendors.email}`)
+      // Pressing Email Vendor counts as contacting the vendor (the first time only; a manual mark is left as it is).
+      if (vendorContactReady(r) && !isVendorContacted(r)) handleSetVendorContacted(r, true, 'email', true)
     } catch (error) {
       console.error(error)
       setEmailNote({ id: r.id, text: "Couldn't attach the PDF, so a plain email (no attachment) was opened instead." })
@@ -1585,6 +1616,27 @@ function PurchaseOrdersTab({
                 )}
               </>
             )}
+            {canMarkVendorContacted(loggedInUser, r) &&
+              (isVendorContacted(r) ? (
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleSetVendorContacted(r, false)}
+                  disabled={poActionBusyId === r.id}
+                  title="Clear the mark, e.g. if it was set by mistake"
+                >
+                  Clear contacted
+                </button>
+              ) : (
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleSetVendorContacted(r, true, 'manual')}
+                  disabled={poActionBusyId === r.id}
+                  title="Use this when the vendor was contacted another way (phone, your own email, ...)"
+                >
+                  Mark vendor contacted
+                </button>
+              ))}
+            <VendorContactedBadge request={r} users={users} full />
           </div>
           {emailNote && emailNote.id === r.id && (
             <p className="sub" style={{ margin: '6px 0 0' }}>
@@ -2545,6 +2597,7 @@ function PurchaseOrdersTab({
                       )}
                       <td className="center-cell">
                         <PoStatusBadge request={r} />
+                        <VendorContactedBadge request={r} users={users} />
                       </td>
                       <td className="nowrap-cell">{findUserName(users, r.requested_by)}</td>
                       <td className="nowrap-cell">{next.who || '—'}</td>

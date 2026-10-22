@@ -72,6 +72,7 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **Transfer POs get the budget category "Inventory":** `add_transfer_po_budget_category.sql` (run after `add_transfer_po_request_stage.sql`) replaces `inv_private.create_transfer_po` so the PO a Stock Transfer writes carries the category named Inventory (found by name ignoring case, created if missing, so an admin can rename or re-point it under Admin). Only new transfers; older transfer POs keep no category.
 - **One-off clean-up scripts (not migrations):** `supabase/reset_purchase_orders.sql` deletes every PO (with lines, invoices, receipts, activity), payment batches, the
   whole PO History and the PO number counters, and restarts ids at 1; it does nothing until its first line is changed to `true`, pauses and then restores the
   PO History protections, and leaves parts, stock, vendors, users and the inventory History alone. Uploaded PDFs in Storage and ticket-system links to the deleted POs are
@@ -203,7 +204,7 @@ Most recent first, all on `main`:
   Audit tab (demo); security hardening (`security_0*.sql`).
 
 SQL added in this round (run in this order if not already run): `add_part_images`, `add_app_settings`, `add_transfer_pos`
-(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`, `add_vendor_deactivate`, `add_invoice_duplicate_guard`, `add_invoice_hold` (then re-run `add_po_history`), `add_transfer_po_request_stage` (after `add_transfer_pos`), `add_office_location`, `add_inventory_write_permission`, `add_part_datasheets`.
+(needs `ownership_location_01_schema.sql` first), `add_po_invoice_email`, `add_ticket_code_link`, `add_parts_history`, `add_vendor_approval_guard`, `add_po_prepaid`, `add_invoice_approval_flow`, `add_payment_batches`, `add_po_history`, `add_vendor_deactivate`, `add_invoice_duplicate_guard`, `add_invoice_hold` (then re-run `add_po_history`), `add_transfer_po_request_stage` (after `add_transfer_pos`), `add_office_location`, `add_inventory_write_permission`, `add_part_datasheets`, `add_transfer_po_budget_category` (after `add_transfer_po_request_stage`).
 
 ## What to build next
 

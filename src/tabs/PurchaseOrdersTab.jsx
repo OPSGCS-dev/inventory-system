@@ -497,7 +497,6 @@ function PurchaseOrdersTab({
     ...(shownPoNumber(r) && !r.po_number ? { ...r, po_number: shownPoNumber(r) } : r),
     requisitioner_name: requisitionerName(users, r),
     program_name: programName(r.program_id),
-    sub_projects: locationVisible(r) ? r.sub_projects : null,
   })
 
   // Collapsed by default -- the activity log is a secondary, rarely-needed
@@ -1216,12 +1215,10 @@ function PurchaseOrdersTab({
                         <th>PO #</th>
                         <td>{shownPoNumber(r) || `#${r.id}`}</td>
                       </tr>
-                      {locationVisible(r) && (
-                        <tr>
-                          <th>Location</th>
-                          <td>{r.sub_projects.name}</td>
-                        </tr>
-                      )}
+                      <tr>
+                        <th>Location</th>
+                        <td>{r.sub_projects?.name || r.projects?.name || '—'}</td>
+                      </tr>
                       <tr>
                         <th>Requisitioner</th>
                         <td>{requisitionerName(users, r) || '—'}</td>
@@ -1307,11 +1304,6 @@ function PurchaseOrdersTab({
                 return (
                   <div className="po-print-footer">
                     <div className="po-print-footer-left">
-                      {!locationVisible(r) && (
-                        <p>
-                          <strong>Site:</strong> {r.projects?.name || '—'}
-                        </p>
-                      )}
                       <p>
                         <strong>Notes:</strong> {r.notes || '—'}
                       </p>

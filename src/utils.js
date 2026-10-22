@@ -1105,9 +1105,9 @@ export function formatDateTime(value) {
   return d ? `${formatDate(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` : ''
 }
 
-// Whether a PO shows its Location (the optional sub_projects row under its site, e.g. one of Firelight Solar's
-// rooftops). A location that is only the site again (a ground-mount site) isn't asked for and isn't shown; it is
-// still stored on the PO so reports stay complete.
+// Whether the PO page and list show a Location (the optional sub_projects row under its site, e.g. one of Firelight
+// Solar's rooftops). A location that is only the site again (a ground-mount site) isn't asked for and isn't shown
+// there; it is still stored on the PO, and the PO document (print view, PDF) always carries a Location row.
 export function locationVisible(request) {
   return Boolean(request?.sub_projects?.name) && !locationIsSiteItself(request.sub_projects, request.projects)
 }

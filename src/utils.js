@@ -1106,10 +1106,29 @@ export function formatDateTime(value) {
 }
 
 // Whether a PO shows its Location (the optional sub_projects row under its site, e.g. one of Firelight Solar's
-// rooftops). A site with only one location -- a ground-mount site whose single location is the site itself --
-// doesn't ask for it and doesn't show it; the one location is still stored on the PO so reports stay complete.
-export function locationVisible(request, subProjects) {
-  return Boolean(request?.sub_projects?.name) && (subProjects || []).filter((sp) => sp.project_id === request.project_id).length > 1
+// rooftops). A location that is only the site again (a ground-mount site) isn't asked for and isn't shown; it is
+// still stored on the PO so reports stay complete.
+export function locationVisible(request) {
+  return Boolean(request?.sub_projects?.name) && !locationIsSiteItself(request.sub_projects, request.projects)
+}
+
+// A location that is just the site again (a ground-mount site's one location, "Alfred" under "SunE Alfred LP"):
+// the names match once "SunE", "LP", "Solar", punctuation and spacing are ignored and "Highway" is read as "Hwy".
+const siteNameCore = (name) =>
+  String(name || '')
+    .toLowerCase()
+    .replace(/highway/g, 'hwy')
+    .replace(/\b(sune|lp|llc|inc|ltd|solar|farm|the)\b/g, '')
+    .replace(/[^a-z0-9]/g, '')
+export function locationIsSiteItself(location, site) {
+  const a = siteNameCore(location?.name)
+  return a !== '' && a === siteNameCore(site?.name)
+}
+
+// Does a site ask which location a PO is for? Only when it has one that isn't the site itself (Firelight Solar's
+// rooftops do; a ground-mount site doesn't).
+export function siteNeedsLocation(site, subProjects) {
+  return (subProjects || []).some((sp) => sp.project_id === site?.id && !locationIsSiteItself(sp, site))
 }
 
 // A yyyy-mm-dd date column for display.

@@ -37,6 +37,7 @@ import {
   computePoProgressStage,
   poStatusText,
   locationVisible,
+  siteNeedsLocation,
   requisitionerName,
   lineTotal,
   filterPartsForSearch,
@@ -496,7 +497,7 @@ function PurchaseOrdersTab({
     ...(shownPoNumber(r) && !r.po_number ? { ...r, po_number: shownPoNumber(r) } : r),
     requisitioner_name: requisitionerName(users, r),
     program_name: programName(r.program_id),
-    sub_projects: locationVisible(r, subProjects) ? r.sub_projects : null,
+    sub_projects: locationVisible(r) ? r.sub_projects : null,
   })
 
   // Collapsed by default -- the activity log is a secondary, rarely-needed
@@ -895,7 +896,7 @@ function PurchaseOrdersTab({
                 <span className="po-detail-value">{programName(r.program_id)}</span>
               </div>
             )}
-            {locationVisible(r, subProjects) && (
+            {locationVisible(r) && (
               <div className="po-detail-meta-item">
                 <span className="po-detail-label">Location</span>
                 <span className="po-detail-value">{r.sub_projects.name}</span>
@@ -1215,7 +1216,7 @@ function PurchaseOrdersTab({
                         <th>PO #</th>
                         <td>{shownPoNumber(r) || `#${r.id}`}</td>
                       </tr>
-                      {locationVisible(r, subProjects) && (
+                      {locationVisible(r) && (
                         <tr>
                           <th>Location</th>
                           <td>{r.sub_projects.name}</td>
@@ -1306,7 +1307,7 @@ function PurchaseOrdersTab({
                 return (
                   <div className="po-print-footer">
                     <div className="po-print-footer-left">
-                      {!locationVisible(r, subProjects) && (
+                      {!locationVisible(r) && (
                         <p>
                           <strong>Site:</strong> {r.projects?.name || '—'}
                         </p>
@@ -1851,7 +1852,7 @@ function PurchaseOrdersTab({
             />
           )}
 
-          {availableSubProjects.length > 1 && (
+          {siteNeedsLocation(projects.find((p) => p.id === poDraftProjectId), subProjects) && (
             <div className="field-row" style={{ marginTop: 12 }}>
               <div>
                 <label htmlFor="po_draft_sub_project">Location</label>
@@ -2670,7 +2671,7 @@ function PurchaseOrdersTab({
                       {programsReady && <td className="nowrap-cell">{programName(r.program_id) || '—'}</td>}
                       <td className="nowrap-cell">
                         {r.projects?.name || '—'}
-                        {locationVisible(r, subProjects) && (
+                        {locationVisible(r) && (
                           <div className="sub" style={{ margin: 0 }}>
                             {r.sub_projects.name}
                           </div>

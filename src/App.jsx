@@ -40,6 +40,7 @@ import {
   canApproveInvoice,
   todayLocal,
   defaultBatchName,
+  siteNeedsLocation,
   paymentBatchLabel,
   canReviewInvoice,
   canReturnInvoice,
@@ -2190,8 +2191,10 @@ function App() {
       ? vendors.find((v) => v.name?.trim().toLowerCase() === vendorName)
       : null
 
+    // A location belongs to one site; if the link names both and they disagree, the location's site is the right one.
+    const matchedSite = matchedSubProject ? projects.find((p) => p.id === matchedSubProject.project_id) : null
     openPoDraftForm(null, {
-      projectId: matchedEntity?.id ?? null,
+      projectId: matchedSite?.id ?? matchedEntity?.id ?? null,
       subProjectId: matchedSubProject?.id ?? null,
       vendorId: matchedVendor?.id ?? null,
       vendorQuoteNumber: params.get('quote') ?? '',
@@ -2386,9 +2389,12 @@ function App() {
     if (!poDraftVendorId) errors.vendor = true
     if (!poDraftBudgetCategoryId) errors.budgetCategory = true
     if (validLines.length === 0) errors.lines = true
-    // A site with several locations has to say which; one with a single location uses it without asking.
-    if (entitySubProjects.length > 1 && !poDraftSubProjectId) errors.subProject = true
-    const subProjectToSave = entitySubProjects.length === 1 ? entitySubProjects[0].id : poDraftSubProjectId
+    // A site with real locations (Firelight Solar's rooftops) has to say which; a site whose only location is itself
+    // (ground-mount) uses that one without asking.
+    const draftSite = projects.find((p) => p.id === poDraftProjectId)
+    const needsLocation = siteNeedsLocation(draftSite, subProjects)
+    if (needsLocation && !poDraftSubProjectId) errors.subProject = true
+    const subProjectToSave = needsLocation ? poDraftSubProjectId : (entitySubProjects[0]?.id ?? null)
 
     if (Object.keys(errors).length > 0) {
       setPoDraftFieldErrors(errors)

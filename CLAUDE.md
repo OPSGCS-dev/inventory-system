@@ -59,7 +59,7 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 ## Working here
 
-- **Verify before saying done:** run `npx vite build`; for database logic, replay `build/test_copy/1_schema.sql` +
+- **Verify before saying done:** run `npx vite build` (it does NOT catch a variable that was never imported or passed in -- that is a white screen at runtime; also run `npx oxlint src -D no-undef` and ignore the browser globals it lists like document/console/TextEncoder, and render the tab you touched with the harness below); for database logic, replay `build/test_copy/1_schema.sql` +
   `2_seed.sql` + the new SQL in PGlite (in-memory Postgres; a working harness is in
   `Projects/ticket-system/.claude/scratch/harness`, which can also render the real tabs with a fake Supabase client).
 - Some files use CRLF line endings (`OwnershipTab`, `PhysicalLocationTab`, `utils.js`, ...). Edit in a way that

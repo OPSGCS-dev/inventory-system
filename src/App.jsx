@@ -5295,6 +5295,7 @@ function App() {
           openPoDraftForm={openPoDraftForm}
           closePoDraftForm={closePoDraftForm}
           poDraftId={poDraftId}
+          allPurchaseRequests={purchaseRequests}
           poLinks={poLinks}
           poLinksReady={poLinksReady}
           handleAddPoLink={handleAddPoLink}

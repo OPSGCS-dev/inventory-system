@@ -289,6 +289,7 @@ function PurchaseOrdersTab({
   openPoDraftForm,
   closePoDraftForm,
   poDraftId,
+  allPurchaseRequests,
   poLinks,
   poLinksReady,
   handleAddPoLink,
@@ -1692,7 +1693,7 @@ function PurchaseOrdersTab({
           {r.status !== 'draft' && (
             <RelatedPos
               request={r}
-              purchaseRequests={purchaseRequests}
+              purchaseRequests={allPurchaseRequests || []}
               poLinks={poLinks || []}
               poLinksReady={poLinksReady}
               canLink={canLinkPos(loggedInUser)}

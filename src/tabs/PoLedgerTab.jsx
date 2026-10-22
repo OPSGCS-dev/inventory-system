@@ -14,6 +14,7 @@ import {
   formatDate,
   formatDateTime,
   formatMoney,
+  descriptionOneLine,
 } from '../utils'
 import DateInput from './DateInput'
 

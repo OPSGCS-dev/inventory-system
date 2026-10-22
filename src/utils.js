@@ -214,11 +214,17 @@ export function workStatusEntries(request) {
 // Every kind of work on the PO is at its "done" end: all parts received (or the PO is
 // pre-paid) and all services complete. Closing a PO, the progress stepper and "what's
 // next" all go through this.
+// A pre-paid PO's parts can stand in for "Received" when closing -- unless some of them are spares for the
+// inventory: those only reach the stock count when the parts are marked Received, so they have to be.
+export function hasSparePartLines(request) {
+  return (request?.purchase_request_lines || []).some(lineCountsInStock)
+}
+
 export function isWorkFullyDone(request) {
   const entries = workStatusEntries(request)
   if (entries.length === 0) return false
   return entries.every((e) => {
-    if (e.kind === 'parts') return e.status === 'received' || (e.status === 'prepaid' && isPrepaid(request))
+    if (e.kind === 'parts') return e.status === 'received' || (e.status === 'prepaid' && isPrepaid(request) && !hasSparePartLines(request))
     return e.status === 'complete'
   })
 }

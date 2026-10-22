@@ -5007,6 +5007,7 @@ function App() {
           reloadStock={loadStock}
           focusGcsId={focusPart?.tab === 'location' ? focusPart.gcsId : null}
           onFocusDone={() => setFocusPart(null)}
+          incomingByKey={incomingByKey}
           onShowOwnership={(gcsId) => {
             setFocusPart({ tab: 'ownership', gcsId })
             setActiveTab('ownership')

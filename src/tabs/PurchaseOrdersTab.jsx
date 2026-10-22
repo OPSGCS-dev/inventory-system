@@ -62,6 +62,7 @@ import {
   isAdmin,
   isNotToExceed,
   isPrepaid,
+  hasSparePartLines,
   computeInvoicedTotal,
   isOverSpendingCap,
   canApproveVendors,
@@ -1579,6 +1580,11 @@ function PurchaseOrdersTab({
               <button className="btn-primary" onClick={() => handleClosePo(r)} disabled={busy}>
                 {busy ? 'Closing…' : 'Close PO'}
               </button>
+            )}
+            {r.status === 'issued' && isPrepaid(r) && partsStatus(r) === 'prepaid' && hasSparePartLines(r) && (
+              <span className="sub" style={{ margin: 0 }}>
+                Pre-paid, but its spare parts still have to be marked Received (Parts status) before it can close — that is what adds them to the stock count.
+              </span>
             )}
 
             {r.status === 'closed' && (

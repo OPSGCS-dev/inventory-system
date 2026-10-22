@@ -21,6 +21,9 @@ export const STORAGE = 'storage'
 export const BARN = 'barn'
 export const OFFICE = 'office'
 
+// The yellow behind units that are on an issued PO but not received yet (Ownership and Physical Location).
+export const INCOMING_BG = '#fff3a8'
+
 // An entity that keeps no parts on a site of its own (projects.has_site_stock = false: FLOPS, Firelight).
 // Before add_office_location.sql is run the column is missing, and every entity counts as having one.
 export const hasSiteStock = (project) => project?.has_site_stock !== false

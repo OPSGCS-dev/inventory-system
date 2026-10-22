@@ -3,7 +3,7 @@ import Papa from 'papaparse'
 import { supabase } from '../supabaseClient'
 import { shortProjectName } from '../utils'
 import {
-  BARN, OFFICE, STORAGE, allLocationKeys, downloadCsv, hasSiteStock, locLabel, offSiteUnits, parseLocKey, qtyAt, rpcErrorText, siteKey,
+  BARN, INCOMING_BG, OFFICE, STORAGE, allLocationKeys, downloadCsv, hasSiteStock, locLabel, offSiteUnits, parseLocKey, qtyAt, rpcErrorText, siteKey,
 } from '../stockUtils'
 
 // Where every part physically sits: Oshawa, the Barn, the Office, or on an entity's own site (an entity
@@ -25,6 +25,7 @@ function PhysicalLocationTab({
   focusGcsId,
   onFocusDone,
   onShowOwnership,
+  incomingByKey,
 }) {
   const [view, setView] = useState('places')
   const [mode, setMode] = useState(null) // null | 'move' | 'use'
@@ -83,6 +84,32 @@ function PhysicalLocationTab({
     setMode(mode === next ? null : next)
   }
 
+  // Spares on issued POs that haven't been received yet. When the PO's parts are received they land at the
+  // entity's home place (its own site, or Oshawa if it has none), so that is where they are shown, in yellow:
+  // gcs -> place key -> { qty, pos }. Not shown while moving or using units, which work on real stock only.
+  const incomingByPlace = useMemo(() => {
+    const map = new Map()
+    if (!incomingByKey) return map
+    for (const [key, entry] of incomingByKey) {
+      const [pid, gcs] = key.split(':').map(Number)
+      const project = projects.find((p) => p.id === pid)
+      if (!project) continue
+      const place = hasSiteStock(project) ? siteKey(pid) : STORAGE
+      const byPlace = map.get(gcs) || new Map()
+      const cur = byPlace.get(place) || { qty: 0, pos: [] }
+      cur.qty += entry.qty
+      cur.pos.push(...entry.pos)
+      byPlace.set(place, cur)
+      map.set(gcs, byPlace)
+    }
+    return map
+  }, [incomingByKey, projects])
+  const incomingHere = (item, k) => (mode ? null : incomingByPlace.get(item.gcs_id)?.get(k) || null)
+  const incomingTitle = (inc) =>
+    `Includes ${inc.pos.map((p) => `${p.qty} on ${p.label}`).join(', ')} — issued but not received yet, so not on the shelf`
+  const hasIncoming = !mode && items.some((i) => incomingByPlace.has(i.gcs_id))
+
+  const incomingExtra = (item) => (mode ? 0 : keys.reduce((s, k) => s + (incomingByPlace.get(item.gcs_id)?.get(k)?.qty || 0), 0))
   const occupied = (item) => keys.filter((k) => qtyAt(item, k) > 0)
 
   // ---- Update Location ----
@@ -242,6 +269,9 @@ function PhysicalLocationTab({
             {!mode && (
               <p className="sub" style={{ margin: 0 }}>
                 Where each part physically is: Oshawa, the Barn, the Office, or an entity&apos;s own site (which can only hold parts that entity owns). Click a part to see who owns it.
+                {hasIncoming && (
+                  <> <span style={{ background: INCOMING_BG, padding: '0 6px', borderRadius: 3 }}>Yellow</span> numbers include spares on issued POs that haven&apos;t been received yet; they are counted where they will land (the entity&apos;s own site, or Oshawa), but aren&apos;t on the shelf until the PO&apos;s parts are marked received.</>
+                )}
               </p>
             )}
             {mode === 'move' && (
@@ -316,13 +346,15 @@ function PhysicalLocationTab({
                           <td><PartDescription text={item.part?.description || '—'} /></td>
                           {placeCols.map((k) => {
                             const q = qtyAt(item, k)
+                            const inc = incomingHere(item, k)
                             return (
-                              <td key={k} className="center-cell" style={placeFilter === k && q > 0 ? { background: '#dbeafe' } : undefined}>
-                                {q > 0 ? q : '—'}
+                              <td key={k} className="center-cell" title={inc ? incomingTitle(inc) : undefined}
+                                style={inc ? { background: INCOMING_BG } : placeFilter === k && q > 0 ? { background: '#dbeafe' } : undefined}>
+                                {q + (inc ? inc.qty : 0) > 0 ? q + (inc ? inc.qty : 0) : '—'}
                               </td>
                             )
                           })}
-                          <td className="center-cell total-col">{total}</td>
+                          <td className="center-cell total-col" style={incomingExtra(item) > 0 ? { background: INCOMING_BG } : undefined}>{total + incomingExtra(item)}</td>
                           {mode === 'move' && (
                             <>
                               <td className="center-cell">

@@ -2,11 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '../supabaseClient'
 import { computeTargetSum, shortProjectName, normalizeHeader } from '../utils'
-import { downloadCsv, hasSiteStock, offSiteUnits, ownedBy, rpcErrorText, totalOwned } from '../stockUtils'
+import { INCOMING_BG, downloadCsv, hasSiteStock, offSiteUnits, ownedBy, rpcErrorText, totalOwned } from '../stockUtils'
 
 import PartDescription from './PartDescription'
-
-const INCOMING_BG = '#fff3a8'
 
 // Who owns how many of each part. Counts and uploads change ownership; Stock Transfer
 // moves ownership between entities (and, in the same step, where the units are).

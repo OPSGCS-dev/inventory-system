@@ -1,7 +1,7 @@
 // Turns rows of the PO audit trail (po_history, written by database triggers -- see
 // supabase/add_po_history.sql) into text a person can read: what happened, and which fields
 // changed from what to what. Pure functions, no React or network, so they can be run from Node.
-import { findUserName, formatMoney, paymentStatusLabel, poStatusLabel, workStatusLabel } from './utils.js'
+import { findUserName, formatMoney, paymentStatusLabel, poStatusLabel, workStatusLabel, formatDateTime, formatDate } from './utils.js'
 
 export const PO_HISTORY_CATEGORIES = {
   request: 'Request',
@@ -174,10 +174,10 @@ export function formatValue(key, value, ctx = {}) {
   if (key === 'payment_batch_id') return `batch #${value}`
   if (key === 'matched_receipt_id') return `receipt #${value}`
   if (key.endsWith('_by') && typeof value === 'number') return findUserName(ctx.users, value) || `user #${value}`
-  if (key.endsWith('_at')) return Number.isNaN(Date.parse(value)) ? String(value) : new Date(value).toLocaleString()
+  if (key.endsWith('_at')) return Number.isNaN(Date.parse(value)) ? String(value) : formatDateTime(value)
   if (key === 'paid_date') {
     const [y, m, d] = String(value).slice(0, 10).split('-').map(Number)
-    return new Date(y, m - 1, d).toLocaleDateString()
+    return formatDate(y, m - 1, d)
   }
   if (FILE_FIELDS.has(key)) return 'a file'
   if (MONEY_FIELDS.has(key)) return formatMoney(value)
@@ -353,7 +353,7 @@ export const poLabelOf = (row) => row.po_number || (row.purchase_request_id ? `R
 export function historyCsvRow(row, ctx = {}) {
   return {
     'Seq': row.seq,
-    'When': new Date(row.happened_at).toLocaleString(),
+    'When': formatDateTime(row.happened_at),
     'When (UTC)': row.happened_at,
     'Who': row.actor_name || 'System',
     'Category': PO_HISTORY_CATEGORIES[row.category] || row.category,

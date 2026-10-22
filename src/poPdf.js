@@ -15,6 +15,7 @@ import {
   isOverSpendingCap,
   lineTotal,
   poHasParts,
+  formatDate,
 } from './utils.js'
 
 // The standard PDF fonts only cover Latin-1: swap the usual offenders (dashes,
@@ -81,7 +82,7 @@ export async function buildPoPdf(request, stamp = null) {
     styles: { fontSize: 9, cellPadding: 3, textColor: INK, lineColor: [200, 200, 200] },
     columnStyles: { 0: { fontStyle: 'bold', fillColor: [242, 242, 242], cellWidth: 110 } },
     body: [
-      ['PO Date', new Date(request.issued_at || Date.now()).toLocaleDateString()],
+      ['PO Date', formatDate(request.issued_at || Date.now())],
       ['PO #', clean(poLabel(request))],
       ['Requisitioner', clean(request.requisitioner_name || '-')],
       ['Budget Category', clean(budgetCategoryLabel(request))],
@@ -244,7 +245,7 @@ export async function buildPoPdf(request, stamp = null) {
       text(stamp.name || '', M + 2, ruleY - 5)
     }
     doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(INK)
-    text(stamp.date ? stamp.date.toLocaleDateString() : '', dateX + 2, ruleY - 5)
+    text(stamp.date ? formatDate(stamp.date) : '', dateX + 2, ruleY - 5)
     doc.setDrawColor(60).setLineWidth(0.6)
     doc.line(M, ruleY, M + signW, ruleY)
     doc.line(dateX, ruleY, dateX + 110, ruleY)

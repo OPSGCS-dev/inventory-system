@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '../supabaseClient'
 import { downloadCsv } from '../stockUtils'
+import { formatDateTime } from '../utils'
 
 // The Suggestions tab. Anyone signed in can send in something they dislike, something that's broken, or an idea
 // (add_suggestions.sql); the admin sees everyone's in a list, sorts them out by status and can reply. Everyone else
@@ -36,7 +37,7 @@ const SUGGESTION_STATUSES = {
 const OPEN_STATUSES = ['new', 'reviewing', 'planned']
 const MAX_LEN = 4000
 
-const when = (iso) => (iso ? new Date(iso).toLocaleString() : '')
+const when = (iso) => (iso ? formatDateTime(iso) : '')
 
 // A missing table means add_suggestions.sql hasn't been run yet.
 const isMissingTable = (error) =>

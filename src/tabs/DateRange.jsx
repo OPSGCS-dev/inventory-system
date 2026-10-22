@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import DateInput from './DateInput'
 
 // A timestamp as the local calendar day, YYYY-MM-DD (what a date input holds).
 export const localDay = (iso) => (iso ? new Date(iso).toLocaleDateString('en-CA') : '')
@@ -45,11 +46,11 @@ export function DateRangeFilter({ range, what = 'dated' }) {
     <>
       <label className="po-date-filter" title={`Show items ${what} on or after this date`}>
         From
-        <input type="date" value={range.from} max={range.to || undefined} onChange={(e) => range.setFrom(e.target.value)} />
+        <DateInput value={range.from} max={range.to || undefined} onChange={range.setFrom} />
       </label>
       <label className="po-date-filter" title={`Show items ${what} on or before this date`}>
         To
-        <input type="date" value={range.to} min={range.from || undefined} onChange={(e) => range.setTo(e.target.value)} />
+        <DateInput value={range.to} min={range.from || undefined} onChange={range.setTo} />
       </label>
       {range.filtered && (
         <button type="button" className="btn-secondary" onClick={range.clear}>

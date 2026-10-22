@@ -12,6 +12,8 @@ import {
   poLabelOf,
   summarize,
 } from '../poHistory'
+import { formatDateTime } from '../utils'
+import DateInput from './DateInput'
 
 // The audit trail for purchase orders: one row per step in a PO's life -- who did what, and when --
 // with exactly which fields changed. It is written by database triggers (supabase/add_po_history.sql),
@@ -203,7 +205,7 @@ function PoHistoryTab({ users, projects, vendors, purchaseRequests, focus, onCle
           {verify.error
             ? verify.error
             : verify.result.ok
-            ? `✓ Integrity verified ${verify.at.toLocaleString()}: all ${verify.result.checked.toLocaleString()} records are intact and in unbroken order.`
+            ? `✓ Integrity verified ${formatDateTime(verify.at)}: all ${verify.result.checked.toLocaleString()} records are intact and in unbroken order.`
             : `⚠ The record chain is broken at record ${verify.result.bad_seq}: ${verify.result.reason} ${verify.result.checked.toLocaleString()} earlier records were fine. Tell an administrator immediately.`}
         </div>
       )}
@@ -276,11 +278,11 @@ function PoHistoryTab({ users, projects, vendors, purchaseRequests, focus, onCle
         </select>
         <label className="po-date-filter">
           From
-          <input type="date" value={draft.from} max={draft.to || undefined} onChange={set('from')} />
+          <DateInput value={draft.from} max={draft.to || undefined} onChange={(v) => setDraft((d) => ({ ...d, from: v }))} />
         </label>
         <label className="po-date-filter">
           To
-          <input type="date" value={draft.to} min={draft.from || undefined} onChange={set('to')} />
+          <DateInput value={draft.to} min={draft.from || undefined} onChange={(v) => setDraft((d) => ({ ...d, to: v }))} />
         </label>
         {Object.values(draft).some(Boolean) && (
           <button type="button" className="btn-secondary" onClick={() => setDraft(EMPTY)}>
@@ -318,7 +320,7 @@ function PoHistoryTab({ users, projects, vendors, purchaseRequests, focus, onCle
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
-                    <td className="nowrap-cell">{new Date(r.happened_at).toLocaleString()}</td>
+                    <td className="nowrap-cell">{formatDateTime(r.happened_at)}</td>
                     <td>{r.actor_name || 'System'}</td>
                     <td>
                       {eventLabel(r.event)}

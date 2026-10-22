@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
+import { formatDateTime } from '../utils'
 
 // Change history for the Master List: one row per add / edit / delete of a part, with who made
 // it and exactly which fields changed. Written by a database trigger (supabase/add_parts_history.sql),
@@ -173,7 +174,7 @@ function PartsHistoryPanel() {
               <tbody>
                 {range.listed.map((r) => (
                   <tr key={r.id}>
-                    <td className="nowrap-cell">{new Date(r.changed_at).toLocaleString()}</td>
+                    <td className="nowrap-cell">{formatDateTime(r.changed_at)}</td>
                     <td>{r.changed_by_name || 'System'}</td>
                     <td>{ACTION_LABELS[r.action] || r.action}</td>
                     <td>

@@ -988,3 +988,10 @@ th.center-cell .colfilter-head { justify-content: center; }
 td .vendor-contact { display: block; margin-top: 4px; }
 .vendor-contact-yes { color: var(--success); }
 .vendor-contact-no { color: var(--warn); }
+
+/* Date box that always reads yyyy/mm/dd (DateInput.jsx): a text box, a calendar button and a hidden native picker */
+.date-input { position: relative; display: inline-flex; align-items: center; gap: 2px; }
+.date-input input[type="text"] { width: 104px; padding: 4px 6px; }
+.date-input-btn { padding: 2px 4px; border: none; background: none; cursor: pointer; font-size: 14px; line-height: 1; }
+.date-input-btn:disabled { cursor: default; opacity: 0.5; }
+.date-input-native { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }

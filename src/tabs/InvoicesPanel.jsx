@@ -27,6 +27,7 @@ import {
   formatMoney,
   isPrepaid,
   canSetPrepaid,
+  formatDate,
 } from '../utils'
 
 // Why an invoice is on hold, who held it and when.
@@ -35,7 +36,7 @@ function HoldNote({ inv, users }) {
     <div>
       <span style={{ color: 'var(--warn)', fontWeight: 600 }}>On hold</span>
       <div className="sub" style={{ margin: 0 }}>
-        {inv.hold_reason || '—'} — {findUserName(users, inv.held_by)}, {new Date(inv.held_at).toLocaleDateString()}
+        {inv.hold_reason || '—'} — {findUserName(users, inv.held_by)}, {formatDate(inv.held_at)}
       </div>
     </div>
   )
@@ -263,7 +264,7 @@ function InvoicesPanel({
                       {row.receipt ? (
                         <>
                           {findUserName(users, row.receipt.uploaded_by)} —{' '}
-                          {new Date(row.receipt.uploaded_at).toLocaleDateString()}
+                          {formatDate(row.receipt.uploaded_at)}
                           {row.receipt.file_url && (
                             <>
                               {' '}
@@ -292,7 +293,7 @@ function InvoicesPanel({
                               {unmatchedReceipts.map((r) => (
                                 <option value={r.id} key={r.id}>
                                   {findUserName(users, r.uploaded_by)} —{' '}
-                                  {new Date(r.uploaded_at).toLocaleDateString()}
+                                  {formatDate(r.uploaded_at)}
                                 </option>
                               ))}
                             </select>
@@ -329,7 +330,7 @@ function InvoicesPanel({
                           <br />
                           <span className="sub" style={{ margin: 0 }}>
                             {findUserName(users, row.invoice.uploaded_by)} —{' '}
-                            {new Date(row.invoice.uploaded_at).toLocaleDateString()}
+                            {formatDate(row.invoice.uploaded_at)}
                           </span>
                           {row.invoice.file_url && (
                             <>
@@ -387,7 +388,7 @@ function InvoicesPanel({
                           <span style={{ color: 'var(--danger)', fontWeight: 600 }}>Sent back</span>
                           <span className="sub" style={{ margin: 0 }}>
                             {inv.return_reason || '—'} — {findUserName(users, inv.returned_by)},{' '}
-                            {new Date(inv.returned_at).toLocaleDateString()}
+                            {formatDate(inv.returned_at)}
                           </span>
                           {canResubmitInvoice(loggedInUser, inv, request) && (
                             <div>
@@ -438,7 +439,7 @@ function InvoicesPanel({
                       ) : (
                         <>
                           ✓ {findUserName(users, inv.reviewed_by)}
-                          {inv.reviewed_at ? ` — ${new Date(inv.reviewed_at).toLocaleDateString()}` : ''}
+                          {inv.reviewed_at ? ` — ${formatDate(inv.reviewed_at)}` : ''}
                           {canUndoReview(loggedInUser, inv, request) && (
                             <>
                               {' '}
@@ -496,7 +497,7 @@ function InvoicesPanel({
                       ) : (
                         <>
                           ✓ {findUserName(users, inv.approved_by)}
-                          {inv.approved_at ? ` — ${new Date(inv.approved_at).toLocaleDateString()}` : ''}
+                          {inv.approved_at ? ` — ${formatDate(inv.approved_at)}` : ''}
                           {batchOf(inv) && (
                             <div className="sub" style={{ margin: 0 }}>
                               {paymentBatchLabel(batchOf(inv))}
@@ -545,7 +546,7 @@ function InvoicesPanel({
                         )
                       ) : stage === 'paid' ? (
                         <>
-                          Paid — {inv.paid_date ? formatDateOnly(inv.paid_date) : new Date(inv.paid_at).toLocaleDateString()}
+                          Paid — {inv.paid_date ? formatDateOnly(inv.paid_date) : formatDate(inv.paid_at)}
                           {inv.payment_reference && (
                             <>
                               <br />

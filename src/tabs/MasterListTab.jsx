@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { emptyFilters, shortProjectName } from '../utils'
+import { emptyFilters, shortProjectName, formatDateTime } from '../utils'
 import PartsHistoryPanel from './PartsHistoryPanel'
 
 // Small document icon. Opens the part's datasheet (a link or an uploaded PDF) in a new tab.
@@ -294,7 +294,7 @@ function MasterListTab({
       <div className="card">
         <div className="card-header">
           <h2>
-            Last Update: {lastPartsUpdate ? new Date(lastPartsUpdate).toLocaleString() : '—'}
+            Last Update: {lastPartsUpdate ? formatDateTime(lastPartsUpdate) : '—'}
           </h2>
           <div className="header-actions">
             {!editMode && hasActiveFilter && (

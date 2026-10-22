@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import Papa from 'papaparse'
 import { downloadCsv } from '../stockUtils'
-import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText } from '../utils'
+import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText, formatDate } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
 import PaymentConfirm from './PaymentConfirm'
@@ -71,7 +71,7 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
       'Invoice #': invoice.invoice_number || '',
       Amount: Number(invoice.amount || 0).toFixed(2),
       Currency: request.currency || 'CAD',
-      'Approved for payment': invoice.approved_at ? new Date(invoice.approved_at).toLocaleDateString() : '',
+      'Approved for payment': invoice.approved_at ? formatDate(invoice.approved_at) : '',
       'On hold': isInvoiceHeld(invoice) ? invoice.hold_reason || 'Yes' : '',
       'Invoice file': invoice.file_url || '',
     }))
@@ -115,7 +115,7 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
       {chosenBatch && (
         <p className="sub" style={{ margin: '0 0 8px' }}>
           <strong>{paymentBatchLabel(chosenBatch.batch)}</strong> — approved by {findUserName(users, chosenBatch.batch.approved_by)} on{' '}
-          {new Date(chosenBatch.batch.approved_at).toLocaleDateString()}: {chosenBatch.items.length} invoice
+          {formatDate(chosenBatch.batch.approved_at)}: {chosenBatch.items.length} invoice
           {chosenBatch.items.length === 1 ? '' : 's'}, {totalsByCurrencyText(amountsOf(chosenBatch.items))},{' '}
           {chosenBatch.items.filter(({ invoice }) => invoice.paid).length} paid so far.
         </p>
@@ -170,7 +170,7 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
                   <td>{request.vendors?.name || '—'}</td>
                   {showBatches && <td>{batchOf(invoice) ? paymentBatchLabel(batchOf(invoice)) : '—'}</td>}
                   <td>
-                    {invoice.approved_at ? new Date(invoice.approved_at).toLocaleDateString() : '—'}
+                    {invoice.approved_at ? formatDate(invoice.approved_at) : '—'}
                     {invoice.approved_by && (
                       <div className="sub" style={{ margin: 0 }}>
                         {findUserName(users, invoice.approved_by)}

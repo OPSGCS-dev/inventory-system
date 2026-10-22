@@ -72,6 +72,8 @@ import {
   vendorContactReady,
   isVendorContacted,
   canMarkVendorContacted,
+  formatDateTime,
+  formatDate,
 } from '../utils'
 import InvoicesPanel from './InvoicesPanel'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
@@ -82,6 +84,7 @@ import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnF
 import InvoiceMatchChip from './InvoiceMatchChip'
 import VendorRequestPanel from './VendorRequestPanel'
 import VendorsToApproveTable from './VendorsToApproveTable'
+import DateInput from './DateInput'
 
 function formatTicketNumber(n) {
   return `TK-${String(n).padStart(5, '0')}`
@@ -184,7 +187,7 @@ function VendorContactedBadge({ request, users, full }) {
     )
   }
   const who = request.vendor_contacted_by ? findUserName(users, request.vendor_contacted_by) : ''
-  const when = new Date(request.vendor_contacted_at).toLocaleString()
+  const when = formatDateTime(request.vendor_contacted_at)
   const how = request.vendor_contacted_how === 'email' ? 'emailed from the site' : 'contacted outside the site'
   const detail = `Vendor ${how}${who ? ' by ' + who : ''}, ${when}`
   return (
@@ -209,7 +212,7 @@ function VoidedAttachments({ request, users }) {
         No file
       </span>
     )
-  const added = (row) => findUserName(users, row.uploaded_by) + (row.uploaded_at ? ' — ' + new Date(row.uploaded_at).toLocaleDateString() : '')
+  const added = (row) => findUserName(users, row.uploaded_by) + (row.uploaded_at ? ' — ' + formatDate(row.uploaded_at) : '')
   return (
     <div className="card" style={{ marginTop: 12 }}>
       <div className="card-header">
@@ -422,7 +425,7 @@ function PurchaseOrdersTab({
       {
         key: 'date',
         label: 'Date',
-        values: (r) => (r.created_at ? new Date(r.created_at).toLocaleDateString() : ''),
+        values: (r) => (r.created_at ? formatDate(r.created_at) : ''),
         sort: (a, b) => (Date.parse(b) || 0) - (Date.parse(a) || 0),
       },
       { key: 'description', label: 'Description', values: (r) => r.description },
@@ -898,7 +901,7 @@ function PurchaseOrdersTab({
                 <span className="po-detail-label">Voided</span>
                 <span className="po-detail-value" style={{ color: 'var(--danger)' }}>
                   {findUserName(users, r.voided_by)}
-                  {r.voided_at ? ` — ${new Date(r.voided_at).toLocaleString()}` : ''}
+                  {r.voided_at ? ` — ${formatDateTime(r.voided_at)}` : ''}
                   {r.void_reason ? `: ${r.void_reason}` : ''}
                 </span>
               </div>
@@ -908,7 +911,7 @@ function PurchaseOrdersTab({
                 <span className="po-detail-label">Rejected</span>
                 <span className="po-detail-value" style={{ color: 'var(--danger)' }}>
                   {findUserName(users, r.rejected_by)}
-                  {r.rejected_at ? ` — ${new Date(r.rejected_at).toLocaleString()}` : ''}
+                  {r.rejected_at ? ` — ${formatDateTime(r.rejected_at)}` : ''}
                   {r.rejection_reason ? `: ${r.rejection_reason}` : ''}
                 </span>
               </div>
@@ -918,7 +921,7 @@ function PurchaseOrdersTab({
                 <span className="po-detail-label">On Hold</span>
                 <span className="po-detail-value">
                   {findUserName(users, r.held_by)}
-                  {r.held_at ? ` — ${new Date(r.held_at).toLocaleString()}` : ''}
+                  {r.held_at ? ` — ${formatDateTime(r.held_at)}` : ''}
                   {r.hold_reason ? `: ${r.hold_reason}` : ''}
                 </span>
               </div>
@@ -969,9 +972,9 @@ function PurchaseOrdersTab({
                 <th>Requested</th>
                 <td>
                   {r.requested_by
-                    ? `${findUserName(users, r.requested_by)} — ${new Date(
+                    ? `${findUserName(users, r.requested_by)} — ${formatDateTime(
                         r.submitted_at
-                      ).toLocaleString()}`
+                      )}`
                     : '—'}
                 </td>
               </tr>
@@ -979,9 +982,9 @@ function PurchaseOrdersTab({
                 <th>Approved</th>
                 <td>
                   {r.approved_by
-                    ? `${findUserName(users, r.approved_by)} — ${new Date(
+                    ? `${findUserName(users, r.approved_by)} — ${formatDateTime(
                         r.approved_at
-                      ).toLocaleString()}`
+                      )}`
                     : '—'}
                 </td>
               </tr>
@@ -989,7 +992,7 @@ function PurchaseOrdersTab({
                 <th>Issued</th>
                 <td>
                   {r.issued_by
-                    ? `${findUserName(users, r.issued_by)} — ${new Date(r.issued_at).toLocaleString()}`
+                    ? `${findUserName(users, r.issued_by)} — ${formatDateTime(r.issued_at)}`
                     : '—'}
                 </td>
               </tr>
@@ -998,9 +1001,9 @@ function PurchaseOrdersTab({
                   <th>Completed</th>
                   <td>
                     {r.service_completed_by
-                      ? `${findUserName(users, r.service_completed_by)} — ${new Date(
+                      ? `${findUserName(users, r.service_completed_by)} — ${formatDateTime(
                           r.service_completed_at
-                        ).toLocaleString()}`
+                        )}`
                       : '—'}
                   </td>
                 </tr>
@@ -1014,7 +1017,7 @@ function PurchaseOrdersTab({
                 if (computePaymentStatus(r) === 'paid') {
                   const entry = poActivity.find((a) => /→ Paid$/.test(a.note || ''))
                   if (entry) {
-                    text = `${findUserName(users, entry.user_id)} — ${new Date(entry.created_at).toLocaleString()}`
+                    text = `${findUserName(users, entry.user_id)} — ${formatDateTime(entry.created_at)}`
                   } else if (poActivityLoading) {
                     text = 'Loading…'
                   }
@@ -1084,7 +1087,7 @@ function PurchaseOrdersTab({
                   <th>Closed</th>
                   <td>
                     {r.closed_by
-                      ? `${findUserName(users, r.closed_by)} — ${new Date(r.closed_at).toLocaleString()}`
+                      ? `${findUserName(users, r.closed_by)} — ${formatDateTime(r.closed_at)}`
                       : '—'}
                   </td>
                 </tr>
@@ -1174,8 +1177,8 @@ function PurchaseOrdersTab({
                         <th>PO Date</th>
                         <td>
                           {r.issued_at
-                            ? new Date(r.issued_at).toLocaleDateString()
-                            : new Date().toLocaleDateString()}
+                            ? formatDate(r.issued_at)
+                            : formatDate(new Date())}
                         </td>
                       </tr>
                       <tr>
@@ -1369,7 +1372,7 @@ function PurchaseOrdersTab({
                     </div>
                     <div className="po-signed-block">
                       <div className="po-signed-mark">
-                        <span className="po-signed-date">{stamp.date ? stamp.date.toLocaleDateString() : ''}</span>
+                        <span className="po-signed-date">{stamp.date ? formatDate(stamp.date) : ''}</span>
                       </div>
                       <div className="po-signed-label">Date</div>
                     </div>
@@ -1397,7 +1400,7 @@ function PurchaseOrdersTab({
                   poActivity.map((a) => (
                     <div key={a.id} className="po-activity-item">
                       <div className="po-activity-meta">
-                        {findUserName(users, a.user_id)} — {new Date(a.created_at).toLocaleString()}
+                        {findUserName(users, a.user_id)} — {formatDateTime(a.created_at)}
                       </div>
                       <div className="po-activity-note">{a.note}</div>
                     </div>
@@ -2458,11 +2461,11 @@ function PurchaseOrdersTab({
           <div className="header-actions">
             <label className="po-date-filter" title="Show POs created on or after this date">
               From
-              <input type="date" value={poDateFrom} max={poDateTo || undefined} onChange={(e) => setPoDateFrom(e.target.value)} />
+              <DateInput value={poDateFrom} max={poDateTo || undefined} onChange={setPoDateFrom} />
             </label>
             <label className="po-date-filter" title="Show POs created on or before this date">
               To
-              <input type="date" value={poDateTo} min={poDateFrom || undefined} onChange={(e) => setPoDateTo(e.target.value)} />
+              <DateInput value={poDateTo} min={poDateFrom || undefined} onChange={setPoDateTo} />
             </label>
             {(poDateFrom || poDateTo) && (
               <button
@@ -2587,7 +2590,7 @@ function PurchaseOrdersTab({
                   return (
                     <tr key={r.id}>
                       <td className="row-head nowrap-cell">{r.id}</td>
-                      <td className="nowrap-cell">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
+                      <td className="nowrap-cell">{r.created_at ? formatDate(r.created_at) : '—'}</td>
                       <td className="nowrap-cell" title={r.description || undefined}>
                         {r.description ? truncate(r.description, PO_DESCRIPTION_MAX_LEN) : '—'}
                       </td>

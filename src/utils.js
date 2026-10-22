@@ -1077,15 +1077,44 @@ export function todayLocal() {
   return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 }
 
-// A yyyy-mm-dd date column for display. Parsed as a local date, so it can't slip a day the
-// way `new Date('2026-10-09')` (read as UTC) does west of Greenwich.
-export function formatDateOnly(value) {
-  if (!value) return ''
-  const [y, m, d] = String(value).slice(0, 10).split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString()
+// Every date on the site is shown as yyyy/mm/dd (and a time as hh:mm, 24-hour) -- one place, so it stays
+// that way. Takes a Date, an ISO timestamp, or a yyyy-mm-dd date column. A bare yyyy-mm-dd is read as a
+// local date, so it can't slip a day the way `new Date('2026-10-09')` (read as UTC) does west of Greenwich.
+const pad2 = (n) => String(n).padStart(2, '0')
+function toDate(value) {
+  if (!value) return null
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
+  const bare = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value))
+  const d = bare ? new Date(Number(bare[1]), Number(bare[2]) - 1, Number(bare[3])) : new Date(value)
+  return Number.isNaN(d.getTime()) ? null : d
 }
 
-// How a payment batch is shown: its name and number, e.g. "Payment run 2026-10-15 (#7)".
+export function formatDate(value) {
+  const d = toDate(value)
+  return d ? `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}` : ''
+}
+
+export function formatDateTime(value) {
+  const d = toDate(value)
+  return d ? `${formatDate(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` : ''
+}
+
+// A yyyy-mm-dd date column for display.
+export const formatDateOnly = formatDate
+
+// What a date input holds (yyyy-mm-dd) from the yyyy/mm/dd a person types; '' if it isn't a real date.
+export function parseTypedDate(text) {
+  const m = /^\s*(\d{4})[/.\-\s]+(\d{1,2})[/.\-\s]+(\d{1,2})\s*$/.exec(String(text || ''))
+  if (!m) return ''
+  const y = Number(m[1])
+  const mo = Number(m[2])
+  const d = Number(m[3])
+  const check = new Date(y, mo - 1, d)
+  if (check.getFullYear() !== y || check.getMonth() !== mo - 1 || check.getDate() !== d) return ''
+  return `${y}-${pad2(mo)}-${pad2(d)}`
+}
+
+// How a payment batch is shown: its name and number, e.g. "Payment run 2026/10/15 (#7)".
 export function paymentBatchLabel(batch) {
   return `${batch.name} (#${batch.id})`
 }

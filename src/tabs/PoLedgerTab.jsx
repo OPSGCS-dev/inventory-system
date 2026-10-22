@@ -11,7 +11,10 @@ import {
   lineTotal,
   lineLedgerCategory,
   LEDGER_CATEGORY_LABELS,
+  formatDate,
+  formatDateTime,
 } from '../utils'
+import DateInput from './DateInput'
 
 // Which POs the ledger lists by default: the ones that were actually issued to
 // a vendor (money committed), plus voided ones so a cancelled PO is still
@@ -25,7 +28,7 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'all', label: 'All (incl. drafts)' },
 ]
 
-const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString() : '')
+const fmtDate = (iso) => (iso ? formatDate(iso) : '')
 const fmtMoney = (n) => `$${Number(n || 0).toFixed(2)}`
 
 function lineLabel(line) {
@@ -75,6 +78,7 @@ function buildRows(requests) {
           .filter((inv) => inv.paid)
           .map((inv) => inv.paid_date || (inv.paid_at ? inv.paid_at.slice(0, 10) : ''))
           .filter(Boolean)
+          .map(formatDate)
           .join(', '),
         paymentRefs: invoices.map((inv) => inv.payment_reference).filter(Boolean).join(', '),
         issuedAt: r.issued_at,
@@ -259,10 +263,10 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
         </select>
         <label className="sub" style={{ margin: 0 }}>
           Issued from{' '}
-          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          <DateInput value={fromDate} onChange={setFromDate} />
         </label>
         <label className="sub" style={{ margin: 0 }}>
-          to <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          to <DateInput value={toDate} onChange={setToDate} />
         </label>
         <input
           type="text"
@@ -350,7 +354,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
                           {voided && (
                             <div className="status err" style={{ marginTop: 0 }}>
                               Voided by {findUserName(users, r.voided_by)}
-                              {r.voided_at ? ` — ${new Date(r.voided_at).toLocaleString()}` : ''}
+                              {r.voided_at ? ` — ${formatDateTime(r.voided_at)}` : ''}
                               {r.void_reason ? `: ${r.void_reason}` : ''}
                             </div>
                           )}
@@ -363,7 +367,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
                               <tbody>
                                 {activity[r.id].map((a) => (
                                   <tr key={a.id}>
-                                    <td className="row-head">{new Date(a.created_at).toLocaleString()}</td>
+                                    <td className="row-head">{formatDateTime(a.created_at)}</td>
                                     <td>{findUserName(users, a.user_id)}</td>
                                     <td style={{ whiteSpace: 'pre-line' }}>{a.note}</td>
                                   </tr>

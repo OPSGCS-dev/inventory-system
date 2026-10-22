@@ -39,6 +39,7 @@ import {
   canManagePayment,
   canApproveInvoice,
   todayLocal,
+  formatDate,
   paymentBatchLabel,
   canReviewInvoice,
   canReturnInvoice,
@@ -3371,7 +3372,7 @@ function App() {
     let batch = null
     try {
       const now = new Date().toISOString()
-      const name = batchName.trim() || `Payment run ${todayLocal()}`
+      const name = batchName.trim() || `Payment run ${formatDate(new Date())}`
       if (paymentBatchesReady) {
         const { data, error } = await supabase
           .from('invoice_payment_batches')

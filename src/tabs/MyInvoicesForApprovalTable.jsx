@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
-import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, todayLocal, totalsByCurrencyText } from '../utils'
+import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText, formatDateTime, formatDate } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 
 // "My Invoices for Payment Approval": the supervisor's list. Every invoice the
@@ -63,7 +63,7 @@ function MyInvoicesForApprovalTable({
   }
 
   async function approveChosen() {
-    const name = batchName.trim() || `Payment run ${todayLocal()}`
+    const name = batchName.trim() || `Payment run ${formatDate(new Date())}`
     const what = `${chosen.length} invoice${chosen.length === 1 ? '' : 's'} (${totalsByCurrencyText(amountsOf(chosen))})`
     if (!window.confirm(`Approve ${what} for payment${paymentBatchesReady ? ` as "${name}"` : ''}?`)) return
     const ok = await handleApproveInvoicesForPayment(chosen, batchName)
@@ -106,7 +106,7 @@ function MyInvoicesForApprovalTable({
               <input
                 type="text"
                 aria-label="Batch name"
-                placeholder={`Batch name (optional) — Payment run ${todayLocal()}`}
+                placeholder={`Batch name (optional) — Payment run ${formatDate(new Date())}`}
                 value={batchName}
                 onChange={(e) => setBatchName(e.target.value)}
                 style={{ minWidth: 280 }}
@@ -170,10 +170,10 @@ function MyInvoicesForApprovalTable({
                     <td className="nowrap-cell">{request.projects?.name || '—'}</td>
                     <td>{request.vendors?.name || '—'}</td>
                     <td>
-                      {new Date(reviewedAt({ invoice })).toLocaleString()}
+                      {formatDateTime(reviewedAt({ invoice }))}
                       {isInvoiceHeld(invoice) && (
                         <div className="sub" style={{ margin: 0 }}>
-                          Held by {findUserName(users, invoice.held_by)}, {new Date(invoice.held_at).toLocaleDateString()}: {invoice.hold_reason || '—'}
+                          Held by {findUserName(users, invoice.held_by)}, {formatDate(invoice.held_at)}: {invoice.hold_reason || '—'}
                         </div>
                       )}
                     </td>
@@ -245,7 +245,7 @@ function MyInvoicesForApprovalTable({
                   return (
                     <tr key={batch.id}>
                       <td>{paymentBatchLabel(batch)}</td>
-                      <td>{new Date(batch.approved_at).toLocaleDateString()}</td>
+                      <td>{formatDate(batch.approved_at)}</td>
                       <td>{findUserName(users, batch.approved_by)}</td>
                       <td className="center-cell">{items.length}</td>
                       <td>{totalsByCurrencyText(amountsOf(items))}</td>

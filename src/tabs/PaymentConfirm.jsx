@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { todayLocal } from '../utils'
+import DateInput from './DateInput'
 
 // Accounting's "I've paid this one": the date it was paid and an optional reference
 // (cheque, EFT or transaction number), confirmed one invoice at a time. Used on the
@@ -9,14 +10,7 @@ export default function PaymentConfirm({ onConfirm, busy }) {
   const [reference, setReference] = useState('')
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-      <input
-        type="date"
-        aria-label="Date paid"
-        value={paidDate}
-        max={todayLocal()}
-        onChange={(e) => setPaidDate(e.target.value)}
-        style={{ maxWidth: 140 }}
-      />
+      <DateInput aria-label="Date paid" value={paidDate} max={todayLocal()} onChange={setPaidDate} />
       <input
         type="text"
         aria-label="Payment reference"

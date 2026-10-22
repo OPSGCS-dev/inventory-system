@@ -4,7 +4,7 @@
 // the figures that disagree boxed. Differences only ever warn: the invoice can
 // always be added, since the reading can be wrong. See scrape/comparePo.js.
 
-import { formatMoney } from '../utils'
+import { formatMoney, formatDate } from '../utils'
 import { isBlockingDuplicate, MIN_DUPLICATE_REASON } from '../invoiceDuplicates'
 
 const STATUS_LABEL = { ok: '✓ Matches', warn: '⚠ Check', info: 'ℹ Note' }
@@ -35,7 +35,7 @@ function DocView({ title, images, boxes }) {
 
 const poLabel = (m) => m.po_number || 'a draft PO'
 const matchLine = (m) =>
-  `${poLabel(m)} — invoice ${m.invoice_number ? `#${m.invoice_number}` : '(no number)'}, ${formatMoney(m.amount)}, added ${new Date(m.uploaded_at).toLocaleDateString()}${m.paid ? ', paid' : ''}${m.po_status === 'voided' ? ' (voided PO)' : ''}`
+  `${poLabel(m)} — invoice ${m.invoice_number ? `#${m.invoice_number}` : '(no number)'}, ${formatMoney(m.amount)}, added ${formatDate(m.uploaded_at)}${m.paid ? ', paid' : ''}${m.po_status === 'voided' ? ' (voided PO)' : ''}`
 
 export default function InvoiceReview({ pending, dupes, request, busy, onChange, onSubmit, onCancel }) {
   const { file, receiptId, number, amount, scan, review } = pending

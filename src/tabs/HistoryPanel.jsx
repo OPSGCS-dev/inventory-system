@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { journalEntryTypeLabel, JOURNAL_ENTRY_TYPE_LABELS, findUserName } from '../utils'
+import { journalEntryTypeLabel, JOURNAL_ENTRY_TYPE_LABELS, findUserName, formatDateTime } from '../utils'
 import { locKeyOf, locLabel } from '../stockUtils'
 
 // History of every change to what's owned and where it sits. Shared by the Ownership
@@ -121,7 +121,7 @@ function HistoryPanel({ projects, parts, users }) {
                 return (
                   <Fragment key={j.id}>
                     <tr>
-                      <td className="row-head">{new Date(j.created_at).toLocaleString()}</td>
+                      <td className="row-head">{formatDateTime(j.created_at)}</td>
                       <td>{journalEntryTypeLabel(j.entry_type)}</td>
                       <td>{j.note || '—'}</td>
                       <td>{j.created_by ? findUserName(users || [], j.created_by) : '—'}</td>

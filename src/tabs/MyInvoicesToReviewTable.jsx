@@ -1,4 +1,4 @@
-import { totalsByCurrencyText, formatMoney, findUserName, isInvoiceHeld, canHoldInvoice, canReleaseInvoice } from '../utils'
+import { totalsByCurrencyText, formatMoney, findUserName, isInvoiceHeld, canHoldInvoice, canReleaseInvoice, formatDate, formatDateTime } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
 
@@ -96,7 +96,7 @@ function MyInvoicesToReviewTable({
                         <div>
                           <div style={{ color: 'var(--warn)', fontWeight: 600 }}>On hold</div>
                           <div className="sub" style={{ margin: 0 }}>
-                            {invoice.hold_reason || '—'} — {findUserName(users, invoice.held_by)}, {new Date(invoice.held_at).toLocaleDateString()}
+                            {invoice.hold_reason || '—'} — {findUserName(users, invoice.held_by)}, {formatDate(invoice.held_at)}
                           </div>
                         </div>
                       )}
@@ -105,7 +105,7 @@ function MyInvoicesToReviewTable({
                     <td>{request.po_number || `#${request.id}`}</td>
                     <td className="nowrap-cell">{request.projects?.name || '—'}</td>
                     <td>{request.vendors?.name || '—'}</td>
-                    <td>{new Date(invoice.uploaded_at).toLocaleString()}</td>
+                    <td>{formatDateTime(invoice.uploaded_at)}</td>
                     <td>
                       <button className="btn-secondary" onClick={() => toggleExpandedPo(request.id)}>
                         View

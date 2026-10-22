@@ -2,7 +2,7 @@
 // still waiting for a decision. Each row says who asked and why, and flags
 // existing vendors with a similar name so a duplicate can be rejected.
 import { similarNames } from '../scrape/matchers'
-import { findUserName, vendorApprovalStatus } from '../utils'
+import { findUserName, vendorApprovalStatus, formatDate } from '../utils'
 
 export default function VendorsToApproveTable({ vendors, users, onApprove, onReject }) {
   const pending = vendors.filter((v) => vendorApprovalStatus(v) === 'pending')
@@ -39,7 +39,7 @@ export default function VendorsToApproveTable({ vendors, users, onApprove, onRej
                     </td>
                     <td>
                       {findUserName(users, v.requested_by)}
-                      {v.requested_at ? <div className="sub">{new Date(v.requested_at).toLocaleDateString()}</div> : null}
+                      {v.requested_at ? <div className="sub">{formatDate(v.requested_at)}</div> : null}
                     </td>
                     <td>
                       {[v.contact_name, v.email, v.phone].filter(Boolean).map((t, i) => (

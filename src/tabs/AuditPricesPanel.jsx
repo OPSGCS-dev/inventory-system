@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
-import { formatMoney, normalizeHeader } from '../utils'
+import { formatMoney, normalizeHeader, formatDateTime } from '../utils'
 import { downloadCsv } from '../stockUtils'
 import { AMBER, Badge, GREEN, RED, Tile } from './AuditShared'
 
@@ -182,7 +182,7 @@ function AuditPricesPanel({ stockItems, stockLoading, parts, userName }) {
   }
 
   function confirmResolve(r) {
-    setResolutions((prev) => ({ ...prev, [r.key]: { action: draft.action, note: draft.note.trim(), by: userName, at: new Date().toLocaleString() } }))
+    setResolutions((prev) => ({ ...prev, [r.key]: { action: draft.action, note: draft.note.trim(), by: userName, at: formatDateTime(new Date()) } }))
     setOpenId(null)
   }
 
@@ -277,7 +277,7 @@ function AuditPricesPanel({ stockItems, stockLoading, parts, userName }) {
             <button
               className="btn-primary"
               disabled={counts.open > 0 || counts.total === 0}
-              onClick={() => setSignedOff({ by: userName, at: new Date().toLocaleString() })}
+              onClick={() => setSignedOff({ by: userName, at: formatDateTime(new Date()) })}
             >
               Sign Off Audit
             </button>

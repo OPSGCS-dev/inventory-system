@@ -1,3 +1,4 @@
+import { formatAmount } from '../utils'
 // The "Read from the PDF" review box on the purchase request form. Shows what
 // was found in an attached quote/invoice, one checkbox per item, and applies
 // the checked ones to the form on request -- never silently overwriting
@@ -44,8 +45,8 @@ export default function PdfReadPanel({ read, onToggle, onApply, onDismiss }) {
                             {l.description}
                           </td>
                           <td className="center-cell">{l.quantity}</td>
-                          <td className="center-cell">{l.unitPrice.toFixed(2)}</td>
-                          <td className="center-cell">{l.amount.toFixed(2)}</td>
+                          <td className="center-cell">{formatAmount(l.unitPrice)}</td>
+                          <td className="center-cell">{formatAmount(l.amount)}</td>
                         </tr>
                       ))}
                     </tbody>

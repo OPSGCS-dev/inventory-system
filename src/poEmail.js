@@ -1,3 +1,4 @@
+import { formatMoney } from './utils.js'
 // Packs a purchase order into an email *draft file* (.eml) with its PDF
 // attached. A mailto: link can't carry an attachment, but opening an .eml
 // that carries the "X-Unsent: 1" header makes Outlook show it as a new message
@@ -69,7 +70,7 @@ export function buildPoEmailBody(request, totals, label) {
     `Please find Purchase Order ${label} attached (PDF).`,
     '',
     `Entity: ${request.projects?.name || '-'}`,
-    `Grand Total: $${totals.grandTotal.toFixed(2)} ${request.currency || 'CAD'}`,
+    `Grand Total: ${formatMoney(totals.grandTotal)} ${request.currency || 'CAD'}`,
   ]
   if (request.vendor_quote_number) lines.push(`Your quote #: ${request.vendor_quote_number}`)
   if (request.notes) lines.push('', `Notes: ${request.notes}`)

@@ -326,7 +326,7 @@ function InvoicesPanel({
                     <td>
                       {row.invoice ? (
                         <>
-                          {row.invoice.invoice_number || '—'} — ${Number(row.invoice.amount).toFixed(2)}
+                          {row.invoice.invoice_number || '—'} — {formatMoney(row.invoice.amount)}
                           <br />
                           <span className="sub" style={{ margin: 0 }}>
                             {findUserName(users, row.invoice.uploaded_by)} —{' '}
@@ -356,7 +356,7 @@ function InvoicesPanel({
                               <option value="">Match to existing invoice…</option>
                               {unmatchedInvoices.map((inv) => (
                                 <option value={inv.id} key={inv.id}>
-                                  {inv.invoice_number || '—'} — ${Number(inv.amount).toFixed(2)}
+                                  {inv.invoice_number || '—'} — {formatMoney(inv.amount)}
                                 </option>
                               ))}
                             </select>

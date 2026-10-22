@@ -86,7 +86,7 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
           {listed.length > 0 && (
             <span className="sub">
               {' '}
-              — ${total.toFixed(2)} outstanding{heldCount > 0 ? `, ${heldCount} on hold` : ''}
+              — {formatMoney(total)} outstanding{heldCount > 0 ? `, ${heldCount} on hold` : ''}
             </span>
           )}
         </h2>
@@ -164,7 +164,7 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
                     {invoice.invoice_number || '—'}
                     {isInvoiceHeld(invoice) && <div style={{ color: 'var(--warn)', fontWeight: 600 }}>On hold</div>}
                   </td>
-                  <td className="center-cell">${Number(invoice.amount).toFixed(2)}</td>
+                  <td className="center-cell">{formatMoney(invoice.amount)}</td>
                   <td>{request.po_number || `#${request.id}`}</td>
                   <td className="nowrap-cell">{request.projects?.name || '—'}</td>
                   <td>{request.vendors?.name || '—'}</td>

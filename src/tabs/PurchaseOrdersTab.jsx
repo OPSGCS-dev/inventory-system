@@ -74,6 +74,7 @@ import {
   canMarkVendorContacted,
   formatDateTime,
   formatDate,
+  formatAmount,
 } from '../utils'
 import InvoicesPanel from './InvoicesPanel'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
@@ -661,7 +662,7 @@ function PurchaseOrdersTab({
     }
     const summarise = (list) => {
       const sum = list.reduce((s, l) => s + l.amount, 0)
-      return `${list.length} line${list.length === 1 ? '' : 's'}, ${sum.toFixed(2)} in total`
+      return `${list.length} line${list.length === 1 ? '' : 's'}, ${formatMoney(sum)} in total`
     }
     const unreconciled = result.lines && !result.lines.reconciled
     const reconcileWarn = unreconciled ? "These don't add up to the PDF's subtotal/total — check every line." : null
@@ -669,7 +670,7 @@ function PurchaseOrdersTab({
     if (poHasPartLines) {
       if (result.shipping > 0 && Number(cur.poDraftShippingHandling) !== result.shipping) {
         data.shipping = result.shipping
-        add('shipping', 'Shipping / handling', result.shipping.toFixed(2), Number(cur.poDraftShippingHandling).toFixed(2))
+        add('shipping', 'Shipping / handling', formatMoney(result.shipping), formatMoney(cur.poDraftShippingHandling))
       }
       if (result.markup && result.markup.rate !== null && Number(cur.poDraftMarkupRate) !== result.markup.rate) {
         data.markup = result.markup.rate
@@ -745,7 +746,7 @@ function PurchaseOrdersTab({
         }
         if (result.amount) {
           if (cur.poDraftInvoiceAmount === '') setPoDraftInvoiceAmount(String(result.amount.value))
-          found.push(`${result.amount.value.toFixed(2)}${result.amount.currency ? ` ${result.amount.currency}` : ''}`)
+          found.push(`${formatMoney(result.amount.value)}${result.amount.currency ? ` ${result.amount.currency}` : ''}`)
         }
         const missing = [!result.invoiceNumber && 'invoice number', !result.amount && 'total'].filter(Boolean)
         note = found.length ? `Read from the PDF: ${found.join(', ')}. Check before saving.` : ''
@@ -865,7 +866,7 @@ function PurchaseOrdersTab({
                 <div className="po-detail-meta-item">
                   <span className="po-detail-label">Invoiced</span>
                   <span className="po-detail-value" title={invoiceMatchText(match)}>
-                    ${match.invoiced.toFixed(2)} of ${match.expected.toFixed(2)}
+                    {formatMoney(match.invoiced)} of {formatMoney(match.expected)}
                     <InvoiceMatchChip request={r} />
                   </span>
                 </div>
@@ -882,7 +883,7 @@ function PurchaseOrdersTab({
                 <div className="po-detail-meta-item">
                   <span className="po-detail-label">Spending Cap</span>
                   <span className="po-detail-value">
-                    {r.spending_cap ? `$${Number(r.spending_cap).toFixed(2)}` : '—'}
+                    {r.spending_cap ? formatMoney(r.spending_cap) : '—'}
                   </span>
                 </div>
                 <div className="po-detail-meta-item">
@@ -891,7 +892,7 @@ function PurchaseOrdersTab({
                     className="po-detail-value"
                     style={isOverSpendingCap(r) ? { color: 'var(--danger)', fontWeight: 600 } : undefined}
                   >
-                    ${computeInvoicedTotal(r).toFixed(2)}
+                    {formatMoney(computeInvoicedTotal(r))}
                   </span>
                 </div>
               </>
@@ -1139,8 +1140,8 @@ function PurchaseOrdersTab({
                       })()}
                   </td>
                   <td className="center-cell">{l.quantity}</td>
-                  <td className="center-cell">{l.unit_cost ?? '—'}</td>
-                  <td className="center-cell">{lineTotal(l).toFixed(2)}</td>
+                  <td className="center-cell">{l.unit_cost != null ? formatAmount(l.unit_cost) : '—'}</td>
+                  <td className="center-cell">{formatAmount(lineTotal(l))}</td>
                 </tr>
               ))}
             </tbody>
@@ -1256,10 +1257,10 @@ function PurchaseOrdersTab({
                       </td>
                       <td className="center-cell">
                         {l.unit_cost !== null && l.unit_cost !== undefined
-                          ? `$${Number(l.unit_cost).toFixed(2)}`
+                          ? formatMoney(l.unit_cost)
                           : '—'}
                       </td>
-                      <td className="center-cell">${lineTotal(l).toFixed(2)}</td>
+                      <td className="center-cell">{formatMoney(lineTotal(l))}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1282,43 +1283,43 @@ function PurchaseOrdersTab({
                         <tbody>
                           <tr>
                             <th>Subtotal</th>
-                            <td>${totals.subtotal.toFixed(2)}</td>
+                            <td>{formatMoney(totals.subtotal)}</td>
                           </tr>
                           <tr>
                             <th>Credit</th>
-                            <td>-${totals.credit.toFixed(2)}</td>
+                            <td>-{formatMoney(totals.credit)}</td>
                           </tr>
                           {poHasParts(r) && (
                             <tr>
                               <th>Shipping/Handling</th>
-                              <td>${totals.shipping.toFixed(2)}</td>
+                              <td>{formatMoney(totals.shipping)}</td>
                             </tr>
                           )}
                           {poHasParts(r) && (
                             <tr>
                               <th>Vendor Mark-Up</th>
                               <td>
-                                {totals.markupRate.toFixed(1)}% ${totals.markupAmount.toFixed(2)}
+                                {totals.markupRate.toFixed(1)}% {formatMoney(totals.markupAmount)}
                               </td>
                             </tr>
                           )}
                           <tr>
                             <th>Sales Taxes</th>
                             <td>
-                              {totals.taxRate.toFixed(1)}% ${totals.taxAmount.toFixed(2)}
+                              {totals.taxRate.toFixed(1)}% {formatMoney(totals.taxAmount)}
                             </td>
                           </tr>
                           <tr className="po-print-grand-total">
                             <th>Grand Total</th>
-                            <td>${totals.grandTotal.toFixed(2)}</td>
+                            <td>{formatMoney(totals.grandTotal)}</td>
                           </tr>
                           {isNotToExceed(r) && (
                             <tr>
                               <th>Not to Exceed</th>
                               <td style={isOverSpendingCap(r) ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
-                                {r.spending_cap ? `$${Number(r.spending_cap).toFixed(2)}` : '—'}
-                                {' · Invoiced $'}
-                                {computeInvoicedTotal(r).toFixed(2)}
+                                {r.spending_cap ? formatMoney(r.spending_cap) : '—'}
+                                {' · Invoiced '}
+                                {formatMoney(computeInvoicedTotal(r))}
                                 {isOverSpendingCap(r) ? ' (OVER LIMIT)' : ''}
                               </td>
                             </tr>
@@ -2205,7 +2206,7 @@ function PurchaseOrdersTab({
                                 <option value="spare">Spare — from the inventory list, added to stock when received</option>
                                 <option value="used">Used immediately — from the inventory list, not added to stock</option>
                                 <option value="consumable">
-                                  {`Consumable — not tracked (max $${getConsumableMaxUnitCost().toLocaleString()} each)`}
+                                  {`Consumable — not tracked (max ${formatMoney(getConsumableMaxUnitCost())} each)`}
                                 </option>
                               </select>
 
@@ -2266,7 +2267,7 @@ function PurchaseOrdersTab({
                                   />
                                   {consumableOverCap(line) && (
                                     <p className="sub" style={{ margin: '4px 0 0', color: 'var(--danger)' }}>
-                                      {`Over the $${getConsumableMaxUnitCost().toLocaleString()} limit for a consumable — it has to be an inventory part, or go in a service line.`}
+                                      {`Over the ${formatMoney(getConsumableMaxUnitCost())} limit for a consumable — it has to be an inventory part, or go in a service line.`}
                                     </p>
                                   )}
                                 </>
@@ -2304,7 +2305,7 @@ function PurchaseOrdersTab({
                             onChange={(e) => updatePoDraftLineField(i, 'unit_cost', e.target.value)}
                           />
                         </td>
-                        <td className="center-cell">{lineTotal(line).toFixed(2)}</td>
+                        <td className="center-cell">{formatAmount(lineTotal(line))}</td>
                         <td className="col-last">
                           <button className="del-btn" onClick={() => handleRemovePurchaseRequestLine(i)}>
                             Delete

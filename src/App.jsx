@@ -66,6 +66,7 @@ import {
   canViewAudit,
   canViewPoHistory,
   TICKETING_URL,
+  formatMoney,
 } from './utils'
 import MasterListTab from './tabs/MasterListTab'
 import RequiredInventoryTab from './tabs/RequiredInventoryTab'
@@ -356,7 +357,7 @@ function App() {
       if (!data || data.length === 0) throw new Error('The database did not apply the change — only an admin can change settings.')
       setConsumableMaxUnitCost(value)
       setConsumableCap(value)
-      flashSettingsStatus(`Consumable limit set to $${value.toLocaleString()} per unit.`, true)
+      flashSettingsStatus(`Consumable limit set to ${formatMoney(value)} per unit.`, true)
       return true
     } catch (error) {
       console.error(error)
@@ -2224,7 +2225,7 @@ function App() {
     if (overCap.length > 0) {
       flagLines(
         overCap,
-        `A consumable can't cost more than $${getConsumableMaxUnitCost().toLocaleString()} each. If it's an inventory part, pick it from the list as a Spare or Used immediately; otherwise include it in a service line.`
+        `A consumable can't cost more than ${formatMoney(getConsumableMaxUnitCost())} each. If it's an inventory part, pick it from the list as a Spare or Used immediately; otherwise include it in a service line.`
       )
       return
     }
@@ -2423,16 +2424,16 @@ function App() {
             changeLines.push(`Sales Tax: ${existing.tax_rate}% → ${newValues.tax_rate}%`)
           }
           if (Number(existing.shipping_handling) !== newValues.shipping_handling) {
-            changeLines.push(`Shipping/Handling: $${existing.shipping_handling} → $${newValues.shipping_handling}`)
+            changeLines.push(`Shipping/Handling: ${formatMoney(existing.shipping_handling)} → ${formatMoney(newValues.shipping_handling)}`)
           }
           if (Number(existing.credit) !== newValues.credit) {
-            changeLines.push(`Credit: $${existing.credit} → $${newValues.credit}`)
+            changeLines.push(`Credit: ${formatMoney(existing.credit)} → ${formatMoney(newValues.credit)}`)
           }
           if (Boolean(existing.not_to_exceed) !== newValues.not_to_exceed) {
             changeLines.push(`Not to Exceed: ${existing.not_to_exceed ? 'Yes' : 'No'} → ${newValues.not_to_exceed ? 'Yes' : 'No'}`)
           }
           if ((existing.spending_cap ?? null) !== (newValues.spending_cap ?? null)) {
-            changeLines.push(`Spending Cap: ${existing.spending_cap ?? '—'} → ${newValues.spending_cap ?? '—'}`)
+            changeLines.push(`Spending Cap: ${existing.spending_cap == null ? '—' : formatMoney(existing.spending_cap)} → ${newValues.spending_cap == null ? '—' : formatMoney(newValues.spending_cap)}`)
           }
           if ((existing.vendor_quote_number || '') !== (newValues.vendor_quote_number || '')) {
             changeLines.push(`Vendor Quote #: ${newValues.vendor_quote_number || '(cleared)'}`)
@@ -3221,7 +3222,7 @@ function App() {
     }
     await logPoActivity(
       requestId,
-      `Invoice added${invoiceNumber ? ` (#${invoiceNumber})` : ''}: $${amount.toFixed(2)}`
+      `Invoice added${invoiceNumber ? ` (#${invoiceNumber})` : ''}: ${formatMoney(amount)}`
     )
   }
 

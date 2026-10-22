@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
-import { formatDateTime } from '../utils'
+import { formatDateTime, formatMoney } from '../utils'
 
 // Change history for the Master List: one row per add / edit / delete of a part, with who made
 // it and exactly which fields changed. Written by a database trigger (supabase/add_parts_history.sql),
@@ -31,7 +31,7 @@ function showValue(field, v) {
   if (v === null || v === undefined || v === '') return '(blank)'
   if (field === 'image_url') return 'a picture'
   if (field === 'datasheet_url') return 'a link'
-  if (field === 'last_cost') return '$' + Number(v).toFixed(2)
+  if (field === 'last_cost') return formatMoney(v)
   if (typeof v === 'boolean') return v ? 'Yes' : 'No'
   return String(v)
 }

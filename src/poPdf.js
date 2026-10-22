@@ -16,6 +16,7 @@ import {
   lineTotal,
   poHasParts,
   formatDate,
+  formatMoney,
 } from './utils.js'
 
 // The standard PDF fonts only cover Latin-1: swap the usual offenders (dashes,
@@ -29,7 +30,7 @@ const clean = (value) =>
     .replace(/…/g, '...')
     .replace(/[Ā-￿]/g, '?')
 
-const money = (n) => `$${Number(n).toFixed(2)}`
+const money = formatMoney
 
 export function poLabel(request) {
   return request.po_number || `#${request.id}`

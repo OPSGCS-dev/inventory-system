@@ -341,7 +341,7 @@ export function compareInvoicesToPo(request) {
   }
 }
 
-const moneyText = (n) => `$${Number(n).toFixed(2)}`
+const moneyText = (n) => formatMoney(n)
 
 // The sentence behind the invoice indicator, for its hover text.
 export function invoiceMatchText(match) {
@@ -1125,9 +1125,13 @@ export function paymentBatchLabel(batch) {
   return `${batch.name} (#${batch.id})`
 }
 
-// Dollar amounts for the approval screens: thousands separators, two decimals.
-export const formatMoney = (n) =>
-  `$${Number(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+// Every dollar amount on the site is shown with thousands separators and two decimals: 1,234.50.
+// formatAmount is the bare number (for a column whose heading already says it is money);
+// formatMoney adds the $.
+export const formatAmount = (n) =>
+  Number(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+export const formatMoney = (n) => (Number(n) < 0 ? '-$' + formatAmount(-Number(n)) : '$' + formatAmount(n))
 
 // Total of a list of { amount, currency } entries, never adding across currencies:
 // "$1,234.00 CAD" or, with a mix, "$1,234.00 CAD · $500.00 USD".
@@ -1193,7 +1197,7 @@ export function buildPoMailto(request) {
       l.line_type === 'part'
         ? `${l.parts?.gcs_id ?? l.part_gcs_id} — ${l.parts?.gcs_part_id || ''} — ${descriptionOneLine(l.parts?.description)}`
         : l.description || 'Service'
-    const cost = l.unit_cost !== null && l.unit_cost !== undefined ? ` @ $${l.unit_cost}` : ''
+    const cost = l.unit_cost !== null && l.unit_cost !== undefined ? ` @ ${formatMoney(l.unit_cost)}` : ''
     return `  - ${label} (Qty ${l.quantity}${cost})`
   })
 
@@ -1208,12 +1212,12 @@ export function buildPoMailto(request) {
     'Line Items:',
     ...(lineLines.length ? lineLines : ['  (none)']),
     '',
-    `Subtotal: $${totals.subtotal.toFixed(2)}`,
-    `Credit: -$${totals.credit.toFixed(2)}`,
-    `Shipping/Handling: $${totals.shipping.toFixed(2)}`,
-    `Vendor Mark-Up (${totals.markupRate.toFixed(1)}%): $${totals.markupAmount.toFixed(2)}`,
-    `Sales Taxes (${totals.taxRate.toFixed(1)}%): $${totals.taxAmount.toFixed(2)}`,
-    `Grand Total: $${totals.grandTotal.toFixed(2)}`,
+    `Subtotal: ${formatMoney(totals.subtotal)}`,
+    `Credit: -${formatMoney(totals.credit)}`,
+    `Shipping/Handling: ${formatMoney(totals.shipping)}`,
+    `Vendor Mark-Up (${totals.markupRate.toFixed(1)}%): ${formatMoney(totals.markupAmount)}`,
+    `Sales Taxes (${totals.taxRate.toFixed(1)}%): ${formatMoney(totals.taxAmount)}`,
+    `Grand Total: ${formatMoney(totals.grandTotal)}`,
     `Currency: ${currency}`,
   ]
   if (request.notes) {

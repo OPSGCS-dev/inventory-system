@@ -13,6 +13,7 @@ import {
   LEDGER_CATEGORY_LABELS,
   formatDate,
   formatDateTime,
+  formatMoney,
 } from '../utils'
 import DateInput from './DateInput'
 
@@ -29,7 +30,7 @@ const STATUS_FILTER_OPTIONS = [
 ]
 
 const fmtDate = (iso) => (iso ? formatDate(iso) : '')
-const fmtMoney = (n) => `$${Number(n || 0).toFixed(2)}`
+const fmtMoney = formatMoney
 
 function lineLabel(line) {
   if (line.line_type === 'part') {

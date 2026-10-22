@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { emptyFilters, shortProjectName, formatDateTime } from '../utils'
+import { emptyFilters, shortProjectName, formatDateTime, formatMoney } from '../utils'
 import PartsHistoryPanel from './PartsHistoryPanel'
 
 // Small document icon. Opens the part's datasheet (a link or an uploaded PDF) in a new tab.
@@ -504,7 +504,7 @@ function MasterListTab({
                           />
                         </td>
                       ) : (
-                        <td>{p.last_cost != null ? `$${Number(p.last_cost).toFixed(2)}` : '—'}</td>
+                        <td>{p.last_cost != null ? formatMoney(p.last_cost) : '—'}</td>
                       )}
                       {editMode && (
                         <td className="col-last">

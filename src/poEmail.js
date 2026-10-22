@@ -71,6 +71,7 @@ export function buildPoEmailBody(request, totals, label) {
     '',
     ...(request.program_name ? [`Project: ${request.program_name}`] : []),
     `Site: ${request.projects?.name || '-'}`,
+    ...(request.sub_projects?.name ? [`Location: ${request.sub_projects.name}`] : []),
     `Grand Total: ${formatMoney(totals.grandTotal)} ${request.currency || 'CAD'}`,
   ]
   if (request.vendor_quote_number) lines.push(`Your quote #: ${request.vendor_quote_number}`)

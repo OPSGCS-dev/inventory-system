@@ -177,7 +177,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users, programs = []
         Status: poStatusLabel(r.status),
         ...(r.program_id && programNameFor(r.program_id) ? { Project: programNameFor(r.program_id) } : {}),
         Site: r.projects?.name || '',
-        Project: r.sub_projects?.name || '',
+        Location: r.sub_projects?.name || '',
         Vendor: r.vendors?.name || '',
         Issued: fmtDate(row.issuedAt),
         'Received / Completed': fmtDate(row.workDoneAt),

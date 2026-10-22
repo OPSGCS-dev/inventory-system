@@ -1105,6 +1105,13 @@ export function formatDateTime(value) {
   return d ? `${formatDate(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` : ''
 }
 
+// Whether a PO shows its Location (the optional sub_projects row under its site, e.g. one of Firelight Solar's
+// rooftops). A site with only one location -- a ground-mount site whose single location is the site itself --
+// doesn't ask for it and doesn't show it; the one location is still stored on the PO so reports stay complete.
+export function locationVisible(request, subProjects) {
+  return Boolean(request?.sub_projects?.name) && (subProjects || []).filter((sp) => sp.project_id === request.project_id).length > 1
+}
+
 // A yyyy-mm-dd date column for display.
 export const formatDateOnly = formatDate
 
@@ -1214,6 +1221,7 @@ export function buildPoMailto(request) {
     `Purchase Order ${poLabel}`,
     ...(request.program_name ? [`Project: ${request.program_name}`] : []),
     `Site: ${request.projects?.name || '—'}`,
+    ...(request.sub_projects?.name ? [`Location: ${request.sub_projects.name}`] : []),
     ...(request?.vendors?.address ? [`Ship to / Address: ${request.vendors.address}`] : []),
     '',
     'Line Items:',

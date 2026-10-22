@@ -86,6 +86,7 @@ export async function buildPoPdf(request, stamp = null) {
       ['PO Date', formatDate(request.issued_at || Date.now())],
       ...(request.program_name ? [['Project', clean(request.program_name)]] : []),
       ['PO #', clean(poLabel(request))],
+      ...(request.sub_projects?.name ? [['Location', clean(request.sub_projects.name)]] : []),
       ['Requisitioner', clean(request.requisitioner_name || '-')],
       ['Budget Category', clean(budgetCategoryLabel(request))],
       ['Chargeable Expense', request.chargeable_expense ? 'Yes' : 'No'],
@@ -202,7 +203,7 @@ export async function buildPoPdf(request, stamp = null) {
     })
     ly += 16
   }
-  labelled(request.sub_projects?.name ? 'Location:' : 'Site:', request.sub_projects?.name || request.projects?.name || '-')
+  if (!request.sub_projects?.name) labelled('Site:', request.projects?.name || '-')
   labelled('Notes:', request.notes || '-')
   y = Math.max(totalsBottom, ly) + 22
 

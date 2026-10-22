@@ -36,6 +36,7 @@ import {
   PO_PROGRESS_STAGE_LABELS,
   computePoProgressStage,
   poStatusText,
+  locationVisible,
   requisitionerName,
   lineTotal,
   filterPartsForSearch,
@@ -495,6 +496,7 @@ function PurchaseOrdersTab({
     ...(shownPoNumber(r) && !r.po_number ? { ...r, po_number: shownPoNumber(r) } : r),
     requisitioner_name: requisitionerName(users, r),
     program_name: programName(r.program_id),
+    sub_projects: locationVisible(r, subProjects) ? r.sub_projects : null,
   })
 
   // Collapsed by default -- the activity log is a secondary, rarely-needed
@@ -893,7 +895,7 @@ function PurchaseOrdersTab({
                 <span className="po-detail-value">{programName(r.program_id)}</span>
               </div>
             )}
-            {r.sub_projects?.name && (
+            {locationVisible(r, subProjects) && (
               <div className="po-detail-meta-item">
                 <span className="po-detail-label">Location</span>
                 <span className="po-detail-value">{r.sub_projects.name}</span>
@@ -1213,6 +1215,12 @@ function PurchaseOrdersTab({
                         <th>PO #</th>
                         <td>{shownPoNumber(r) || `#${r.id}`}</td>
                       </tr>
+                      {locationVisible(r, subProjects) && (
+                        <tr>
+                          <th>Location</th>
+                          <td>{r.sub_projects.name}</td>
+                        </tr>
+                      )}
                       <tr>
                         <th>Requisitioner</th>
                         <td>{requisitionerName(users, r) || '—'}</td>
@@ -1298,9 +1306,11 @@ function PurchaseOrdersTab({
                 return (
                   <div className="po-print-footer">
                     <div className="po-print-footer-left">
-                      <p>
-                        <strong>{r.sub_projects?.name ? 'Location:' : 'Site:'}</strong> {r.sub_projects?.name || r.projects?.name || '—'}
-                      </p>
+                      {!locationVisible(r, subProjects) && (
+                        <p>
+                          <strong>Site:</strong> {r.projects?.name || '—'}
+                        </p>
+                      )}
                       <p>
                         <strong>Notes:</strong> {r.notes || '—'}
                       </p>
@@ -1841,7 +1851,7 @@ function PurchaseOrdersTab({
             />
           )}
 
-          {availableSubProjects.length > 0 && (
+          {availableSubProjects.length > 1 && (
             <div className="field-row" style={{ marginTop: 12 }}>
               <div>
                 <label htmlFor="po_draft_sub_project">Location</label>
@@ -2658,7 +2668,14 @@ function PurchaseOrdersTab({
                         {r.description ? truncate(r.description, PO_DESCRIPTION_MAX_LEN) : '—'}
                       </td>
                       {programsReady && <td className="nowrap-cell">{programName(r.program_id) || '—'}</td>}
-                      <td className="nowrap-cell">{r.projects?.name || '—'}</td>
+                      <td className="nowrap-cell">
+                        {r.projects?.name || '—'}
+                        {locationVisible(r, subProjects) && (
+                          <div className="sub" style={{ margin: 0 }}>
+                            {r.sub_projects.name}
+                          </div>
+                        )}
+                      </td>
                       <td className="nowrap-cell">{r.vendors?.name || '—'}</td>
                       {poView === 'my-approvals' && (
                         <td className="center-cell nowrap-cell">

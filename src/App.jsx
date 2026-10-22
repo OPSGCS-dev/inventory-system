@@ -2382,7 +2382,9 @@ function App() {
     if (!poDraftVendorId) errors.vendor = true
     if (!poDraftBudgetCategoryId) errors.budgetCategory = true
     if (validLines.length === 0) errors.lines = true
-    if (entitySubProjects.length > 0 && !poDraftSubProjectId) errors.subProject = true
+    // A site with several locations has to say which; one with a single location uses it without asking.
+    if (entitySubProjects.length > 1 && !poDraftSubProjectId) errors.subProject = true
+    const subProjectToSave = entitySubProjects.length === 1 ? entitySubProjects[0].id : poDraftSubProjectId
 
     if (Object.keys(errors).length > 0) {
       setPoDraftFieldErrors(errors)
@@ -2485,7 +2487,7 @@ function App() {
           .update({
             ...newValues,
             ...(programsReady ? { program_id: poDraftProgramId } : {}),
-            sub_project_id: poDraftSubProjectId,
+            sub_project_id: subProjectToSave,
             notes: poDraftNotes.trim() || null,
             budget_category_id: poDraftBudgetCategoryId,
             budget_subcategory_id: poDraftBudgetSubcategoryId,
@@ -2573,7 +2575,7 @@ function App() {
           .insert({
             project_id: poDraftProjectId,
             ...(programsReady ? { program_id: poDraftProgramId } : {}),
-            sub_project_id: poDraftSubProjectId,
+            sub_project_id: subProjectToSave,
             vendor_id: poDraftVendorId,
             notes: poDraftNotes.trim() || null,
             description: poDraftDescription.trim() || null,

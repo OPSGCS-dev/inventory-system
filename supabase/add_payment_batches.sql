@@ -3,7 +3,7 @@
 --
 -- A record of each payment-approval batch. When a supervisor approves invoices for payment
 -- (My Invoices for Payment Approval), the invoices they approve together become one batch:
--- it has a name (their own, or "Payment run <date>"), who approved it and when. Accounting
+-- it has a name (their own, or "Approved invoice batch <date>"), who approved it and when. Accounting
 -- can then filter the Invoices to Pay list by batch and see how much of each batch is paid.
 --
 -- Invoices approved before this existed simply have no batch.

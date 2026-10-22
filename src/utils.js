@@ -1114,7 +1114,13 @@ export function parseTypedDate(text) {
   return `${y}-${pad2(mo)}-${pad2(d)}`
 }
 
-// How a payment batch is shown: its name and number, e.g. "Payment run 2026/10/15 (#7)".
+// The name an approval batch gets when the supervisor doesn't type one. Deliberately not "payment run":
+// the invoices are only approved for payment at that point, not paid.
+export function defaultBatchName() {
+  return `Approved invoice batch ${formatDate(new Date())}`
+}
+
+// How a payment batch is shown: its name and number, e.g. "Approved invoice batch 2026/10/15 (#7)".
 export function paymentBatchLabel(batch) {
   return `${batch.name} (#${batch.id})`
 }

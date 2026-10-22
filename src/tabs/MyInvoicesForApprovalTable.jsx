@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
-import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText, formatDateTime, formatDate } from '../utils'
+import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText, formatDateTime, formatDate, defaultBatchName } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 
 // "My Invoices for Payment Approval": the supervisor's list. Every invoice the
@@ -63,7 +63,7 @@ function MyInvoicesForApprovalTable({
   }
 
   async function approveChosen() {
-    const name = batchName.trim() || `Payment run ${formatDate(new Date())}`
+    const name = batchName.trim() || defaultBatchName()
     const what = `${chosen.length} invoice${chosen.length === 1 ? '' : 's'} (${totalsByCurrencyText(amountsOf(chosen))})`
     if (!window.confirm(`Approve ${what} for payment${paymentBatchesReady ? ` as "${name}"` : ''}?`)) return
     const ok = await handleApproveInvoicesForPayment(chosen, batchName)
@@ -106,7 +106,7 @@ function MyInvoicesForApprovalTable({
               <input
                 type="text"
                 aria-label="Batch name"
-                placeholder={`Batch name (optional) — Payment run ${formatDate(new Date())}`}
+                placeholder={`Batch name (optional) — ${defaultBatchName()}`}
                 value={batchName}
                 onChange={(e) => setBatchName(e.target.value)}
                 style={{ minWidth: 280 }}

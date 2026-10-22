@@ -2588,7 +2588,8 @@ function PurchaseOrdersTab({
               <colgroup>
                 <col style={{ width: '60px' }} />
                 <col style={{ width: '100px' }} />
-                <col style={{ width: '250px' }} />
+                <col style={{ width: programsReady ? '210px' : '250px' }} />
+                {programsReady && <col style={{ width: '130px' }} />}
                 <col style={{ width: '130px' }} />
                 <col style={{ width: '130px' }} />
                 {poView === 'my-approvals' && <col style={{ width: '120px' }} />}
@@ -2596,7 +2597,7 @@ function PurchaseOrdersTab({
                 <col style={{ width: '110px' }} />
                 <col style={{ width: '140px' }} />
                 <col style={{ width: '110px' }} />
-                <col style={{ width: '130px' }} />
+                <col style={{ width: programsReady ? '150px' : '130px' }} />
                 <col className="col-last" />
               </colgroup>
               <thead>

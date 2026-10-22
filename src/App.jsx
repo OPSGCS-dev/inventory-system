@@ -2079,7 +2079,11 @@ function App() {
       setPoDraftId(null)
       // A new request starts on an entity the person may create requests for.
       const mayUse = entitiesAllowedFor(loggedInUserWithScopes, 'purchase_req', projects)
-      const startProject = prefill?.projectId ?? mayUse.find((p) => p.id === selectedProjectId)?.id ?? mayUse[0]?.id ?? null
+      // With projects set up the site starts empty (the one picked on the inventory screens has nothing to do with
+      // a PO, and it was easy to leave the wrong one in place); someone who may only use one site gets that one.
+      const startProject = programsReady
+        ? prefill?.projectId ?? (mayUse.length === 1 ? mayUse[0].id : null)
+        : prefill?.projectId ?? mayUse.find((p) => p.id === selectedProjectId)?.id ?? mayUse[0]?.id ?? null
       setPoDraftProjectId(startProject)
       setPoDraftProgramId(prefill?.programId ?? defaultProgramFor(startProject))
       setPoDraftVendorId(prefill?.vendorId ?? null)

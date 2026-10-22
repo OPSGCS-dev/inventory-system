@@ -22,7 +22,8 @@ function RelatedPos({ request, purchaseRequests, poLinks, poLinksReady, canLink,
       <p style={{ margin: '0 0 6px', fontWeight: 600 }}>Related POs</p>
       {related.length === 0 ? (
         <p className="sub" style={{ margin: '0 0 6px' }}>
-          None yet. POs that share one of this PO&apos;s invoices show up here on their own; others can be linked by number.
+          None yet. A PO shows up here on its own when it has an invoice from the same vendor with the same invoice number (or the
+          same invoice file); any other PO can be linked by number.
         </p>
       ) : (
         <ul style={{ margin: '0 0 8px', paddingLeft: 18 }}>

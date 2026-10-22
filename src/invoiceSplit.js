@@ -87,17 +87,24 @@ export function relatedRequests(request, allRequests, links = []) {
     out.set(other.id, entry)
   }
 
+  // Same vendor, and either the same invoice number or the same invoice file (an invoice with no number read or
+  // typed is still recognised when the same PDF went on both POs).
   const mine = new Map()
+  const myFiles = new Map()
   for (const inv of request.invoices || []) {
     const n = normalizeInvoiceNumber(inv.invoice_number)
     if (n) mine.set(n, inv.invoice_number)
+    const f = String(inv.file_name || '').trim().toLowerCase()
+    if (f) myFiles.set(f, inv.file_name)
   }
-  if (mine.size > 0) {
+  if (mine.size > 0 || myFiles.size > 0) {
     for (const other of allRequests || []) {
       if (other.id === request.id || other.vendor_id !== request.vendor_id) continue
       for (const inv of other.invoices || []) {
         const n = normalizeInvoiceNumber(inv.invoice_number)
-        if (mine.has(n)) add(other, `shares invoice #${mine.get(n)}`)
+        const f = String(inv.file_name || '').trim().toLowerCase()
+        if (n && mine.has(n)) add(other, `shares invoice #${mine.get(n)}`)
+        else if (f && myFiles.has(f)) add(other, `shares the invoice file ${myFiles.get(f)}`)
       }
     }
   }

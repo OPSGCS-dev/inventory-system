@@ -1,4 +1,4 @@
-import { totalsByCurrencyText, formatMoney } from '../utils'
+import { totalsByCurrencyText, formatMoney, findUserName, isInvoiceHeld, canHoldInvoice, canReleaseInvoice } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
 
@@ -18,7 +18,17 @@ const COLUMNS = [
   { key: 'vendor', label: 'Vendor', values: ({ request }) => request.vendors?.name },
 ]
 
-function MyInvoicesToReviewTable({ invoicesToReview, toggleExpandedPo, handleReviewInvoice, handleReturnInvoice, poActionBusyId }) {
+function MyInvoicesToReviewTable({
+  invoicesToReview,
+  toggleExpandedPo,
+  handleReviewInvoice,
+  handleReturnInvoice,
+  handleHoldInvoice,
+  handleReleaseInvoice,
+  poActionBusyId,
+  loggedInUser,
+  users,
+}) {
   const range = useDateRange(invoicesToReview, uploadedAt)
   const filters = useColumnFilters(range.listed, COLUMNS)
   const listed = filters.filtered
@@ -39,7 +49,8 @@ function MyInvoicesToReviewTable({ invoicesToReview, toggleExpandedPo, handleRev
         )}
       </div>
       <p className="sub" style={{ margin: '0 0 8px' }}>
-        Open the PO to see the invoice and receipt side by side. Approving sends the invoice to the supervisor for payment approval.
+        Open the PO to see the invoice and receipt side by side. Approving sends the invoice to the supervisor for payment approval. Hold pauses an
+        invoice (for example while you check something with the vendor); it can't be approved until you release it.
       </p>
 
       <ColumnFilterBar filters={filters} shown={listed.length} />
@@ -79,7 +90,17 @@ function MyInvoicesToReviewTable({ invoicesToReview, toggleExpandedPo, handleRev
                 const busy = poActionBusyId === request.id
                 return (
                   <tr key={invoice.id}>
-                    <td>{invoice.invoice_number || '—'}</td>
+                    <td>
+                      {invoice.invoice_number || '—'}
+                      {isInvoiceHeld(invoice) && (
+                        <div>
+                          <div style={{ color: 'var(--warn)', fontWeight: 600 }}>On hold</div>
+                          <div className="sub" style={{ margin: 0 }}>
+                            {invoice.hold_reason || '—'} — {findUserName(users, invoice.held_by)}, {new Date(invoice.held_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                      )}
+                    </td>
                     <td className="center-cell">{formatMoney(invoice.amount)}</td>
                     <td>{request.po_number || `#${request.id}`}</td>
                     <td className="nowrap-cell">{request.projects?.name || '—'}</td>
@@ -89,9 +110,28 @@ function MyInvoicesToReviewTable({ invoicesToReview, toggleExpandedPo, handleRev
                       <button className="btn-secondary" onClick={() => toggleExpandedPo(request.id)}>
                         View
                       </button>{' '}
-                      <button className="btn-primary" onClick={() => handleReviewInvoice(invoice, true)} disabled={busy}>
-                        Approve
-                      </button>{' '}
+                      {isInvoiceHeld(invoice) ? (
+                        canReleaseInvoice(loggedInUser, invoice, request) && (
+                          <>
+                            <button className="btn-secondary" onClick={() => handleReleaseInvoice(invoice)} disabled={busy}>
+                              Release
+                            </button>{' '}
+                          </>
+                        )
+                      ) : (
+                        <>
+                          <button className="btn-primary" onClick={() => handleReviewInvoice(invoice, true)} disabled={busy}>
+                            Approve
+                          </button>{' '}
+                          {canHoldInvoice(loggedInUser, invoice, request) && (
+                            <>
+                              <button className="btn-secondary" onClick={() => handleHoldInvoice(invoice)} disabled={busy}>
+                                Hold
+                              </button>{' '}
+                            </>
+                          )}
+                        </>
+                      )}
                       <button
                         className="btn-secondary"
                         style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}

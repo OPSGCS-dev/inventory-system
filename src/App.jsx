@@ -1904,6 +1904,7 @@ function App() {
     const invoicesToPayCount = canManagePayment(loggedInUserWithScopes)
       ? invoicesToPay.filter(({ invoice }) => !isInvoiceHeld(invoice)).length
       : 0
+    const invoicesToReviewCount = invoicesToReview.filter(({ invoice }) => !isInvoiceHeld(invoice)).length
     const vendorsToApprove = canApproveVendors(loggedInUserWithScopes)
       ? vendors.filter((v) => vendorApprovalStatus(v) === 'pending').length
       : 0
@@ -1912,9 +1913,9 @@ function App() {
       toIssue,
       invoicesToApprove,
       invoicesToPay: invoicesToPayCount,
-      invoicesToReview: invoicesToReview.length,
+      invoicesToReview: invoicesToReviewCount,
       vendorsToApprove,
-      total: approvals + toIssue + invoicesToApprove + invoicesToPayCount + invoicesToReview.length + vendorsToApprove,
+      total: approvals + toIssue + invoicesToApprove + invoicesToPayCount + invoicesToReviewCount + vendorsToApprove,
     }
   }, [purchaseRequests, loggedInUserWithScopes, invoicesPendingApproval, invoicesToPay, invoicesToReview, vendors])
 
@@ -3325,6 +3326,10 @@ function App() {
       flashPoStatus('Only the person who raised this PO can review its invoices.', false)
       return
     }
+    if (checked && isInvoiceHeld(invoice)) {
+      flashPoStatus("An invoice on hold can't be approved — release it first.", false)
+      return
+    }
     setPoActionBusyId(invoice.purchase_request_id)
     try {
       const payload = checked
@@ -3490,7 +3495,7 @@ function App() {
         .eq('id', invoice.id)
       if (error) throw error
       await logPoActivity(invoice.purchase_request_id, `Invoice put on hold${invoiceTag(invoice)}: ${reason.trim()}`)
-      flashPoStatus('Invoice put on hold — it can\'t be paid until it is released.', true)
+      flashPoStatus('Invoice put on hold — it can\'t move on until it is released.', true)
       await refreshPurchaseRequest(invoice.purchase_request_id)
     } catch (error) {
       console.error(error)

@@ -402,9 +402,23 @@ function InvoicesPanel({
                       ) : stage === 'review' ? (
                         canReviewInvoice(loggedInUser, inv, request) ? (
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            <button className="btn-primary" disabled={busy} onClick={() => handleReviewInvoice(inv, true)}>
-                              Approve
-                            </button>
+                            {isInvoiceHeld(inv) ? (
+                              <HoldNote inv={inv} users={users} />
+                            ) : (
+                              <button className="btn-primary" disabled={busy} onClick={() => handleReviewInvoice(inv, true)}>
+                                Approve
+                              </button>
+                            )}
+                            {canHoldInvoice(loggedInUser, inv, request) && (
+                              <button className="btn-secondary" disabled={busy} onClick={() => handleHoldInvoice(inv)}>
+                                Hold
+                              </button>
+                            )}
+                            {canReleaseInvoice(loggedInUser, inv, request) && (
+                              <button className="btn-secondary" disabled={busy} onClick={() => handleReleaseInvoice(inv)}>
+                                Release
+                              </button>
+                            )}
                             <button
                               className="btn-secondary"
                               style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
@@ -414,6 +428,8 @@ function InvoicesPanel({
                               Send Back
                             </button>
                           </div>
+                        ) : isInvoiceHeld(inv) ? (
+                          <HoldNote inv={inv} users={users} />
                         ) : (
                           <span className="sub" style={{ margin: 0 }}>
                             Waiting on {findUserName(users, request.requested_by)}

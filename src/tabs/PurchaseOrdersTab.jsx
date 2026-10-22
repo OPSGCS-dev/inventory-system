@@ -2425,7 +2425,11 @@ function PurchaseOrdersTab({
           toggleExpandedPo={toggleExpandedPo}
           handleReviewInvoice={handleReviewInvoice}
           handleReturnInvoice={handleReturnInvoice}
+          handleHoldInvoice={handleHoldInvoice}
+          handleReleaseInvoice={handleReleaseInvoice}
           poActionBusyId={poActionBusyId}
+          loggedInUser={loggedInUser}
+          users={users}
         />
       ) : poView === 'my-invoices' ? (
         <MyInvoicesForApprovalTable

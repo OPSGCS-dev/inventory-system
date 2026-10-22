@@ -108,6 +108,8 @@ const FIELD_LABELS = {
   void_reason: 'Void reason',
   rejection_reason: 'Rejection reason',
   po_category: 'PO category',
+  invoice_total: 'Whole invoice total',
+  covers: 'Covers',
   vendor_contacted_at: 'Vendor contacted',
   vendor_contacted_how: 'Vendor contacted how',
   ticket_system_ticket_id: 'Ticket',

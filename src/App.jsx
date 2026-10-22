@@ -93,6 +93,7 @@ import UsersTab from './tabs/UsersTab'
 import SignatureCard from './tabs/SignatureCard'
 import GlobalSearch from './tabs/GlobalSearch'
 import { matchPart } from './scrape/matchers'
+import { findRequestByNumber } from './invoiceSplit'
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true)
@@ -154,6 +155,9 @@ function App() {
   const [programs, setPrograms] = useState([])
   const [programSites, setProgramSites] = useState([])
   const [poDraftProgramId, setPoDraftProgramId] = useState(null)
+  // POs linked to each other by hand (add_po_links_and_invoice_split.sql); `poLinksReady` is false until that SQL is run.
+  const [poLinks, setPoLinks] = useState([])
+  const [poLinksReady, setPoLinksReady] = useState(false)
   const [newProjectPrograms, setNewProjectPrograms] = useState([])
   const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [projectItems, setProjectItems] = useState([])
@@ -501,6 +505,18 @@ function App() {
     } else if (!data || data.length === 0) {
       setProjectLoading(false)
     }
+  }
+
+  async function loadPoLinks() {
+    const { data, error } = await supabase.from('purchase_request_links').select('*')
+    if (error) {
+      console.warn("PO links aren't set up yet (run supabase/add_po_links_and_invoice_split.sql):", error.message)
+      setPoLinks([])
+      setPoLinksReady(false)
+      return
+    }
+    setPoLinks(data ?? [])
+    setPoLinksReady(true)
   }
 
   async function loadPrograms() {
@@ -869,6 +885,7 @@ function App() {
       loadBudgetSubcategories()
       loadSubProjects()
       loadPrograms()
+      loadPoLinks()
     }
   }, [loggedInUser])
 
@@ -3173,6 +3190,65 @@ function App() {
     }
   }
 
+  // Link this PO to another one by its number (both POs get a note in their activity log).
+  async function handleAddPoLink(request, text) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return false
+    }
+    const other = findRequestByNumber(purchaseRequests, text)
+    if (!other) {
+      flashPoStatus(`There is no PO numbered "${text.trim()}".`, false)
+      return false
+    }
+    if (other.id === request.id) {
+      flashPoStatus("A PO can't be linked to itself.", false)
+      return false
+    }
+    if (poLinks.some((l) => (l.request_a === request.id && l.request_b === other.id) || (l.request_a === other.id && l.request_b === request.id))) {
+      flashPoStatus('Those two POs are already linked.', false)
+      return false
+    }
+    setPoActionBusyId(request.id)
+    try {
+      const { error } = await supabase.from('purchase_request_links').insert({ request_a: request.id, request_b: other.id })
+      if (error) throw error
+      const label = (r) => r.po_number || `#${r.id}`
+      await logPoActivity(request.id, `Linked to ${label(other)}`)
+      await logPoActivity(other.id, `Linked to ${label(request)}`)
+      flashPoStatus(`Linked to ${label(other)}.`, true)
+      await loadPoLinks()
+      return true
+    } catch (error) {
+      console.error(error)
+      flashPoStatus(dbRefusal(error) || 'Could not link the POs — check the console for details.', false)
+      return false
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  async function handleRemovePoLink(link) {
+    if (!loggedInUser) return
+    setPoActionBusyId(link.request_a)
+    try {
+      const { error } = await supabase.from('purchase_request_links').delete().eq('id', link.id)
+      if (error) throw error
+      const a = purchaseRequests.find((r) => r.id === link.request_a)
+      const b = purchaseRequests.find((r) => r.id === link.request_b)
+      const label = (r, id) => r?.po_number || `#${id}`
+      await logPoActivity(link.request_a, `Unlinked from ${label(b, link.request_b)}`)
+      await logPoActivity(link.request_b, `Unlinked from ${label(a, link.request_a)}`)
+      flashPoStatus('Link removed.', true)
+      await loadPoLinks()
+    } catch (error) {
+      console.error(error)
+      flashPoStatus('Could not remove the link — check the console for details.', false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
   // Mark a PO's vendor as contacted (or clear the mark). how = 'email' when Email Vendor was pressed, 'manual' for
   // a vendor reached outside the site. The database stamps who and when (add_vendor_contacted.sql).
   // `quiet` skips the green message, for the automatic mark that follows Email Vendor.
@@ -3322,7 +3398,7 @@ function App() {
   // logs it. Throws on failure -- callers do their own flash/refresh.
   // `duplicateReason` is only sent when the same vendor already has an invoice with this number
   // (add_invoice_duplicate_guard.sql refuses that without a reason).
-  async function uploadAndInsertInvoice(requestId, { invoiceNumber, amount, file, matchToReceiptId, duplicateReason }) {
+  async function uploadAndInsertInvoice(requestId, { invoiceNumber, amount, file, matchToReceiptId, duplicateReason, invoiceTotal, covers }) {
     const ext = file.name.split('.').pop() || 'pdf'
     const path = `po-${requestId}-${Date.now()}.${ext}`
     const { error: uploadError } = await supabase.storage
@@ -3340,6 +3416,8 @@ function App() {
       matched_receipt_id: matchToReceiptId || null,
       // Left out when there is none, so this still works before the SQL has been run.
       ...(duplicateReason ? { duplicate_reason: duplicateReason } : {}),
+      // Only when this PO takes part of the invoice (add_po_links_and_invoice_split.sql).
+      ...(covers ? { covers, invoice_total: invoiceTotal } : {}),
     })
     if (error) {
       // Don't leave the PDF behind in Storage when the row was refused.
@@ -3348,7 +3426,8 @@ function App() {
     }
     await logPoActivity(
       requestId,
-      `Invoice added${invoiceNumber ? ` (#${invoiceNumber})` : ''}: ${formatMoney(amount)}`
+      `Invoice added${invoiceNumber ? ` (#${invoiceNumber})` : ''}: ${formatMoney(amount)}` +
+        (covers ? ` — covers: ${covers}${invoiceTotal != null ? ` (invoice total ${formatMoney(invoiceTotal)})` : ''}` : '')
     )
   }
 
@@ -3356,7 +3435,7 @@ function App() {
   // requisitioner adding a receipt (handleAddReceipt below) -- neither
   // blocks the other. They start out unpaired; handleMatchInvoiceReceipt
   // pairs a specific invoice with a specific receipt afterward.
-  async function handleAddInvoice(request, { invoiceNumber, amount, file, matchToReceiptId, duplicateReason }) {
+  async function handleAddInvoice(request, { invoiceNumber, amount, file, matchToReceiptId, duplicateReason, invoiceTotal, covers }) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
@@ -3382,13 +3461,21 @@ function App() {
         file,
         matchToReceiptId,
         duplicateReason,
+        invoiceTotal,
+        covers,
       })
       flashPoStatus(matchToReceiptId ? 'Invoice added and matched.' : 'Invoice added.', true)
       await refreshPurchaseRequest(request.id)
       return true
     } catch (error) {
       console.error(error)
-      flashPoStatus(dbRefusal(error) || 'Could not add the invoice — check the console for details.', false)
+      flashPoStatus(
+        dbRefusal(error) ||
+          (/covers|invoice_total/.test(error?.message || '')
+            ? "Splitting an invoice across POs isn't set up yet. Run supabase/add_po_links_and_invoice_split.sql in the Inventory project's SQL editor first."
+            : 'Could not add the invoice — check the console for details.'),
+        false
+      )
       return false
     } finally {
       setPoActionBusyId(null)
@@ -5208,6 +5295,10 @@ function App() {
           openPoDraftForm={openPoDraftForm}
           closePoDraftForm={closePoDraftForm}
           poDraftId={poDraftId}
+          poLinks={poLinks}
+          poLinksReady={poLinksReady}
+          handleAddPoLink={handleAddPoLink}
+          handleRemovePoLink={handleRemovePoLink}
           poDraftProjectId={poDraftProjectId}
           setPoDraftProjectId={setPoDraftProjectId}
           programs={programs}

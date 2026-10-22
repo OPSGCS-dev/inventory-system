@@ -1105,6 +1105,14 @@ export function formatDateTime(value) {
   return d ? `${formatDate(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` : ''
 }
 
+// Who may link POs to each other (RelatedPos): anyone who works on POs or invoices.
+export function canLinkPos(user) {
+  return (
+    isAdmin(user) ||
+    ['purchase_req', 'purchase_rec_approval', 'po_issue', 'invoice_matching', 'invoice_approval', 'payment'].some((role) => userHasRole(user, role))
+  )
+}
+
 // Whether the PO page and list show a Location (the optional sub_projects row under its site, e.g. one of Firelight
 // Solar's rooftops). A location that is only the site again (a ground-mount site) isn't asked for and isn't shown
 // there; it is still stored on the PO, and the PO document (print view, PDF) always carries a Location row.

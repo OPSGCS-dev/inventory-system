@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import InvoiceReview from './InvoiceReview'
 import { findDuplicateInvoices, isBlockingDuplicate, MIN_DUPLICATE_REASON } from '../invoiceDuplicates'
+import { allocateInvoice, invoiceItemRows } from '../invoiceSplit'
 import PaymentConfirm from './PaymentConfirm'
 import {
   canMatchInvoices,
@@ -131,7 +132,7 @@ function InvoicesPanel({
     const token = ++scanToken.current
     const fresh = (patch) => setPending((p) => (p && token === scanToken.current ? { ...p, ...patch } : p))
     setDupes({ ready: null, matches: [] })
-    setPending({ file, receiptId, number: '', amount: '', dupReason: '', scan: { busy: true }, review: null, error: '' })
+    setPending({ file, receiptId, number: '', amount: '', dupReason: '', splitShared: false, rows: [], selected: [], scan: { busy: true }, review: null, error: '' })
     if (file.type !== 'application/pdf') {
       fresh({ scan: { note: 'Please choose a PDF file.' } })
       return
@@ -158,6 +159,8 @@ function InvoicesPanel({
               ...p,
               number: p.number || (invoiceNumber ? invoiceNumber.value : ''),
               amount: p.amount === '' && amount ? String(amount.value) : p.amount,
+              rows: invoiceItemRows(review.extracted),
+              selected: invoiceItemRows(review.extracted).map((r) => r.key),
               scan: { note },
               review,
             }
@@ -174,6 +177,21 @@ function InvoicesPanel({
     }
   }
 
+  // Ticking or unticking an item of the invoice: the amount follows what this PO takes.
+  function toggleItem(key) {
+    setPending((p) => {
+      const selected = p.selected.includes(key) ? p.selected.filter((k) => k !== key) : [...p.selected, key]
+      const split = allocateInvoice(p.review?.extracted, p.rows, selected)
+      return { ...p, selected, amount: selected.length > 0 ? String(split.amount) : '', error: '' }
+    })
+  }
+  function selectAllItems() {
+    setPending((p) => {
+      const selected = p.rows.map((r) => r.key)
+      return { ...p, selected, amount: String(allocateInvoice(p.review?.extracted, p.rows, selected).amount), error: '' }
+    })
+  }
+
   async function submitPending() {
     const n = Number(pending.amount)
     if (!pending.amount || Number.isNaN(n) || n <= 0) {
@@ -184,7 +202,17 @@ function InvoicesPanel({
     // this vendor has to be explained before it can go in (the database insists on it too).
     const check = await findDuplicateInvoices({ vendorId: request.vendor_id, number: pending.number, amount: pending.amount })
     const clash = check.matches.some(isBlockingDuplicate)
-    const reason = (pending.dupReason || '').trim()
+    const split = pending.rows.length > 0 ? allocateInvoice(pending.review?.extracted, pending.rows, pending.selected) : null
+    // The same invoice split across POs explains itself: the reason names the POs it is shared with.
+    const sharedWith = check.matches.filter((m) => m.same_number && m.po_status !== 'voided').map((m) => m.po_number || 'a draft PO')
+    const reason =
+      clash && pending.splitShared
+        ? `Same invoice split across POs (shared with ${[...new Set(sharedWith)].join(', ')})`
+        : (pending.dupReason || '').trim()
+    if (clash && pending.splitShared && split && !split.partial) {
+      setPending((p) => ({ ...p, error: 'This PO would take the whole invoice. Untick the items that belong on the other PO, or untick "split across POs".' }))
+      return
+    }
     if (clash && reason.length < MIN_DUPLICATE_REASON) {
       setDupes(check)
       setPending((p) => ({
@@ -199,6 +227,9 @@ function InvoicesPanel({
       file: pending.file,
       matchToReceiptId: pending.receiptId,
       duplicateReason: clash ? reason : null,
+      // Only when this PO takes part of the invoice: the whole invoice's total and which items are this PO's.
+      invoiceTotal: split?.partial ? split.documentTotal : null,
+      covers: split?.partial ? split.covers : null,
     })
     if (ok) {
       scanToken.current++
@@ -327,6 +358,12 @@ function InvoicesPanel({
                       {row.invoice ? (
                         <>
                           {row.invoice.invoice_number || '—'} — {formatMoney(row.invoice.amount)}
+                          {row.invoice.covers && (
+                            <div className="sub" style={{ margin: 0 }} title="This PO takes only part of the invoice">
+                              Covers: {row.invoice.covers}
+                              {row.invoice.invoice_total != null ? ` (invoice total ${formatMoney(row.invoice.invoice_total)})` : ''}
+                            </div>
+                          )}
                           <br />
                           <span className="sub" style={{ margin: 0 }}>
                             {findUserName(users, row.invoice.uploaded_by)} —{' '}
@@ -605,6 +642,8 @@ function InvoicesPanel({
           request={request}
           busy={busy}
           onChange={(field, value) => setPending((p) => ({ ...p, [field]: value, error: '' }))}
+          onToggleItem={toggleItem}
+          onSelectAllItems={selectAllItems}
           onSubmit={submitPending}
           onCancel={() => {
             scanToken.current++

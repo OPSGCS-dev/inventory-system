@@ -37,6 +37,7 @@ import {
   computePoProgressStage,
   poStatusText,
   locationVisible,
+  canLinkPos,
   siteNeedsLocation,
   requisitionerName,
   lineTotal,
@@ -80,6 +81,7 @@ import {
   formatAmount,
 } from '../utils'
 import InvoicesPanel from './InvoicesPanel'
+import RelatedPos from './RelatedPos'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
 import MyInvoicesToReviewTable from './MyInvoicesToReviewTable'
 import MyInvoicesToPayTable from './MyInvoicesToPayTable'
@@ -287,6 +289,10 @@ function PurchaseOrdersTab({
   openPoDraftForm,
   closePoDraftForm,
   poDraftId,
+  poLinks,
+  poLinksReady,
+  handleAddPoLink,
+  handleRemovePoLink,
   poDraftProjectId,
   setPoDraftProjectId,
   programs,
@@ -1681,6 +1687,20 @@ function PurchaseOrdersTab({
             <p className="sub" style={{ margin: '6px 0 0' }}>
               {emailNote.text}
             </p>
+          )}
+
+          {r.status !== 'draft' && (
+            <RelatedPos
+              request={r}
+              purchaseRequests={purchaseRequests}
+              poLinks={poLinks || []}
+              poLinksReady={poLinksReady}
+              canLink={canLinkPos(loggedInUser)}
+              busy={poActionBusyId === r.id}
+              onOpenPo={toggleExpandedPo}
+              onAddLink={handleAddPoLink}
+              onRemoveLink={handleRemovePoLink}
+            />
           )}
 
           {(r.status === 'issued' || r.status === 'closed') && (

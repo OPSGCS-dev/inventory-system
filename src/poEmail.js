@@ -69,7 +69,8 @@ export function buildPoEmailBody(request, totals, label) {
     '',
     `Please find Purchase Order ${label} attached (PDF).`,
     '',
-    `Entity: ${request.projects?.name || '-'}`,
+    ...(request.program_name ? [`Project: ${request.program_name}`] : []),
+    `Site: ${request.projects?.name || '-'}`,
     `Grand Total: ${formatMoney(totals.grandTotal)} ${request.currency || 'CAD'}`,
   ]
   if (request.vendor_quote_number) lines.push(`Your quote #: ${request.vendor_quote_number}`)

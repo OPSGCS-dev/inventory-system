@@ -79,9 +79,10 @@ const FIELD_LABELS = {
   status: 'Status',
   description: 'Description',
   po_number: 'PO #',
-  project_id: 'Entity',
+  project_id: 'Site',
+  program_id: 'Project',
   vendor_id: 'Vendor',
-  sub_project_id: 'Project / site',
+  sub_project_id: 'Location',
   notes: 'Notes',
   vendor_quote_number: 'Vendor quote #',
   quote_file_url: 'Quote file',
@@ -165,11 +166,13 @@ const FILE_FIELDS = new Set(['file_url', 'quote_file_url', 'receipt_file_url'])
 const STATUS_FIELDS = new Set(['status'])
 const WORK_FIELDS = new Set(['parts_status', 'service_status', 'work_status'])
 
-// One stored value as text. `ctx` = { users, projects, vendors } so ids can be shown as names.
+// One stored value as text. `ctx` = { users, projects, vendors, programs, budgetCategories } so ids can be shown as names.
 export function formatValue(key, value, ctx = {}) {
   if (value === null || value === undefined || value === '') return '(blank)'
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  if (key === 'project_id') return ctx.projects?.find((p) => p.id === value)?.name || `entity #${value}`
+  if (key === 'project_id') return ctx.projects?.find((p) => p.id === value)?.name || `site #${value}`
+  if (key === 'program_id') return ctx.programs?.find((g) => g.id === value)?.name || `project #${value}`
+  if (key === 'budget_category_id') return ctx.budgetCategories?.find((c) => c.id === value)?.name || `category #${value}`
   if (key === 'vendor_id') return ctx.vendors?.find((v) => v.id === value)?.name || `vendor #${value}`
   if (key === 'payment_batch_id') return `batch #${value}`
   if (key === 'matched_receipt_id') return `receipt #${value}`
@@ -359,7 +362,7 @@ export function historyCsvRow(row, ctx = {}) {
     'Category': PO_HISTORY_CATEGORIES[row.category] || row.category,
     'Event': eventLabel(row.event),
     'PO #': poLabelOf(row),
-    'Entity': row.entity_name || '',
+    'Site': row.entity_name || '',
     'Vendor': row.vendor_name || '',
     'Invoice #': row.invoice_number || '',
     'Summary': summarize(row, ctx),

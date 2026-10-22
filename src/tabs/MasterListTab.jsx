@@ -489,7 +489,7 @@ function MasterListTab({
                         <td>{p.spare_category || '—'}</td>
                       )}
                       {editMode ? (
-                        <td title="Set by each entity's Required Inventory list">{usedByCell(p)}</td>
+                        <td title="Set by each site's Required Inventory list">{usedByCell(p)}</td>
                       ) : (
                         <td>{usedByCell(p)}</td>
                       )}

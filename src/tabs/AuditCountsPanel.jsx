@@ -201,7 +201,7 @@ function AuditCountsPanel({ stockItems, stockLoading, parts, userName }) {
           <div>
             <h2>Accounting Audit</h2>
             <p className="sub" style={{ margin: '4px 0 0' }}>
-              Inventory quantity (all entities) against accounting&apos;s books. Source of the books: <strong>{sourceLabel}</strong>
+              Inventory quantity (all sites) against accounting&apos;s books. Source of the books: <strong>{sourceLabel}</strong>
             </p>
           </div>
           <div className="header-actions">

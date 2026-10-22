@@ -14,7 +14,7 @@ const COLUMNS = [
   { key: 'invoice', label: 'Invoice #', values: ({ invoice }) => invoice.invoice_number },
   { key: 'amount', label: 'Amount', values: ({ invoice }) => formatMoney(invoice.amount), sort: byAmount },
   { key: 'po', label: 'PO #', values: ({ request }) => request.po_number || '#' + request.id },
-  { key: 'entity', label: 'Entity', values: ({ request }) => request.projects?.name },
+  { key: 'entity', label: 'Site', values: ({ request }) => request.projects?.name },
   { key: 'vendor', label: 'Vendor', values: ({ request }) => request.vendors?.name },
 ]
 
@@ -79,7 +79,7 @@ function MyInvoicesToReviewTable({
                 <FilterTh filters={filters} col="invoice">Invoice #</FilterTh>
                 <FilterTh filters={filters} col="amount" className="center-cell">Amount</FilterTh>
                 <FilterTh filters={filters} col="po">PO #</FilterTh>
-                <FilterTh filters={filters} col="entity">Entity</FilterTh>
+                <FilterTh filters={filters} col="entity">Site</FilterTh>
                 <FilterTh filters={filters} col="vendor">Vendor</FilterTh>
                 <DateSortHeader range={range} label="Uploaded" />
                 <th></th>

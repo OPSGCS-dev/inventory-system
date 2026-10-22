@@ -84,6 +84,7 @@ export async function buildPoPdf(request, stamp = null) {
     columnStyles: { 0: { fontStyle: 'bold', fillColor: [242, 242, 242], cellWidth: 110 } },
     body: [
       ['PO Date', formatDate(request.issued_at || Date.now())],
+      ...(request.program_name ? [['Project', clean(request.program_name)]] : []),
       ['PO #', clean(poLabel(request))],
       ['Requisitioner', clean(request.requisitioner_name || '-')],
       ['Budget Category', clean(budgetCategoryLabel(request))],
@@ -201,7 +202,7 @@ export async function buildPoPdf(request, stamp = null) {
     })
     ly += 16
   }
-  labelled('Site:', request.sub_projects?.name || request.projects?.name || '-')
+  labelled(request.sub_projects?.name ? 'Location:' : 'Site:', request.sub_projects?.name || request.projects?.name || '-')
   labelled('Notes:', request.notes || '-')
   y = Math.max(totalsBottom, ly) + 22
 

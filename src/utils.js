@@ -520,14 +520,14 @@ export function lineCountsInStock(line) {
 // parts have been received yet. Null for service lines.
 export function describeLineInventory(line, entityName, received) {
   if (line.line_type !== 'part') return null
-  const where = entityName ? `${entityName}'s inventory` : "the entity's inventory"
+  const where = entityName ? `${entityName}'s inventory` : "the site's inventory"
   switch (line.inventory_action) {
     case 'used_immediately':
       return 'Used immediately — not added to inventory'
     case 'consumable':
       return 'Consumable — not tracked in inventory'
     case 'transfer':
-      return 'Stock transfer between entities — the stock already moved when the transfer was saved'
+      return 'Stock transfer between sites — the stock already moved when the transfer was saved'
     case 'add_new':
     case 'not_tracked':
       return 'Uses an older inventory option that no longer exists — edit the request and choose Spare, Used immediately or Consumable'
@@ -1212,7 +1212,8 @@ export function buildPoMailto(request) {
 
   const bodyLines = [
     `Purchase Order ${poLabel}`,
-    `Entity: ${request.projects?.name || '—'}`,
+    ...(request.program_name ? [`Project: ${request.program_name}`] : []),
+    `Site: ${request.projects?.name || '—'}`,
     ...(request?.vendors?.address ? [`Ship to / Address: ${request.vendors.address}`] : []),
     '',
     'Line Items:',

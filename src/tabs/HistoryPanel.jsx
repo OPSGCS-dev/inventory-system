@@ -74,7 +74,7 @@ function HistoryPanel({ projects, parts, users }) {
         after: `S ${line.new_storage_qty ?? '—'} · B ${line.new_barn_qty ?? '—'}`,
       }
     }
-    const owner = projects.find((p) => p.id === line.project_id)?.name || (line.project_id ? `Entity ${line.project_id}` : '—')
+    const owner = projects.find((p) => p.id === line.project_id)?.name || (line.project_id ? `Site ${line.project_id}` : '—')
     return { what: `Owned by ${owner}`, before: line.previous_quantity, after: line.new_quantity }
   }
 

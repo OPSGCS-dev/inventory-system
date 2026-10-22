@@ -268,20 +268,20 @@ function PhysicalLocationTab({
             </div>
             {!mode && (
               <p className="sub" style={{ margin: 0 }}>
-                Where each part physically is: Oshawa, the Barn, the Office, or an entity&apos;s own site (which can only hold parts that entity owns). Click a part to see who owns it.
+                Where each part physically is: Oshawa, the Barn, the Office, or on a site&apos;s own shelf (which can only hold parts that site owns). Click a part to see who owns it.
                 {hasIncoming && (
-                  <> <span style={{ background: INCOMING_BG, padding: '0 6px', borderRadius: 3 }}>Yellow</span> numbers include spares on issued POs that haven&apos;t been received yet; they are counted where they will land (the entity&apos;s own site, or Oshawa), but aren&apos;t on the shelf until the PO&apos;s parts are marked received.</>
+                  <> <span style={{ background: INCOMING_BG, padding: '0 6px', borderRadius: 3 }}>Yellow</span> numbers include spares on issued POs that haven&apos;t been received yet; they are counted where they will land (the site&apos;s own shelf, or Oshawa), but aren&apos;t on the shelf until the PO&apos;s parts are marked received.</>
                 )}
               </p>
             )}
             {mode === 'move' && (
               <p className="sub" style={{ margin: 0 }}>
-                Move units between places. Ownership doesn&apos;t change, and a site can only receive units its entity owns. To move parts from one site to another, use Stock Transfer on the Ownership tab, which changes the owner and the location together.
+                Move units between places. Ownership doesn&apos;t change, and a site&apos;s shelf can only receive units that site owns. To move parts from one site to another, use Stock Transfer on the Ownership tab, which changes the owner and the location together.
               </p>
             )}
             {mode === 'use' && (
               <p className="sub" style={{ margin: 0 }}>
-                Take units out where they were used. On a site, the count that goes down is that site&apos;s entity. From Oshawa, the Barn or the Office, choose whose count it comes from.
+                Take units out where they were used. On a site, the count that goes down is that site&apos;s own. From Oshawa, the Barn or the Office, choose whose count it comes from.
               </p>
             )}
           </div>

@@ -90,7 +90,9 @@ function buildRows(requests) {
   return rows
 }
 
-function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
+function PoLedgerTab({ purchaseRequests, projects, vendors, users, programs = [] }) {
+  const programNameFor = (id) => programs.find((g) => g.id === id)?.name || ''
+  const [programFilter, setProgramFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [entityFilter, setEntityFilter] = useState('')
   const [vendorFilter, setVendorFilter] = useState('')
@@ -110,6 +112,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
       } else if (!DEFAULT_STATUSES.includes(r.status)) {
         return false
       }
+      if (programFilter && String(r.program_id) !== programFilter) return false
       if (entityFilter && String(r.project_id) !== entityFilter) return false
       if (vendorFilter && String(r.vendor_id) !== vendorFilter) return false
       // Date range is on the issue date (the day money was committed); a PO
@@ -133,7 +136,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
         .filter(Boolean)
         .some((f) => String(f).toLowerCase().includes(q))
     })
-  }, [purchaseRequests, statusFilter, entityFilter, vendorFilter, categoryFilter, fromDate, toDate, search])
+  }, [purchaseRequests, statusFilter, programFilter, entityFilter, vendorFilter, categoryFilter, fromDate, toDate, search])
 
   // Totals by category, line subtotals only (markup/tax/shipping live at PO level),
   // and never counting voided POs -- a voided PO committed no money.
@@ -172,7 +175,8 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
       return {
         'PO #': r.po_number || `#${r.id}`,
         Status: poStatusLabel(r.status),
-        Entity: r.projects?.name || '',
+        ...(r.program_id && programNameFor(r.program_id) ? { Project: programNameFor(r.program_id) } : {}),
+        Site: r.projects?.name || '',
         Project: r.sub_projects?.name || '',
         Vendor: r.vendors?.name || '',
         Issued: fmtDate(row.issuedAt),
@@ -212,7 +216,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
     URL.revokeObjectURL(url)
   }
 
-  const COLS = 14
+  const COLS = programs.length > 0 ? 15 : 14
 
   return (
     <div className="card">
@@ -238,8 +242,18 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
             </option>
           ))}
         </select>
+        {programs.length > 0 && (
+          <select value={programFilter} onChange={(e) => setProgramFilter(e.target.value)}>
+            <option value="">All Projects</option>
+            {programs.map((g) => (
+              <option value={g.id} key={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        )}
         <select value={entityFilter} onChange={(e) => setEntityFilter(e.target.value)}>
-          <option value="">All Entities</option>
+          <option value="">All Sites</option>
           {projects.map((p) => (
             <option value={p.id} key={p.id}>
               {p.name}
@@ -294,7 +308,8 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
               <tr className="header-row">
                 <th className="row-head">PO #</th>
                 <th>Status</th>
-                <th>Entity</th>
+                {programs.length > 0 && <th>Project</th>}
+                <th>Site</th>
                 <th>Vendor</th>
                 <th>Issued</th>
                 <th>Received / Done</th>
@@ -318,6 +333,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users }) {
                     <tr>
                       <td className="row-head">{row.first ? r.po_number || `#${r.id}` : ''}</td>
                       <td>{row.first ? poStatusLabel(r.status) : ''}</td>
+                      {programs.length > 0 && <td>{row.first ? programNameFor(r.program_id) || '—' : ''}</td>}
                       <td>{row.first ? r.projects?.name || '—' : ''}</td>
                       <td>{row.first ? r.vendors?.name || '—' : ''}</td>
                       <td>{row.first ? fmtDate(row.issuedAt) || '—' : ''}</td>

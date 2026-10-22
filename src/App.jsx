@@ -147,6 +147,13 @@ function App() {
   const [importing, setImporting] = useState(false)
 
   const [projects, setProjects] = useState([])
+  // The top layer above sites, shown as "Project": Regular O&M, Repower - Phase 1, ... Each has its own sites,
+  // budget categories and invoice email (add_projects_layer.sql). Empty until that SQL has been run, and
+  // everything then works as it did before.
+  const [programs, setPrograms] = useState([])
+  const [programSites, setProgramSites] = useState([])
+  const [poDraftProgramId, setPoDraftProgramId] = useState(null)
+  const [newProjectPrograms, setNewProjectPrograms] = useState([])
   const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [projectItems, setProjectItems] = useState([])
   const [projectLoading, setProjectLoading] = useState(true)
@@ -484,7 +491,7 @@ function App() {
     const { data, error } = await supabase.from('projects').select('*').order('name', { ascending: true })
     if (error) {
       console.error(error)
-      setProjectStatus({ ok: false, msg: 'Could not load entities — check the console for details.' })
+      setProjectStatus({ ok: false, msg: 'Could not load sites — check the console for details.' })
       return
     }
     setProjects(data ?? [])
@@ -493,6 +500,22 @@ function App() {
     } else if (!data || data.length === 0) {
       setProjectLoading(false)
     }
+  }
+
+  async function loadPrograms() {
+    const [pr, ps] = await Promise.all([
+      supabase.from('programs').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true }),
+      supabase.from('program_sites').select('*'),
+    ])
+    const failed = pr.error || ps.error
+    if (failed) {
+      console.warn("Projects aren't set up yet (run supabase/add_projects_layer.sql):", failed.message)
+      setPrograms([])
+      setProgramSites([])
+      return
+    }
+    setPrograms(pr.data ?? [])
+    setProgramSites(ps.data ?? [])
   }
 
   async function loadSubProjects() {
@@ -517,7 +540,7 @@ function App() {
 
     if (error) {
       console.error(error)
-      setProjectStatus({ ok: false, msg: 'Could not load entity sheet — check the console for details.' })
+      setProjectStatus({ ok: false, msg: 'Could not load the site sheet — check the console for details.' })
     } else {
       const sorted = (data ?? []).slice().sort((a, b) => (a.parts?.gcs_id ?? 0) - (b.parts?.gcs_id ?? 0))
       setProjectItems(sorted)
@@ -844,6 +867,7 @@ function App() {
       loadBudgetCategories()
       loadBudgetSubcategories()
       loadSubProjects()
+      loadPrograms()
     }
   }, [loggedInUser])
 
@@ -1037,6 +1061,36 @@ function App() {
   // on the Inventory On Hand tab).
   const incomingByKey = useMemo(() => incomingStockByKey(purchaseRequests), [purchaseRequests])
 
+  // Projects (the top layer) and which sites each holds. Spare-parts stock is only kept for sites in a project
+  // that keeps inventory (Regular O&M), so the stock screens only list those.
+  const programsReady = programs.length > 0
+  const programSiteIds = useMemo(() => {
+    const map = new Map(programs.map((g) => [g.id, new Set()]))
+    for (const ps of programSites) map.get(ps.program_id)?.add(ps.project_id)
+    return map
+  }, [programs, programSites])
+  const siteInProgram = (programId, projectId) =>
+    !programsReady || !programId || Boolean(programSiteIds.get(programId)?.has(projectId))
+  const defaultProgramFor = (projectId) =>
+    programs.find((g) => programSiteIds.get(g.id)?.has(projectId))?.id ?? programs[0]?.id ?? null
+  const inventoryProjects = useMemo(() => {
+    if (!programs.some((g) => g.tracks_inventory)) return projects
+    const ids = new Set()
+    for (const g of programs) {
+      if (g.tracks_inventory) for (const id of programSiteIds.get(g.id) || []) ids.add(id)
+    }
+    return projects.filter((p) => ids.has(p.id))
+  }, [projects, programs, programSiteIds])
+  // A site added in Admin starts in the first project unless another is ticked.
+  useEffect(() => {
+    if (programs.length > 0 && newProjectPrograms.length === 0) setNewProjectPrograms([programs[0].id])
+  }, [programs, newProjectPrograms])
+  useEffect(() => {
+    if (inventoryProjects.length > 0 && selectedProjectId !== null && !inventoryProjects.some((p) => p.id === selectedProjectId)) {
+      setSelectedProjectId(inventoryProjects[0].id)
+    }
+  }, [inventoryProjects, selectedProjectId])
+
   function runAction(action) {
     // Everyone can look at the inventory; only the Inventory role changes anything.
     if (['edit', 'import-parts', 'project-edit'].includes(action.type) && !canEditInventory(loggedInUser)) return
@@ -1189,14 +1243,19 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
+  // 'Entities' and 'Projects' are what the Sites and Locations sheets used to be called; files exported before
+  // the rename still import.
   const ADMIN_SHEET_NAMES = [
     'Users',
     'Vendors',
+    'Sites',
     'Entities',
+    'Locations',
     'Projects',
     'Budget Categories',
     'Budget Sub-Categories',
   ]
+  const programNameOf = (id) => programs.find((g) => g.id === id)?.name || ''
 
   function handleExportAdminData() {
     const wb = XLSX.utils.book_new()
@@ -1234,18 +1293,22 @@ function App() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vendorRows), 'Vendors')
 
     const projectRows = projects.map((p) => ({ Name: p.name, 'PO Code': p.project_code || '' }))
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(projectRows), 'Entities')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(projectRows), 'Sites')
 
     const subProjectRows = subProjects.map((sp) => ({
-      Entity: projects.find((p) => p.id === sp.project_id)?.name || '',
+      Site: projects.find((p) => p.id === sp.project_id)?.name || '',
       Name: sp.name,
     }))
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(subProjectRows), 'Projects')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(subProjectRows), 'Locations')
 
-    const categoryRows = budgetCategories.map((c) => ({ Name: c.name }))
+    // With projects set up, a category belongs to one, and the same name can be on several.
+    const categoryRows = budgetCategories.map((c) => ({ ...(programsReady ? { Project: programNameOf(c.program_id) } : {}), Name: c.name }))
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(categoryRows), 'Budget Categories')
 
     const subcategoryRows = budgetSubcategories.map((sc) => ({
+      ...(programsReady
+        ? { Project: programNameOf(budgetCategories.find((c) => c.id === sc.category_id)?.program_id) }
+        : {}),
       'Budget Category': budgetCategories.find((c) => c.id === sc.category_id)?.name || '',
       Name: sc.name,
     }))
@@ -1278,7 +1341,7 @@ function App() {
 
     if (!wb.SheetNames.some((n) => ADMIN_SHEET_NAMES.includes(n))) {
       setAdminImportErrors([
-        `No recognized sheet names found — expected one or more of: ${ADMIN_SHEET_NAMES.join(', ')}.`,
+        'No recognized sheet names found — expected one or more of: Users, Vendors, Sites, Locations, Budget Categories, Budget Sub-Categories.',
       ])
       return
     }
@@ -1290,7 +1353,16 @@ function App() {
 
     const errors = []
     const rows = []
-    const seenCategoryNames = new Set(budgetCategories.map((c) => c.name.toLowerCase()))
+    // A category is identified by its project and name (the same name can be on several projects). The Project
+    // column is optional: without one a category goes to the first project (Regular O&M).
+    const programIdFromCell = (row) => {
+      const text = String(getCell(row, 'Project') || '').trim().toLowerCase()
+      if (!text) return programs[0]?.id ?? null
+      return programs.find((g) => g.name.toLowerCase() === text)?.id ?? undefined
+    }
+    const categoryKey = (programId, name) => `${programId ?? ''}|${name.toLowerCase()}`
+    const seenCategoryKeys = new Set(budgetCategories.map((c) => categoryKey(c.program_id, c.name)))
+    const sheetOrLegacy = (name, legacy) => (wb.Sheets[name] ? name : legacy)
     const seenEntityNames = new Set(projects.map((p) => p.name.toLowerCase()))
 
     sheetRows('Users').forEach((row, i) => {
@@ -1347,13 +1419,13 @@ function App() {
       })
     })
 
-    sheetRows('Entities').forEach((row) => {
+    sheetRows(sheetOrLegacy('Sites', 'Entities')).forEach((row) => {
       const name = String(getCell(row, 'Name') || '').trim()
       if (!name) return
       const existing = projects.find((p) => p.name.toLowerCase() === name.toLowerCase())
       if (!existing) seenEntityNames.add(name.toLowerCase())
       rows.push({
-        section: 'Entity',
+        section: 'Site',
         name,
         action: existing ? 'update' : 'insert',
         existingId: existing?.id ?? null,
@@ -1361,17 +1433,17 @@ function App() {
       })
     })
 
-    sheetRows('Projects').forEach((row, i) => {
+    sheetRows(sheetOrLegacy('Locations', 'Projects')).forEach((row, i) => {
       const rowNum = i + 2
       const name = String(getCell(row, 'Name') || '').trim()
       if (!name) return
-      const entityName = String(getCell(row, 'Entity') || '').trim()
+      const entityName = String(getCell(row, 'Site') ?? getCell(row, 'Entity') ?? '').trim()
       if (!entityName) {
-        errors.push(`Projects row ${rowNum}: "${name}" needs an Entity.`)
+        errors.push(`Locations row ${rowNum}: "${name}" needs a Site.`)
         return
       }
       if (!seenEntityNames.has(entityName.toLowerCase())) {
-        errors.push(`Projects row ${rowNum}: Entity "${entityName}" not found for project "${name}".`)
+        errors.push(`Locations row ${rowNum}: Site "${entityName}" not found for location "${name}".`)
         return
       }
       const existing = subProjects.find(
@@ -1380,7 +1452,7 @@ function App() {
           projects.find((p) => p.id === sp.project_id)?.name.toLowerCase() === entityName.toLowerCase()
       )
       rows.push({
-        section: 'Project',
+        section: 'Location',
         name,
         action: existing ? 'update' : 'insert',
         existingId: existing?.id ?? null,
@@ -1388,17 +1460,22 @@ function App() {
       })
     })
 
-    sheetRows('Budget Categories').forEach((row) => {
+    sheetRows('Budget Categories').forEach((row, i) => {
       const name = String(getCell(row, 'Name') || '').trim()
       if (!name) return
-      const existing = budgetCategories.find((c) => c.name.toLowerCase() === name.toLowerCase())
-      if (!existing) seenCategoryNames.add(name.toLowerCase())
+      const programId = programsReady ? programIdFromCell(row) : null
+      if (programId === undefined) {
+        errors.push(`Budget Categories row ${i + 2}: Project "${String(getCell(row, 'Project')).trim()}" not found for category "${name}".`)
+        return
+      }
+      const existing = budgetCategories.find((c) => categoryKey(c.program_id, c.name) === categoryKey(programId, name))
+      if (!existing) seenCategoryKeys.add(categoryKey(programId, name))
       rows.push({
         section: 'Budget Category',
-        name,
+        name: programsReady ? `${programNameOf(programId)} — ${name}` : name,
         action: existing ? 'update' : 'insert',
         existingId: existing?.id ?? null,
-        data: { name },
+        data: { name, programId },
       })
     })
 
@@ -1411,24 +1488,23 @@ function App() {
         errors.push(`Budget Sub-Categories row ${rowNum}: "${name}" needs a Budget Category.`)
         return
       }
-      if (!seenCategoryNames.has(categoryName.toLowerCase())) {
+      const programId = programsReady ? programIdFromCell(row) : null
+      if (!seenCategoryKeys.has(categoryKey(programId, categoryName))) {
         errors.push(
           `Budget Sub-Categories row ${rowNum}: Budget Category "${categoryName}" not found for sub-category "${name}".`
         )
         return
       }
-      const existing = budgetSubcategories.find(
-        (sc) =>
-          sc.name.toLowerCase() === name.toLowerCase() &&
-          budgetCategories.find((c) => c.id === sc.category_id)?.name.toLowerCase() ===
-            categoryName.toLowerCase()
-      )
+      const existing = budgetSubcategories.find((sc) => {
+        const cat = budgetCategories.find((c) => c.id === sc.category_id)
+        return sc.name.toLowerCase() === name.toLowerCase() && cat && categoryKey(cat.program_id, cat.name) === categoryKey(programId, categoryName)
+      })
       rows.push({
         section: 'Budget Sub-Category',
         name,
         action: existing ? 'update' : 'insert',
         existingId: existing?.id ?? null,
-        data: { name, categoryName },
+        data: { name, categoryName, programId },
       })
     })
 
@@ -1461,7 +1537,7 @@ function App() {
       }
 
       const entityNameToId = new Map(projects.map((p) => [p.name.toLowerCase(), p.id]))
-      for (const row of byType('Entity')) {
+      for (const row of byType('Site')) {
         if (row.action === 'update') {
           const { error } = await supabase
             .from('projects')
@@ -1480,7 +1556,7 @@ function App() {
         }
       }
 
-      for (const row of byType('Project')) {
+      for (const row of byType('Location')) {
         const entityId = entityNameToId.get(row.data.entityName.toLowerCase())
         if (row.action === 'update') {
           const { error } = await supabase
@@ -1496,23 +1572,24 @@ function App() {
         }
       }
 
-      const categoryNameToId = new Map(budgetCategories.map((c) => [c.name.toLowerCase(), c.id]))
+      const categoryKeyOf = (programId, name) => `${programId ?? ''}|${name.toLowerCase()}`
+      const categoryNameToId = new Map(budgetCategories.map((c) => [categoryKeyOf(c.program_id, c.name), c.id]))
       for (const row of byType('Budget Category')) {
         if (row.action === 'update') {
-          categoryNameToId.set(row.name.toLowerCase(), row.existingId)
+          categoryNameToId.set(categoryKeyOf(row.data.programId, row.data.name), row.existingId)
         } else {
           const { data, error } = await supabase
             .from('budget_categories')
-            .insert({ name: row.data.name })
+            .insert({ name: row.data.name, ...(programsReady ? { program_id: row.data.programId } : {}) })
             .select()
             .single()
           if (error) throw error
-          categoryNameToId.set(row.data.name.toLowerCase(), data.id)
+          categoryNameToId.set(categoryKeyOf(row.data.programId, row.data.name), data.id)
         }
       }
 
       for (const row of byType('Budget Sub-Category')) {
-        const categoryId = categoryNameToId.get(row.data.categoryName.toLowerCase())
+        const categoryId = categoryNameToId.get(categoryKeyOf(row.data.programId, row.data.categoryName))
         if (row.action === 'update') {
           const { error } = await supabase
             .from('budget_subcategories')
@@ -1941,6 +2018,7 @@ function App() {
     if (existing) {
       setPoDraftId(existing.id)
       setPoDraftProjectId(existing.project_id)
+      setPoDraftProgramId(existing.program_id ?? defaultProgramFor(existing.project_id))
       setPoDraftVendorId(existing.vendor_id)
       setPoDraftNotes(existing.notes || '')
       setPoDraftDescription(existing.description || '')
@@ -2001,9 +2079,9 @@ function App() {
       setPoDraftId(null)
       // A new request starts on an entity the person may create requests for.
       const mayUse = entitiesAllowedFor(loggedInUserWithScopes, 'purchase_req', projects)
-      setPoDraftProjectId(
-        prefill?.projectId ?? mayUse.find((p) => p.id === selectedProjectId)?.id ?? mayUse[0]?.id ?? null
-      )
+      const startProject = prefill?.projectId ?? mayUse.find((p) => p.id === selectedProjectId)?.id ?? mayUse[0]?.id ?? null
+      setPoDraftProjectId(startProject)
+      setPoDraftProgramId(prefill?.programId ?? defaultProgramFor(startProject))
       setPoDraftVendorId(prefill?.vendorId ?? null)
       setPoDraftNotes('')
       setPoDraftDescription(prefill?.description ?? '')
@@ -2031,6 +2109,20 @@ function App() {
     }
     setPoDraftFieldErrors({})
     setPoFormOpen(true)
+  }
+
+  // Picking a different project: the site and budget category have to belong to it, so any that don't are cleared.
+  function changePoDraftProgram(programId) {
+    setPoDraftProgramId(programId)
+    if (poDraftProjectId && !siteInProgram(programId, poDraftProjectId)) {
+      setPoDraftProjectId(null)
+      setPoDraftSubProjectId(null)
+    }
+    const category = budgetCategories.find((c) => c.id === poDraftBudgetCategoryId)
+    if (category && category.program_id !== programId) {
+      setPoDraftBudgetCategoryId(null)
+      setPoDraftBudgetSubcategoryId(null)
+    }
   }
 
   function closePoDraftForm() {
@@ -2193,6 +2285,16 @@ function App() {
 
     if (sel.entity !== undefined) {
       setPoDraftProjectId(sel.entity)
+      if (programsReady && sel.entity && !siteInProgram(poDraftProgramId, sel.entity)) {
+        // The site read from the PDF isn't in the chosen project: move to a project it is in.
+        const programId = defaultProgramFor(sel.entity)
+        setPoDraftProgramId(programId)
+        const category = budgetCategories.find((c) => c.id === poDraftBudgetCategoryId)
+        if (category && category.program_id !== programId) {
+          setPoDraftBudgetCategoryId(null)
+          setPoDraftBudgetSubcategoryId(null)
+        }
+      }
       setPoDraftSubProjectId(sel.site ?? null)
     } else if (sel.site !== undefined) {
       setPoDraftSubProjectId(sel.site)
@@ -2209,11 +2311,11 @@ function App() {
 
   async function handleCreatePurchaseRequest() {
     if (!canCreatePurchaseRequests(loggedInUserWithScopes, poDraftProjectId)) {
-      flashPoStatus("You can only create purchase requests for the entities you're assigned to.", false)
+      flashPoStatus("You can only create purchase requests for the sites you're assigned to.", false)
       return
     }
     const partLines = poDraftLines.filter((l) => l.line_type === 'part')
-    const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this entity'
+    const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this site'
     const flagLines = (lines, message) => {
       setPoDraftFieldErrors({ incompleteLines: lines.map((l) => l._tempId) })
       flashPoStatus(message, false)
@@ -2276,6 +2378,7 @@ function App() {
     const entitySubProjects = subProjects.filter((sp) => sp.project_id === poDraftProjectId)
     const errors = {}
     if (!poDraftProjectId) errors.project = true
+    if (programsReady && !poDraftProgramId) errors.program = true
     if (!poDraftVendorId) errors.vendor = true
     if (!poDraftBudgetCategoryId) errors.budgetCategory = true
     if (validLines.length === 0) errors.lines = true
@@ -2284,8 +2387,10 @@ function App() {
     if (Object.keys(errors).length > 0) {
       setPoDraftFieldErrors(errors)
       flashPoStatus(
-        errors.subProject
-          ? 'Select which project this request is for.'
+        errors.program
+          ? 'Choose the project this request is for.'
+          : errors.subProject
+          ? 'Select which location this request is for.'
           : errors.budgetCategory
           ? 'Choose a budget category before saving.'
           : 'Fill in the highlighted fields before saving.',
@@ -2333,12 +2438,15 @@ function App() {
     // The invoice address is only sent when it isn't the default (or is being put back to it from
     // something else), so POs on the default keep saving even before add_po_invoice_email.sql has been run.
     const priorInvoiceEmail = poDraftId ? purchaseRequests.find((r) => r.id === poDraftId)?.invoice_email : null
+    // With projects set up, the project decides the address (ap@ for Regular O&M, repower@ for the repower projects).
+    const programEmail = programsReady ? programs.find((g) => g.id === poDraftProgramId)?.invoice_email : null
+    const invoiceEmailToSave = programEmail || poDraftInvoiceEmail
     const invoiceEmailFields =
-      poDraftInvoiceEmail === PO_INVOICE_EMAIL
+      invoiceEmailToSave === PO_INVOICE_EMAIL
         ? priorInvoiceEmail
           ? { invoice_email: null }
           : {}
-        : { invoice_email: poDraftInvoiceEmail }
+        : { invoice_email: invoiceEmailToSave }
 
     setSavingPoRequest(true)
     try {
@@ -2376,6 +2484,7 @@ function App() {
           .from('purchase_requests')
           .update({
             ...newValues,
+            ...(programsReady ? { program_id: poDraftProgramId } : {}),
             sub_project_id: poDraftSubProjectId,
             notes: poDraftNotes.trim() || null,
             budget_category_id: poDraftBudgetCategoryId,
@@ -2408,8 +2517,12 @@ function App() {
           const projectName = (id) => projects.find((p) => p.id === id)?.name || '—'
           const vendorName = (id) => vendors.find((v) => v.id === id)?.name || '—'
           const changeLines = []
+          if (programsReady && existing.program_id !== poDraftProgramId) {
+            const programName = (id) => programs.find((g) => g.id === id)?.name || '—'
+            changeLines.push(`Project: ${programName(existing.program_id)} → ${programName(poDraftProgramId)}`)
+          }
           if (existing.project_id !== newValues.project_id) {
-            changeLines.push(`Entity: ${projectName(existing.project_id)} → ${projectName(newValues.project_id)}`)
+            changeLines.push(`Site: ${projectName(existing.project_id)} → ${projectName(newValues.project_id)}`)
           }
           if (existing.vendor_id !== newValues.vendor_id) {
             changeLines.push(`Vendor: ${vendorName(existing.vendor_id)} → ${vendorName(newValues.vendor_id)}`)
@@ -2438,8 +2551,8 @@ function App() {
           if ((existing.vendor_quote_number || '') !== (newValues.vendor_quote_number || '')) {
             changeLines.push(`Vendor Quote #: ${newValues.vendor_quote_number || '(cleared)'}`)
           }
-          if ((existing.invoice_email || PO_INVOICE_EMAIL) !== poDraftInvoiceEmail) {
-            changeLines.push(`Send Invoices To: ${existing.invoice_email || PO_INVOICE_EMAIL} → ${poDraftInvoiceEmail}`)
+          if ((existing.invoice_email || PO_INVOICE_EMAIL) !== invoiceEmailToSave) {
+            changeLines.push(`Send Invoices To: ${existing.invoice_email || PO_INVOICE_EMAIL} → ${invoiceEmailToSave}`)
           }
           if (changeLines.length > 0) {
             await logPoActivity(requestId, changeLines.map((l) => `• ${l}`).join('\n'))
@@ -2459,6 +2572,7 @@ function App() {
           .from('purchase_requests')
           .insert({
             project_id: poDraftProjectId,
+            ...(programsReady ? { program_id: poDraftProgramId } : {}),
             sub_project_id: poDraftSubProjectId,
             vendor_id: poDraftVendorId,
             notes: poDraftNotes.trim() || null,
@@ -2693,7 +2807,7 @@ function App() {
   // role for the request's entity.
   function approvalBlockMessage(request) {
     if (canApproveRequests(loggedInUserWithScopes, request)) return null
-    return "You can only act on requests for the entities you're approving for."
+    return "You can only act on requests for the sites you're approving for."
   }
 
   async function handleApprovePurchaseRequest(request) {
@@ -3978,7 +4092,7 @@ function App() {
   function addDraftBudgetCategoryRow() {
     setDraftBudgetCategories((prev) => [
       ...prev,
-      { _existing: false, _tempId: crypto.randomUUID(), name: '' },
+      { _existing: false, _tempId: crypto.randomUUID(), name: '', program_id: programs[0]?.id ?? null },
     ])
   }
 
@@ -3995,6 +4109,10 @@ function App() {
     for (const row of newRows) {
       if (!(row.name || '').trim()) {
         flashUsersStatus('Every new budget category needs a name.', false)
+        return
+      }
+      if (programsReady && !row.program_id) {
+        flashUsersStatus('Every new budget category needs a project.', false)
         return
       }
     }
@@ -4016,7 +4134,7 @@ function App() {
       if (newRows.length) {
         const { error } = await supabase
           .from('budget_categories')
-          .insert(newRows.map((r) => ({ name: r.name.trim() })))
+          .insert(newRows.map((r) => ({ name: r.name.trim(), ...(programsReady ? { program_id: r.program_id } : {}) })))
         if (error) throw error
       }
 
@@ -4118,11 +4236,11 @@ function App() {
     const newRows = draftSubProjects.filter((sp) => !sp._existing)
     for (const row of newRows) {
       if (!(row.name || '').trim()) {
-        flashUsersStatus('Every new project needs a name.', false)
+        flashUsersStatus('Every new location needs a name.', false)
         return
       }
       if (!row.project_id) {
-        flashUsersStatus('Every new project needs an entity.', false)
+        flashUsersStatus('Every new location needs a site.', false)
         return
       }
     }
@@ -4502,22 +4620,59 @@ function App() {
 
   async function handleAddProject() {
     if (!newProjectName.trim()) {
-      flashUsersStatus('Entity name is required.', false)
+      flashUsersStatus('Site name is required.', false)
       return
     }
     setAddingProject(true)
     try {
-      const { error } = await supabase.from('projects').insert({ name: newProjectName.trim() })
+      if (programsReady && newProjectPrograms.length === 0) {
+        flashUsersStatus('Choose at least one project for the new site.', false)
+        setAddingProject(false)
+        return
+      }
+      const { data: created, error } = await supabase.from('projects').insert({ name: newProjectName.trim() }).select().single()
       if (error) throw error
+      if (programsReady) {
+        const { error: linkError } = await supabase
+          .from('program_sites')
+          .insert(newProjectPrograms.map((programId) => ({ program_id: programId, project_id: created.id })))
+        if (linkError) throw linkError
+      }
       setNewProjectName('')
-      flashUsersStatus('Entity added.', true)
-      await loadProjects()
+      flashUsersStatus('Site added.', true)
+      await Promise.all([loadProjects(), loadPrograms()])
     } catch (error) {
       console.error(error)
-      flashUsersStatus('Could not add entity — check the console for details.', false)
+      flashUsersStatus('Could not add site — check the console for details.', false)
     } finally {
       setAddingProject(false)
     }
+  }
+
+  // A project's name, invoice email and whether it keeps spare-parts inventory (Admin tab).
+  async function handleUpdateProgram(programId, fields) {
+    setPrograms((prev) => prev.map((g) => (g.id === programId ? { ...g, ...fields } : g)))
+    const { error } = await supabase.from('programs').update(fields).eq('id', programId)
+    if (error) {
+      console.error(error)
+      flashUsersStatus(
+        /duplicate|unique/i.test(error.message || '') ? 'There is already a project with that name.' : 'Could not save the project — check the console for details.',
+        false
+      )
+      await loadPrograms()
+    }
+  }
+
+  // Put a site in a project, or take it out of one. POs already raised keep the project they were raised on.
+  async function handleSetProgramSite(programId, projectId, on) {
+    const { error } = on
+      ? await supabase.from('program_sites').insert({ program_id: programId, project_id: projectId })
+      : await supabase.from('program_sites').delete().eq('program_id', programId).eq('project_id', projectId)
+    if (error) {
+      console.error(error)
+      flashUsersStatus("Could not change the project's sites — check the console for details.", false)
+    }
+    await loadPrograms()
   }
 
   async function handleUpdateProjectCode(projectId, code) {
@@ -4529,7 +4684,7 @@ function App() {
       .eq('id', projectId)
     if (error) {
       console.error(error)
-      flashUsersStatus('Could not save entity code — check the console for details.', false)
+      flashUsersStatus('Could not save site code — check the console for details.', false)
       await loadProjects()
     }
   }
@@ -4926,7 +5081,7 @@ function App() {
       {activeTab === 'projects' && (
         <RequiredInventoryTab
           canEditInventory={canEditInventory(loggedInUser)}
-          projects={projects}
+          projects={inventoryProjects}
           selectedProjectId={selectedProjectId}
           setSelectedProjectId={setSelectedProjectId}
           projectEditMode={projectEditMode}
@@ -4977,7 +5132,7 @@ function App() {
       {activeTab === 'ownership' && (
         <OwnershipTab
           canEdit={canEditInventory(loggedInUser)}
-          projects={projects}
+          projects={inventoryProjects}
           parts={parts}
           users={users}
           stockItems={stockItems}
@@ -4998,7 +5153,7 @@ function App() {
       {activeTab === 'location' && (
         <PhysicalLocationTab
           canEdit={canEditInventory(loggedInUser)}
-          projects={projects}
+          projects={inventoryProjects}
           parts={parts}
           users={users}
           stockItems={stockItems}
@@ -5043,6 +5198,11 @@ function App() {
           poDraftId={poDraftId}
           poDraftProjectId={poDraftProjectId}
           setPoDraftProjectId={setPoDraftProjectId}
+          programs={programs}
+          programsReady={programsReady}
+          programSiteIds={programSiteIds}
+          poDraftProgramId={poDraftProgramId}
+          changePoDraftProgram={changePoDraftProgram}
           poDraftSubProjectId={poDraftSubProjectId}
           setPoDraftSubProjectId={setPoDraftSubProjectId}
           subProjects={subProjects}
@@ -5159,6 +5319,8 @@ function App() {
         <PoHistoryTab
           users={users}
           projects={projects}
+          programs={programs}
+          budgetCategories={budgetCategories}
           vendors={vendors}
           purchaseRequests={purchaseRequests}
           focus={poHistoryFocus}
@@ -5184,7 +5346,7 @@ function App() {
       )}
 
       {activeTab === 'ledger' && canViewPoLedger(loggedInUser) && (
-        <PoLedgerTab purchaseRequests={purchaseRequests} projects={projects} vendors={vendors} users={users} />
+        <PoLedgerTab purchaseRequests={purchaseRequests} projects={projects} vendors={vendors} users={users} programs={programs} />
       )}
 
       {activeTab === 'users' && isAdmin(loggedInUser) && (
@@ -5255,6 +5417,12 @@ function App() {
           vendorLogonInfo={vendorLogonInfo}
           dismissVendorLogonInfo={() => setVendorLogonInfo(null)}
           projects={projects}
+          programs={programs}
+          programSiteIds={programSiteIds}
+          newProjectPrograms={newProjectPrograms}
+          setNewProjectPrograms={setNewProjectPrograms}
+          handleUpdateProgram={handleUpdateProgram}
+          handleSetProgramSite={handleSetProgramSite}
           newProjectName={newProjectName}
           setNewProjectName={setNewProjectName}
           addingProject={addingProject}

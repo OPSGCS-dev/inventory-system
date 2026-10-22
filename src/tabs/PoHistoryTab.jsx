@@ -87,7 +87,7 @@ function Details({ row, ctx }) {
 
 // `focus` ({ id, label }) narrows it to one PO; `onSelectPo({ id, label, open })` either focuses a PO
 // here (open false) or jumps to it on the Purchase Orders tab (open true).
-function PoHistoryTab({ users, projects, vendors, purchaseRequests, focus, onClearFocus, onSelectPo }) {
+function PoHistoryTab({ users, projects, vendors, purchaseRequests, focus, onClearFocus, onSelectPo, programs, budgetCategories }) {
   const [draft, setDraft] = useState(EMPTY)
   const [applied, setApplied] = useState(EMPTY)
   const [rows, setRows] = useState([])
@@ -97,7 +97,7 @@ function PoHistoryTab({ users, projects, vendors, purchaseRequests, focus, onCle
   const [verify, setVerify] = useState(null)
   const [exporting, setExporting] = useState(null)
   const focusId = focus?.id || null
-  const ctx = useMemo(() => ({ users, projects, vendors }), [users, projects, vendors])
+  const ctx = useMemo(() => ({ users, projects, vendors, programs, budgetCategories }), [users, projects, vendors, programs, budgetCategories])
 
   // Typing waits a moment before it queries; the dropdowns and dates apply at once too, through here.
   useEffect(() => {
@@ -240,8 +240,8 @@ function PoHistoryTab({ users, projects, vendors, purchaseRequests, focus, onCle
               </option>
             ))}
         </select>
-        <select value={draft.entity} onChange={set('entity')} aria-label="Entity">
-          <option value="">All entities</option>
+        <select value={draft.entity} onChange={set('entity')} aria-label="Site">
+          <option value="">All sites</option>
           {projects.map((p) => (
             <option value={p.id} key={p.id}>
               {p.name}

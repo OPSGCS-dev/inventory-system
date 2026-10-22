@@ -13,7 +13,7 @@ function EntityAssignmentCell({ projects, assignedIds, onAdd, onRemove }) {
     <div>
       {assignedIds.length === 0 ? (
         <span className="sub" style={{ margin: 0 }}>
-          All entities
+          All sites
         </span>
       ) : (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
@@ -50,7 +50,7 @@ function EntityAssignmentCell({ projects, assignedIds, onAdd, onRemove }) {
       {available.length > 0 && (
         <div style={{ display: 'flex', gap: 6 }}>
           <select value={pendingId} onChange={(e) => setPendingId(e.target.value)} style={{ flex: 1 }}>
-            <option value="">Add entity…</option>
+            <option value="">Add site…</option>
             {available.map((p) => (
               <option value={p.id} key={p.id}>
                 {p.name}
@@ -131,6 +131,12 @@ function UsersTab({
   vendorLogonInfo,
   dismissVendorLogonInfo,
   projects,
+  programs,
+  programSiteIds,
+  newProjectPrograms,
+  setNewProjectPrograms,
+  handleUpdateProgram,
+  handleSetProgramSite,
   newProjectName,
   setNewProjectName,
   addingProject,
@@ -208,7 +214,7 @@ function UsersTab({
         {adminImportPanelOpen && (
           <div style={{ marginTop: 12 }}>
             <p className="sub" style={{ margin: '0 0 8px' }}>
-              Excel file with one worksheet per category — Users, Vendors, Entities, Projects, Budget
+              Excel file with one worksheet per category — Users, Vendors, Sites, Locations, Budget
               Categories, Budget Sub-Categories — matching the file from "Export All (Excel)". Rows
               matching an existing name update it; anything else is added. New users aren't created
               this way — invite them from the Users section above instead, then re-import to set roles.
@@ -459,12 +465,12 @@ function UsersTab({
 
       <div className="card">
         <div className="card-header">
-          <h2>Entity Assignments</h2>
+          <h2>Site Assignments</h2>
         </div>
         <p className="sub" style={{ margin: '0 0 12px' }}>
           Limits each step of the PO process (creating requests, approving them, issuing POs,
-          matching invoices, approving invoices and payment) to specific entities for the people
-          holding that role. Leave a person's entity list empty to allow every entity — the
+          matching invoices, approving invoices and payment) to specific sites for the people
+          holding that role. Leave a person's site list empty to allow every site — the
           default. Saved together with the Users table above (Save button there).
         </p>
 
@@ -490,7 +496,7 @@ function UsersTab({
                     <thead>
                       <tr className="header-row">
                         <th>Person</th>
-                        <th>Entities (none selected = all)</th>
+                        <th>Sites (none selected = all)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -530,19 +536,129 @@ function UsersTab({
         })}
       </div>
 
+      {programs.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Projects ({programs.length})</h2>
+            <p className="sub" style={{ margin: 0 }}>
+              The top layer: every PO belongs to a project. Each project has its own sites, its own budget
+              categories (below) and the email address vendors send invoices to. Spare-parts inventory is only
+              kept for the sites of a project marked "Keeps inventory". Changes here save as you make them.
+            </p>
+          </div>
+          {programs.map((g) => {
+            const siteIds = programSiteIds?.get(g.id) || new Set()
+            const inProject = projects.filter((p) => siteIds.has(p.id))
+            const notIn = projects.filter((p) => !siteIds.has(p.id))
+            return (
+              <div key={g.id} style={{ borderTop: '1px solid var(--border)', padding: '12px 0' }}>
+                <div className="field-row">
+                  <div>
+                    <label htmlFor={`program_name_${g.id}`}>Project name</label>
+                    <input
+                      id={`program_name_${g.id}`}
+                      type="text"
+                      defaultValue={g.name}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim()
+                        if (v && v !== g.name) handleUpdateProgram(g.id, { name: v })
+                        else e.target.value = g.name
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`program_email_${g.id}`}>Send invoices to</label>
+                    <input
+                      id={`program_email_${g.id}`}
+                      type="text"
+                      defaultValue={g.invoice_email || ''}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim()
+                        if (v !== (g.invoice_email || '')) handleUpdateProgram(g.id, { invoice_email: v || null })
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label>Keeps inventory</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 42 }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(g.tracks_inventory)}
+                        onChange={(e) => handleUpdateProgram(g.id, { tracks_inventory: e.target.checked })}
+                        aria-label={`${g.name} keeps inventory`}
+                      />
+                      <span className="sub" style={{ margin: 0 }}>
+                        Its sites appear on the inventory screens
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <span className="sub" style={{ margin: 0 }}>
+                    Sites ({inProject.length})
+                  </span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, margin: '6px 0' }}>
+                    {inProject.length === 0 && (
+                      <span className="sub" style={{ margin: 0 }}>
+                        None yet.
+                      </span>
+                    )}
+                    {inProject.map((p) => (
+                      <span key={p.id} className="po-badge po-badge-issued" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {p.name}
+                        <button
+                          type="button"
+                          onClick={() => handleSetProgramSite(g.id, p.id, false)}
+                          title={`Take ${p.name} out of ${g.name}`}
+                          style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: 'inherit', fontWeight: 700, lineHeight: 1 }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  {notIn.length > 0 && (
+                    <select
+                      value=""
+                      onChange={(e) => e.target.value && handleSetProgramSite(g.id, Number(e.target.value), true)}
+                      style={{ maxWidth: 280 }}
+                      aria-label={`Add a site to ${g.name}`}
+                    >
+                      <option value="">Add a site…</option>
+                      {notIn.map((p) => (
+                        <option value={p.id} key={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       <div className="card">
         <div className="card-header">
           <h2>Budget Categories {draftBudgetCategories.length ? `(${draftBudgetCategories.length})` : ''}</h2>
+          {programs.length > 0 && (
+            <p className="sub" style={{ margin: 0 }}>
+              Each project has its own list; a PO can only use the categories of its project.
+            </p>
+          )}
         </div>
 
         <div className="sheet-wrap">
           <table className="sheet">
             <colgroup>
+              {programs.length > 0 && <col style={{ width: '30%' }} />}
               <col />
               <col className="col-last" />
             </colgroup>
             <thead>
               <tr className="header-row">
+                {programs.length > 0 && <th>Project</th>}
                 <th>Name</th>
                 <th className="col-last"></th>
               </tr>
@@ -550,13 +666,38 @@ function UsersTab({
             <tbody>
               {draftBudgetCategories.length === 0 ? (
                 <tr>
-                  <td className="empty" colSpan={2}>
+                  <td className="empty" colSpan={programs.length > 0 ? 3 : 2}>
                     No budget categories yet.
                   </td>
                 </tr>
               ) : (
-                draftBudgetCategories.map((c, i) => (
+                [...draftBudgetCategories]
+                  .map((c, i) => ({ c, i }))
+                  .sort((a, b) => {
+                    const pa = programs.findIndex((g) => g.id === a.c.program_id)
+                    const pb = programs.findIndex((g) => g.id === b.c.program_id)
+                    return pa === pb ? a.i - b.i : pa - pb
+                  })
+                  .map(({ c, i }) => (
                   <tr key={c._existing ? c.id : c._tempId}>
+                    {programs.length > 0 && (
+                      <td>
+                        {c._existing ? (
+                          programs.find((g) => g.id === c.program_id)?.name || '—'
+                        ) : (
+                          <select
+                            value={c.program_id ?? ''}
+                            onChange={(e) => updateDraftBudgetCategoryField(i, 'program_id', Number(e.target.value))}
+                          >
+                            {programs.map((g) => (
+                              <option value={g.id} key={g.id}>
+                                {g.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </td>
+                    )}
                     <td>
                       <input
                         type="text"
@@ -630,6 +771,7 @@ function UsersTab({
                           .filter((cat) => cat._existing)
                           .map((cat) => (
                             <option value={cat.id} key={cat.id}>
+                              {programs.length > 0 ? `${programs.find((g) => g.id === cat.program_id)?.name || ''} — ` : ''}
                               {cat.name}
                             </option>
                           ))}
@@ -873,11 +1015,11 @@ function UsersTab({
 
       <div className="card">
         <div className="card-header">
-          <h2>Entities {projects.length ? `(${projects.length})` : ''}</h2>
+          <h2>Sites {projects.length ? `(${projects.length})` : ''}</h2>
         </div>
 
         <div className="add-form" style={{ marginBottom: 16 }}>
-          <label htmlFor="new_project_name">Entity Name</label>
+          <label htmlFor="new_project_name">Site Name</label>
           <div className="field-row">
             <input
               id="new_project_name"
@@ -886,9 +1028,28 @@ function UsersTab({
               onChange={(e) => setNewProjectName(e.target.value)}
             />
           </div>
+          {programs.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '8px 0' }}>
+              <span className="sub" style={{ margin: 0 }}>
+                In project:
+              </span>
+              {programs.map((g) => (
+                <label key={g.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, margin: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={newProjectPrograms.includes(g.id)}
+                    onChange={(e) =>
+                      setNewProjectPrograms((prev) => (e.target.checked ? [...prev, g.id] : prev.filter((id) => id !== g.id)))
+                    }
+                  />
+                  {g.name}
+                </label>
+              ))}
+            </div>
+          )}
           <div className="form-actions">
             <button className="btn-primary" onClick={handleAddProject} disabled={addingProject}>
-              {addingProject ? 'Adding…' : '+ Add Entity'}
+              {addingProject ? 'Adding…' : '+ Add Site'}
             </button>
           </div>
         </div>
@@ -897,25 +1058,35 @@ function UsersTab({
           <table className="sheet">
             <colgroup>
               <col />
+              {programs.length > 0 && <col style={{ width: '35%' }} />}
               <col style={{ width: '20%' }} />
             </colgroup>
             <thead>
               <tr className="header-row">
                 <th>Name</th>
+                {programs.length > 0 && <th>Projects</th>}
                 <th>PO Code</th>
               </tr>
             </thead>
             <tbody>
               {projects.length === 0 ? (
                 <tr>
-                  <td className="empty" colSpan={2}>
-                    No entities yet.
+                  <td className="empty" colSpan={programs.length > 0 ? 3 : 2}>
+                    No sites yet.
                   </td>
                 </tr>
               ) : (
                 projects.map((p) => (
                   <tr key={p.id}>
                     <td>{p.name}</td>
+                    {programs.length > 0 && (
+                      <td className="sub">
+                        {programs
+                          .filter((g) => programSiteIds?.get(g.id)?.has(p.id))
+                          .map((g) => g.name)
+                          .join(', ') || '—'}
+                      </td>
+                    )}
                     <td className="center-cell">
                       <input
                         type="text"
@@ -938,10 +1109,10 @@ function UsersTab({
 
       <div className="card">
         <div className="card-header">
-          <h2>Projects {draftSubProjects.length ? `(${draftSubProjects.length})` : ''}</h2>
+          <h2>Locations {draftSubProjects.length ? `(${draftSubProjects.length})` : ''}</h2>
           <p className="sub" style={{ margin: 0 }}>
-            Individual sites within an Entity (e.g. Firelight Solar LP's rooftop sites) — only used
-            when creating Purchase Requests. Spares inventory stays tracked at the Entity level.
+            Individual locations within a Site (e.g. Firelight Solar LP's rooftop locations) — only used
+            when creating Purchase Requests. Spares inventory stays tracked at the Site level.
           </p>
         </div>
 
@@ -954,7 +1125,7 @@ function UsersTab({
             </colgroup>
             <thead>
               <tr className="header-row">
-                <th>Entity</th>
+                <th>Site</th>
                 <th>Name</th>
                 <th className="col-last"></th>
               </tr>
@@ -963,7 +1134,7 @@ function UsersTab({
               {draftSubProjects.length === 0 ? (
                 <tr>
                   <td className="empty" colSpan={3}>
-                    No projects yet.
+                    No locations yet.
                   </td>
                 </tr>
               ) : (

@@ -287,6 +287,11 @@ function PurchaseOrdersTab({
   poDraftId,
   poDraftProjectId,
   setPoDraftProjectId,
+  programs,
+  programsReady,
+  programSiteIds,
+  poDraftProgramId,
+  changePoDraftProgram,
   poDraftSubProjectId,
   setPoDraftSubProjectId,
   subProjects,
@@ -404,6 +409,12 @@ function PurchaseOrdersTab({
     (sc) => sc.category_id === poDraftBudgetCategoryId
   )
   const availableSubProjects = subProjects.filter((sp) => sp.project_id === poDraftProjectId)
+  // Projects (the top layer): the sites and budget categories offered follow the project chosen. Without
+  // projects set up (add_projects_layer.sql not run) nothing is filtered.
+  const programName = (id) => (programs || []).find((g) => g.id === id)?.name || ''
+  const draftProgram = (programs || []).find((g) => g.id === poDraftProgramId) || null
+  const siteChoices = (list) => (programsReady ? list.filter((p) => programSiteIds?.get(poDraftProgramId)?.has(p.id)) : list)
+  const categoryChoices = programsReady ? budgetCategories.filter((c) => c.program_id === poDraftProgramId) : budgetCategories
   const viewingRequest = expandedPoId ? visiblePurchaseRequests.find((r) => r.id === expandedPoId) : null
 
   // Date column: filter by a range of dates (both ends inclusive; the same day in both boxes
@@ -431,7 +442,8 @@ function PurchaseOrdersTab({
         sort: (a, b) => (Date.parse(b) || 0) - (Date.parse(a) || 0),
       },
       { key: 'description', label: 'Description', values: (r) => r.description },
-      { key: 'entity', label: 'Entity', values: (r) => r.projects?.name },
+      ...(programsReady ? [{ key: 'program', label: 'Project', values: (r) => programName(r.program_id) }] : []),
+      { key: 'entity', label: 'Site', values: (r) => r.projects?.name },
       { key: 'vendor', label: 'Vendor', values: (r) => r.vendors?.name },
       {
         key: 'amount',
@@ -444,7 +456,8 @@ function PurchaseOrdersTab({
       { key: 'next', label: 'Responsible for Next Action', values: (r) => nextStepInfo(r, users).who },
       { key: 'po', label: 'PO #', values: (r) => r.po_number },
     ],
-    [users]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [users, programs, programsReady]
   )
   const poFilters = useColumnFilters(listedPurchaseRequests, poColumns, poView)
   const shownPurchaseRequests = poFilters.filtered
@@ -481,6 +494,7 @@ function PurchaseOrdersTab({
   const withShownPoNumber = (r) => ({
     ...(shownPoNumber(r) && !r.po_number ? { ...r, po_number: shownPoNumber(r) } : r),
     requisitioner_name: requisitionerName(users, r),
+    program_name: programName(r.program_id),
   })
 
   // Collapsed by default -- the activity log is a secondary, rarely-needed
@@ -606,7 +620,7 @@ function PurchaseOrdersTab({
     const entity = matchers.matchEntity(pages, cur.projects)
     if (entity && entity.id !== cur.poDraftProjectId) {
       data.entity = entity.id
-      add('entity', 'Entity', entity.name, nameOf(cur.projects, cur.poDraftProjectId))
+      add('entity', 'Site', entity.name, nameOf(cur.projects, cur.poDraftProjectId))
     }
     const entityId = entity ? entity.id : cur.poDraftProjectId
     const site = matchers.matchSubProject(pages, cur.subProjects.filter((sp) => sp.project_id === entityId))
@@ -873,9 +887,15 @@ function PurchaseOrdersTab({
                 </div>
               )
             })()}
-            {r.sub_projects?.name && (
+            {programsReady && programName(r.program_id) && (
               <div className="po-detail-meta-item">
                 <span className="po-detail-label">Project</span>
+                <span className="po-detail-value">{programName(r.program_id)}</span>
+              </div>
+            )}
+            {r.sub_projects?.name && (
+              <div className="po-detail-meta-item">
+                <span className="po-detail-label">Location</span>
                 <span className="po-detail-value">{r.sub_projects.name}</span>
               </div>
             )}
@@ -1183,6 +1203,12 @@ function PurchaseOrdersTab({
                             : formatDate(new Date())}
                         </td>
                       </tr>
+                      {programsReady && programName(r.program_id) && (
+                        <tr>
+                          <th>Project</th>
+                          <td>{programName(r.program_id)}</td>
+                        </tr>
+                      )}
                       <tr>
                         <th>PO #</th>
                         <td>{shownPoNumber(r) || `#${r.id}`}</td>
@@ -1273,7 +1299,7 @@ function PurchaseOrdersTab({
                   <div className="po-print-footer">
                     <div className="po-print-footer-left">
                       <p>
-                        <strong>Site:</strong> {r.sub_projects?.name || r.projects?.name || '—'}
+                        <strong>{r.sub_projects?.name ? 'Location:' : 'Site:'}</strong> {r.sub_projects?.name || r.projects?.name || '—'}
                       </p>
                       <p>
                         <strong>Notes:</strong> {r.notes || '—'}
@@ -1724,8 +1750,26 @@ function PurchaseOrdersTab({
           </div>
 
           <div className="field-row">
+            {programsReady && (
+              <div>
+                <label htmlFor="po_draft_program">Project *</label>
+                <select
+                  id="po_draft_program"
+                  className={poDraftFieldErrors?.program ? 'field-invalid' : ''}
+                  value={poDraftProgramId ?? ''}
+                  onChange={(e) => changePoDraftProgram(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Select a project…</option>
+                  {programs.map((g) => (
+                    <option value={g.id} key={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
-              <label htmlFor="po_draft_project">Entity</label>
+              <label htmlFor="po_draft_project">Site</label>
               <select
                 id="po_draft_project"
                 className={poDraftFieldErrors?.project ? 'field-invalid' : ''}
@@ -1735,9 +1779,9 @@ function PurchaseOrdersTab({
                   setPoDraftSubProjectId(null)
                 }}
               >
-                <option value="">Select an entity…</option>
-                {entitiesAllowedFor(loggedInUser, 'purchase_req', projects)
-                  // an entity already on an existing request stays in the list
+                <option value="">Select a site…</option>
+                {siteChoices(entitiesAllowedFor(loggedInUser, 'purchase_req', projects))
+                  // a site already on an existing request stays in the list
                   .concat(projects.filter((p) => p.id === poDraftProjectId && !isEntityAllowed(loggedInUser, 'purchase_req', p.id)))
                   .map((p) => (
                   <option value={p.id} key={p.id}>
@@ -1800,14 +1844,14 @@ function PurchaseOrdersTab({
           {availableSubProjects.length > 0 && (
             <div className="field-row" style={{ marginTop: 12 }}>
               <div>
-                <label htmlFor="po_draft_sub_project">Project</label>
+                <label htmlFor="po_draft_sub_project">Location</label>
                 <select
                   id="po_draft_sub_project"
                   className={poDraftFieldErrors?.subProject ? 'field-invalid' : ''}
                   value={poDraftSubProjectId ?? ''}
                   onChange={(e) => setPoDraftSubProjectId(e.target.value ? Number(e.target.value) : null)}
                 >
-                  <option value="">Select a project…</option>
+                  <option value="">Select a location…</option>
                   {availableSubProjects.map((sp) => (
                     <option value={sp.id} key={sp.id}>
                       {sp.name}
@@ -1852,7 +1896,7 @@ function PurchaseOrdersTab({
                 }}
               >
                 <option value="">Select a budget category…</option>
-                {budgetCategories.map((c) => (
+                {categoryChoices.map((c) => (
                   <option value={c.id} key={c.id}>
                     {c.name}
                   </option>
@@ -1904,17 +1948,24 @@ function PurchaseOrdersTab({
             </div>
             <div>
               <label htmlFor="po_draft_invoice_email">Send Invoices To</label>
-              <select
-                id="po_draft_invoice_email"
-                value={poDraftInvoiceEmail}
-                onChange={(e) => setPoDraftInvoiceEmail(e.target.value)}
-              >
-                {[...new Set([...PO_INVOICE_EMAIL_OPTIONS, poDraftInvoiceEmail])].filter(Boolean).map((email) => (
-                  <option value={email} key={email}>
-                    {email}
-                  </option>
-                ))}
-              </select>
+              {programsReady && draftProgram?.invoice_email ? (
+                // Set by the project: nothing to choose.
+                <div id="po_draft_invoice_email" style={{ minHeight: 42, display: 'flex', alignItems: 'center' }} title="Set by the project">
+                  {draftProgram.invoice_email}
+                </div>
+              ) : (
+                <select
+                  id="po_draft_invoice_email"
+                  value={poDraftInvoiceEmail}
+                  onChange={(e) => setPoDraftInvoiceEmail(e.target.value)}
+                >
+                  {[...new Set([...PO_INVOICE_EMAIL_OPTIONS, poDraftInvoiceEmail])].filter(Boolean).map((email) => (
+                    <option value={email} key={email}>
+                      {email}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
@@ -2186,7 +2237,7 @@ function PurchaseOrdersTab({
                   </tr>
                 ) : (
                   poDraftLines.map((line, i) => {
-                    const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this entity'
+                    const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this site'
                     const listed = filterPartsForSearch(parts, line.partSearch)
                     // Only a part that is on the entity's list shows as chosen: one
                     // that isn't (an older request, or the entity was changed) reads
@@ -2496,7 +2547,7 @@ function PurchaseOrdersTab({
               ))}
             </select>
             <select value={poProjectFilter} onChange={(e) => setPoProjectFilter(e.target.value)}>
-              <option value="">All Entities</option>
+              <option value="">All Sites</option>
               {projects.map((p) => (
                 <option value={p.id} key={p.id}>
                   {p.name}
@@ -2563,8 +2614,13 @@ function PurchaseOrdersTab({
                   <FilterTh filters={poFilters} col="description">
                     Description
                   </FilterTh>
+                  {programsReady && (
+                    <FilterTh filters={poFilters} col="program">
+                      Project
+                    </FilterTh>
+                  )}
                   <FilterTh filters={poFilters} col="entity">
-                    Entity
+                    Site
                   </FilterTh>
                   <FilterTh filters={poFilters} col="vendor">
                     Vendor
@@ -2601,6 +2657,7 @@ function PurchaseOrdersTab({
                       <td className="nowrap-cell" title={r.description || undefined}>
                         {r.description ? truncate(r.description, PO_DESCRIPTION_MAX_LEN) : '—'}
                       </td>
+                      {programsReady && <td className="nowrap-cell">{programName(r.program_id) || '—'}</td>}
                       <td className="nowrap-cell">{r.projects?.name || '—'}</td>
                       <td className="nowrap-cell">{r.vendors?.name || '—'}</td>
                       {poView === 'my-approvals' && (

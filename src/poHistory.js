@@ -178,11 +178,10 @@ export function formatValue(key, value, ctx = {}) {
   if (key === 'vendor_id') return ctx.vendors?.find((v) => v.id === value)?.name || `vendor #${value}`
   if (key === 'payment_batch_id') return `batch #${value}`
   if (key === 'matched_receipt_id') return `receipt #${value}`
-  if (key.endsWith('_by') && typeof value === 'number') return findUserName(ctx.users, value) || `user #${value}`
+  if (key.endsWith('_by') && typeof value === 'number') return findUserName(ctx.users || [], value) || `user #${value}`
   if (key.endsWith('_at')) return Number.isNaN(Date.parse(value)) ? String(value) : formatDateTime(value)
   if (key === 'paid_date') {
-    const [y, m, d] = String(value).slice(0, 10).split('-').map(Number)
-    return formatDate(y, m - 1, d)
+    return formatDate(String(value).slice(0, 10))
   }
   if (FILE_FIELDS.has(key)) return 'a file'
   if (MONEY_FIELDS.has(key)) return formatMoney(value)
@@ -234,8 +233,8 @@ function changedList(row, ctx) {
 }
 
 // Just the names of the fields that changed: "Description, Notes".
-function changedNames(row) {
-  const names = changeLines(row).map((c) => c.label)
+function changedNames(row, ctx) {
+  const names = changeLines(row, ctx).map((c) => c.label)
   if (names.length === 0) return []
   return [names.length > 4 ? `${names.slice(0, 4).join(', ')} +${names.length - 4} more` : names.join(', ')]
 }
@@ -284,7 +283,7 @@ export function summarize(row, ctx = {}) {
       bits.push(row.note, ...changedList(row, ctx))
       break
     case 'edited':
-      bits.push(...changedNames(row))
+      bits.push(...changedNames(row, ctx))
       break
     case 'invoice_added':
       return `${label}: ${inv}${amt}${newOf(row, 'duplicate_reason') ? ` — duplicate # allowed: ${newOf(row, 'duplicate_reason')}` : ''}`

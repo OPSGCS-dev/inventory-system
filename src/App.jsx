@@ -42,7 +42,12 @@ import {
   defaultBatchName,
   siteNeedsLocation,
   paymentBatchLabel,
+  computePoTotals,
   canReviewInvoice,
+  canFlagInvoiceOverPo,
+  canRegeneratePo,
+  regenerateBlockReason,
+  isInvoiceOverPo,
   canReturnInvoice,
   canHoldInvoice,
   canReleaseInvoice,
@@ -93,7 +98,7 @@ import UsersTab from './tabs/UsersTab'
 import SignatureCard from './tabs/SignatureCard'
 import GlobalSearch from './tabs/GlobalSearch'
 import { matchPart } from './scrape/matchers'
-import { findRequestByNumber } from './invoiceSplit'
+import { findRequestByNumber } from './poLinks'
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true)
@@ -158,6 +163,8 @@ function App() {
   // POs linked to each other by hand (add_po_links_and_invoice_split.sql); `poLinksReady` is false until that SQL is run.
   const [poLinks, setPoLinks] = useState([])
   const [poLinksReady, setPoLinksReady] = useState(false)
+  // Set while a PO that was voided and regenerated is open as a draft: what the invoice needs the new total to cover.
+  const [poRegen, setPoRegen] = useState(null)
   const [newProjectPrograms, setNewProjectPrograms] = useState([])
   const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [projectItems, setProjectItems] = useState([])
@@ -510,7 +517,7 @@ function App() {
   async function loadPoLinks() {
     const { data, error } = await supabase.from('purchase_request_links').select('*')
     if (error) {
-      console.warn("PO links aren't set up yet (run supabase/add_po_links_and_invoice_split.sql):", error.message)
+      console.warn("PO links aren't set up yet (run supabase/add_invoice_over_po.sql):", error.message)
       setPoLinks([])
       setPoLinksReady(false)
       return
@@ -1946,6 +1953,7 @@ function App() {
     const pairs = []
     for (const r of purchaseRequests) {
       if (r.status === 'voided') continue // its invoices stay on file, but nothing more happens to them
+      if (r.status !== 'issued' && r.status !== 'closed') continue // an invoice moved onto a regenerated draft waits for it to be issued
       if (r.requested_by !== loggedInUserWithScopes?.id) continue
       for (const invoice of r.invoices || []) {
         if (canReviewInvoice(loggedInUserWithScopes, invoice, r)) pairs.push({ request: r, invoice })
@@ -1957,7 +1965,7 @@ function App() {
   const invoicesPendingApproval = useMemo(() => {
     const pairs = []
     for (const r of purchaseRequests) {
-      if (r.status === 'voided') continue
+      if (r.status === 'voided' || (r.status !== 'issued' && r.status !== 'closed')) continue
       for (const invoice of r.invoices || []) {
         // The supervisor's step: invoices the requisitioner has reviewed. Payment approval can be
         // limited to certain entities, like the other steps (canApproveInvoice checks).
@@ -1974,7 +1982,7 @@ function App() {
   const invoicesToPay = useMemo(() => {
     const pairs = []
     for (const r of purchaseRequests) {
-      if (r.status === 'voided') continue
+      if (r.status === 'voided' || (r.status !== 'issued' && r.status !== 'closed')) continue
       for (const invoice of r.invoices || []) {
         if (canPayInvoice(loggedInUserWithScopes, invoice, r)) {
           pairs.push({ request: r, invoice })
@@ -2149,6 +2157,7 @@ function App() {
 
   function closePoDraftForm() {
     setPoFormOpen(false)
+    setPoRegen(null)
     setPoDraftId(null)
     setPoDraftLines([])
     setPoDraftFieldErrors({})
@@ -3398,7 +3407,7 @@ function App() {
   // logs it. Throws on failure -- callers do their own flash/refresh.
   // `duplicateReason` is only sent when the same vendor already has an invoice with this number
   // (add_invoice_duplicate_guard.sql refuses that without a reason).
-  async function uploadAndInsertInvoice(requestId, { invoiceNumber, amount, file, matchToReceiptId, duplicateReason, invoiceTotal, covers }) {
+  async function uploadAndInsertInvoice(requestId, { invoiceNumber, amount, file, matchToReceiptId, duplicateReason, exceedsPo, exceedsNote }) {
     const ext = file.name.split('.').pop() || 'pdf'
     const path = `po-${requestId}-${Date.now()}.${ext}`
     const { error: uploadError } = await supabase.storage
@@ -3416,8 +3425,8 @@ function App() {
       matched_receipt_id: matchToReceiptId || null,
       // Left out when there is none, so this still works before the SQL has been run.
       ...(duplicateReason ? { duplicate_reason: duplicateReason } : {}),
-      // Only when this PO takes part of the invoice (add_po_links_and_invoice_split.sql).
-      ...(covers ? { covers, invoice_total: invoiceTotal } : {}),
+      // Flagged by whoever adds it when it is for more than the PO (add_invoice_over_po.sql).
+      ...(exceedsPo ? { exceeds_po: true, exceeds_note: exceedsNote || null } : {}),
     })
     if (error) {
       // Don't leave the PDF behind in Storage when the row was refused.
@@ -3427,7 +3436,7 @@ function App() {
     await logPoActivity(
       requestId,
       `Invoice added${invoiceNumber ? ` (#${invoiceNumber})` : ''}: ${formatMoney(amount)}` +
-        (covers ? ` — covers: ${covers}${invoiceTotal != null ? ` (invoice total ${formatMoney(invoiceTotal)})` : ''}` : '')
+        (exceedsPo ? ` — flagged as over the PO${exceedsNote ? `: ${exceedsNote}` : ''}` : '')
     )
   }
 
@@ -3435,7 +3444,7 @@ function App() {
   // requisitioner adding a receipt (handleAddReceipt below) -- neither
   // blocks the other. They start out unpaired; handleMatchInvoiceReceipt
   // pairs a specific invoice with a specific receipt afterward.
-  async function handleAddInvoice(request, { invoiceNumber, amount, file, matchToReceiptId, duplicateReason, invoiceTotal, covers }) {
+  async function handleAddInvoice(request, { invoiceNumber, amount, file, matchToReceiptId, duplicateReason, exceedsPo, exceedsNote }) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
@@ -3461,8 +3470,8 @@ function App() {
         file,
         matchToReceiptId,
         duplicateReason,
-        invoiceTotal,
-        covers,
+        exceedsPo,
+        exceedsNote,
       })
       flashPoStatus(matchToReceiptId ? 'Invoice added and matched.' : 'Invoice added.', true)
       await refreshPurchaseRequest(request.id)
@@ -3471,8 +3480,8 @@ function App() {
       console.error(error)
       flashPoStatus(
         dbRefusal(error) ||
-          (/covers|invoice_total/.test(error?.message || '')
-            ? "Splitting an invoice across POs isn't set up yet. Run supabase/add_po_links_and_invoice_split.sql in the Inventory project's SQL editor first."
+          (/exceeds_po|exceeds_note/.test(error?.message || '')
+            ? "Flagging an invoice as over the PO isn't set up yet. Run supabase/add_invoice_over_po.sql in the Inventory project's SQL editor first."
             : 'Could not add the invoice — check the console for details.'),
         false
       )
@@ -3543,6 +3552,10 @@ function App() {
     }
     if (checked && isInvoiceHeld(invoice)) {
       flashPoStatus("An invoice on hold can't be approved — release it first.", false)
+      return
+    }
+    if (checked && isInvoiceOverPo(invoice)) {
+      flashPoStatus('This invoice is for more than the PO: void the PO and regenerate it at the new amount instead.', false)
       return
     }
     setPoActionBusyId(invoice.purchase_request_id)
@@ -3679,6 +3692,164 @@ function App() {
     } catch (error) {
       console.error(error)
       flashPoStatus(invoiceFlowError(error, 'Could not send the invoice back — check the console for details.'), false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  const invoiceOverPoError = (error, fallback) =>
+    dbRefusal(error) ||
+    (error?.code === '42703' || /exceeds_po|exceeds_note/.test(error?.message || '')
+      ? "Flagging an invoice as over the PO isn't set up in the database yet — run add_invoice_over_po.sql."
+      : fallback)
+
+  // Whoever adds invoices flags one that is for MORE than its PO (or takes the flag off again). The requisitioner
+  // then can't approve it: their way forward is to void the PO and regenerate it at the new amount.
+  async function handleSetInvoiceExceeds(invoice, flagged) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    const request = purchaseRequests.find((r) => r.id === invoice.purchase_request_id)
+    if (!canFlagInvoiceOverPo(loggedInUserWithScopes, invoice, request)) {
+      flashPoStatus("You can't change that from where the invoice is now.", false)
+      return
+    }
+    let note = ''
+    if (flagged) {
+      const text = window.prompt('What is the extra? (for example: shipping the vendor added afterwards) — optional')
+      if (text === null) return
+      note = text.trim()
+    }
+    setPoActionBusyId(invoice.purchase_request_id)
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ exceeds_po: flagged, exceeds_note: flagged ? note || null : null })
+        .eq('id', invoice.id)
+      if (error) throw error
+      await logPoActivity(
+        invoice.purchase_request_id,
+        flagged ? `Invoice flagged as over the PO${invoiceTag(invoice)}${note ? `: ${note}` : ''}` : `Over-the-PO flag cleared${invoiceTag(invoice)}`
+      )
+      flashPoStatus(flagged ? 'Flagged: the requisitioner will have to void and regenerate the PO.' : 'Flag cleared.', true)
+      await refreshPurchaseRequest(invoice.purchase_request_id)
+    } catch (error) {
+      console.error(error)
+      flashPoStatus(invoiceOverPoError(error, 'Could not change the flag — check the console for details.'), false)
+    } finally {
+      setPoActionBusyId(null)
+    }
+  }
+
+  // The requisitioner's one way forward for an invoice that is over its PO: the PO is voided and a copy goes back to
+  // the Purchase Requisition stage (a draft, same information) with the PO's invoices and receipts moved onto it, so
+  // its prices can be raised to the invoice before it is submitted for approval again. The two POs are linked.
+  async function handleVoidAndRegeneratePo(request, invoice) {
+    if (!loggedInUser) {
+      flashPoStatus('You must be logged in.', false)
+      return
+    }
+    if (!canRegeneratePo(loggedInUserWithScopes, invoice, request)) {
+      flashPoStatus('Only the person who raised this PO can void and regenerate it.', false)
+      return
+    }
+    const blocked = regenerateBlockReason(request, invoice)
+    if (blocked) {
+      flashPoStatus(blocked, false)
+      return
+    }
+    const label = request.po_number || `request #${request.id}`
+    const poTotal = computePoTotals(request).grandTotal
+    if (
+      !window.confirm(
+        `Void ${label} and regenerate it?\n\nInvoice${invoiceTag(invoice)} is ${formatMoney(invoice.amount)}, more than the PO's ${formatMoney(poTotal)}. ` +
+          `${label} will be voided and a copy created as a draft with the same information, with the PO's invoices and receipts moved onto it. ` +
+          `You then raise the prices to the new amount and submit it for approval again.`
+      )
+    ) {
+      return
+    }
+    setPoActionBusyId(request.id)
+    let newId = null
+    try {
+      // 1. the copy, as a draft
+      const copied = [
+        'project_id', 'program_id', 'sub_project_id', 'vendor_id', 'notes', 'description', 'budget_category_id',
+        'budget_subcategory_id', 'chargeable_expense', 'invoice_email', 'vendor_quote_number', 'quote_file_url',
+        'quote_file_name', 'markup_rate', 'tax_rate', 'shipping_handling', 'credit', 'not_to_exceed', 'spending_cap',
+        'currency', 'po_category', 'ticket_system_ticket_id', 'ticket_system_ticket_number', 'ticket_system_ticket_code',
+        'requested_by',
+      ]
+      const fields = { status: 'draft' }
+      for (const key of copied) {
+        if (key in request && request[key] !== undefined) fields[key] = request[key]
+      }
+      if (request.prepaid && 'prepaid' in request) Object.assign(fields, { prepaid: true }, partsStatusForPrepaid('not_ordered', true))
+      const { data: created, error: createError } = await supabase.from('purchase_requests').insert(fields).select().single()
+      if (createError) throw createError
+      newId = created.id
+      const lineRows = (request.purchase_request_lines || []).map((l) => {
+        const row = { ...l, purchase_request_id: newId }
+        delete row.id
+        delete row.created_at
+        delete row.parts
+        return row
+      })
+      if (lineRows.length > 0) {
+        const { error: lineError } = await supabase.from('purchase_request_lines').insert(lineRows)
+        if (lineError) throw lineError
+      }
+
+      // 2. void the old one
+      const reason = `Invoice${invoiceTag(invoice)} for ${formatMoney(invoice.amount)} is more than the PO (${formatMoney(poTotal)}) — regenerated as request #${newId}`
+      const { error: voidError } = await supabase
+        .from('purchase_requests')
+        .update({ status: 'voided', voided_by: loggedInUser.id, voided_at: new Date().toISOString(), void_reason: reason, on_hold: false })
+        .eq('id', request.id)
+      if (voidError) throw voidError
+
+      // 3. the invoices and receipts follow the PO; the flag has done its job
+      const { error: moveInvoicesError } = await supabase
+        .from('invoices')
+        .update({ purchase_request_id: newId, exceeds_po: false, exceeds_note: null })
+        .eq('purchase_request_id', request.id)
+      if (moveInvoicesError) throw moveInvoicesError
+      const { error: moveReceiptsError } = await supabase.from('receipts').update({ purchase_request_id: newId }).eq('purchase_request_id', request.id)
+      if (moveReceiptsError) throw moveReceiptsError
+
+      // 4. link the two, and say so on both
+      if (poLinksReady) {
+        const { error: linkError } = await supabase
+          .from('purchase_request_links')
+          .insert({ request_a: request.id, request_b: newId, reason: 'regenerated' })
+        if (linkError) console.warn('Could not link the regenerated PO:', linkError.message)
+      }
+      await logPoActivity(request.id, `Voided and regenerated as request #${newId}: ${reason}`)
+      await logPoActivity(newId, `Regenerated from ${label} (voided): invoice${invoiceTag(invoice)} was ${formatMoney(invoice.amount)} against the PO's ${formatMoney(poTotal)}. Raise the prices to match, then submit it again.`)
+
+      // 5. open the new draft for the prices to be adjusted
+      await Promise.all([refreshPurchaseRequest(request.id), loadPoLinks()])
+      const fresh = await refreshPurchaseRequest(newId)
+      flashPoStatus(`${label} voided. Its copy is open as a draft: raise the prices to the invoice, then submit it.`, true)
+      if (fresh) {
+        setActiveTab('po')
+        setExpandedPoId(null)
+        openPoDraftForm(fresh)
+        setPoRegen({ fromLabel: label, invoiceNumber: invoice.invoice_number || '', invoiceAmount: Number(invoice.amount) || 0, oldTotal: poTotal })
+      }
+    } catch (error) {
+      console.error(error)
+      // Don't leave a stray copy behind if the original was not voided.
+      if (newId) {
+        const { data: stillThere } = await supabase.from('purchase_requests').select('status').eq('id', request.id).single()
+        if (stillThere?.status !== 'voided') {
+          await supabase.from('purchase_request_lines').delete().eq('purchase_request_id', newId)
+          await supabase.from('purchase_requests').delete().eq('id', newId)
+        }
+      }
+      flashPoStatus(dbRefusal(error) || 'Could not void and regenerate the PO — check the console for details.', false)
+      await refreshPurchaseRequest(request.id)
     } finally {
       setPoActionBusyId(null)
     }
@@ -5296,6 +5467,9 @@ function App() {
           closePoDraftForm={closePoDraftForm}
           poDraftId={poDraftId}
           allPurchaseRequests={purchaseRequests}
+          handleSetInvoiceExceeds={handleSetInvoiceExceeds}
+          handleVoidAndRegeneratePo={handleVoidAndRegeneratePo}
+          poRegen={poRegen}
           poLinks={poLinks}
           poLinksReady={poLinksReady}
           handleAddPoLink={handleAddPoLink}

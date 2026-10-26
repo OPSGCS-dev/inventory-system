@@ -4,8 +4,7 @@
 // the figures that disagree boxed. Differences only ever warn: the invoice can
 // always be added, since the reading can be wrong. See scrape/comparePo.js.
 
-import { formatMoney, formatAmount, formatDate } from '../utils'
-import { allocateInvoice } from '../invoiceSplit'
+import { formatMoney, formatDate } from '../utils'
 import { isBlockingDuplicate, MIN_DUPLICATE_REASON } from '../invoiceDuplicates'
 
 const STATUS_LABEL = { ok: '✓ Matches', warn: '⚠ Check', info: 'ℹ Note' }
@@ -38,12 +37,10 @@ const poLabel = (m) => m.po_number || 'a draft PO'
 const matchLine = (m) =>
   `${poLabel(m)} — invoice ${m.invoice_number ? `#${m.invoice_number}` : '(no number)'}, ${formatMoney(m.amount)}, added ${formatDate(m.uploaded_at)}${m.paid ? ', paid' : ''}${m.po_status === 'voided' ? ' (voided PO)' : ''}`
 
-export default function InvoiceReview({ pending, dupes, request, busy, onChange, onToggleItem, onSelectAllItems, onSubmit, onCancel }) {
+// `overPo` = { auto, flagged, invoiced, expected, basis }: whether adding this invoice takes the PO's invoiced total
+// past what it allows, and whether the person has flagged it (they are asked to, and the box is ticked for them).
+export default function InvoiceReview({ pending, dupes, request, busy, overPo, onChange, onSubmit, onCancel }) {
   const { file, receiptId, number, amount, scan, review } = pending
-  // The items on the invoice, and which of them this PO takes (everything unless some are unticked).
-  const rows = pending.rows || []
-  const selected = pending.selected || []
-  const split = rows.length > 0 ? allocateInvoice(review?.extracted, rows, selected) : null
   const typedNumber = number.trim().toLowerCase()
   // Until add_invoice_duplicate_guard.sql is run there is no vendor-wide check, only this PO's invoices.
   const checked = dupes?.ready === true
@@ -54,13 +51,7 @@ export default function InvoiceReview({ pending, dupes, request, busy, onChange,
   const sameNumber = checked ? dupes.matches.filter((m) => m.same_number) : []
   const sameAmount = checked ? dupes.matches.filter((m) => !m.same_number) : []
   const mustExplain = sameNumber.some(isBlockingDuplicate)
-  const splitting = mustExplain && Boolean(pending.splitShared)
-  const reasonShort = mustExplain && !splitting && (pending.dupReason || '').trim().length < MIN_DUPLICATE_REASON
-  // When the same invoice is already on other POs: how much of it they hold, against the invoice's total.
-  const otherShares = sameNumber.filter((m) => m.po_status !== 'voided')
-  const otherTotal = otherShares.reduce((s, m) => s + (Number(m.amount) || 0), 0)
-  const invoiceTotal = split?.documentTotal ?? null
-  const overAllocated = splitting && invoiceTotal !== null && otherTotal + (Number(amount) || 0) > invoiceTotal + 0.005
+  const reasonShort = mustExplain && (pending.dupReason || '').trim().length < MIN_DUPLICATE_REASON
 
   return (
     <div className="inv-review">
@@ -88,65 +79,35 @@ export default function InvoiceReview({ pending, dupes, request, busy, onChange,
           />
         </div>
       </div>
-      {rows.length > 0 && (
-        <div style={{ margin: '12px 0' }}>
-          <p style={{ margin: '0 0 6px', fontWeight: 600 }}>Which items on this invoice are for this PO?</p>
-          <p className="sub" style={{ margin: '0 0 6px' }}>
-            Untick anything that belongs on another PO — for example shipping the vendor added after the PO was sent, which gets its own PO.
-            The Invoice Amount above follows what is ticked (with the tax on it); you can still change it by hand.
-          </p>
-          <div className="sheet-wrap" style={{ maxHeight: 'none' }}>
-            <table className="sheet">
-              <colgroup>
-                <col style={{ width: '44px' }} />
-                <col />
-                <col style={{ width: '70px' }} />
-                <col style={{ width: '120px' }} />
-              </colgroup>
-              <thead>
-                <tr className="header-row">
-                  <th></th>
-                  <th>Item on the invoice</th>
-                  <th className="center-cell">Qty</th>
-                  <th className="center-cell">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.key} style={selected.includes(r.key) ? undefined : { color: 'var(--muted)' }}>
-                    <td className="center-cell">
-                      <input
-                        type="checkbox"
-                        checked={selected.includes(r.key)}
-                        onChange={() => onToggleItem(r.key)}
-                        aria-label={`This PO takes: ${r.label}`}
-                      />
-                    </td>
-                    <td>
-                      {r.partNumber ? <strong>{r.partNumber} </strong> : null}
-                      {r.label}
-                    </td>
-                    <td className="center-cell">{r.quantity ?? ''}</td>
-                    <td className="center-cell">{formatAmount(r.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="sub" style={{ margin: '6px 0 0' }}>
-            Ticked: {formatMoney(split.subtotal)}
-            {split.tax > 0 ? ` + ${formatMoney(split.tax)} tax (${split.taxRate}%)` : ''} = <strong>{formatMoney(split.amount)}</strong> for this PO
-            {invoiceTotal !== null ? ` — the whole invoice is ${formatMoney(invoiceTotal)}` : ''}.{' '}
-            {split.partial ? (
-              <button type="button" className="inv-undo" onClick={onSelectAllItems}>
-                Tick everything
-              </button>
-            ) : null}
-          </p>
-          {review?.extracted?.lines && !review.extracted.lines.reconciled && (
-            <p className="inv-warn-text" style={{ margin: '4px 0 0' }}>
-              ⚠ The items read from the PDF don't add up to its subtotal — check them against the invoice before relying on this split.
+      {overPo && (
+        <div style={{ margin: '10px 0' }}>
+          {overPo.auto && (
+            <p className="inv-warn-text" style={{ margin: '0 0 6px' }}>
+              ⚠ With this invoice, {formatMoney(overPo.invoiced)} would be invoiced against the PO's {formatMoney(overPo.expected)}
+              {overPo.basis === 'cap' ? ' spending cap' : ''} — more than the PO allows.
             </p>
+          )}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, margin: 0 }}>
+            <input
+              type="checkbox"
+              checked={overPo.flagged}
+              onChange={(e) => onChange('exceedsPo', e.target.checked)}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              <strong>This invoice is for more than the PO.</strong> It goes to the requisitioner, who has to void the PO and
+              regenerate it at the new amount before the invoice can move on.
+            </span>
+          </label>
+          {overPo.flagged && (
+            <input
+              type="text"
+              style={{ marginTop: 6 }}
+              placeholder="What is the extra? e.g. shipping the vendor added afterwards (optional)"
+              value={pending.exceedsNote || ''}
+              onChange={(e) => onChange('exceedsNote', e.target.value)}
+              aria-label="What is the extra"
+            />
           )}
         </div>
       )}
@@ -163,28 +124,6 @@ export default function InvoiceReview({ pending, dupes, request, busy, onChange,
             ))}
           </ul>
           {mustExplain && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 0' }}>
-              <input
-                type="checkbox"
-                checked={Boolean(pending.splitShared)}
-                onChange={(e) => onChange('splitShared', e.target.checked)}
-              />
-              This is the same invoice, split across POs — this PO takes only the items ticked above
-            </label>
-          )}
-          {splitting && split && !split.partial && (
-            <div style={{ marginTop: 6 }}>
-              ⚠ Everything is ticked, so this PO would take the whole invoice. Untick the items that belong on the other PO.
-            </div>
-          )}
-          {splitting && otherShares.length > 0 && (
-            <div style={{ marginTop: 6 }}>
-              Already on other POs: {formatMoney(otherTotal)}
-              {invoiceTotal !== null ? ` of ${formatMoney(invoiceTotal)}, leaving ${formatMoney(Math.max(0, invoiceTotal - otherTotal))} for this PO` : ''}.
-              {overAllocated ? ' ⚠ With this PO\'s amount that is more than the invoice.' : ''}
-            </div>
-          )}
-          {mustExplain && !splitting && (
             <div style={{ marginTop: 8 }}>
               <label htmlFor="inv_review_dup_reason">This is a separate invoice, because…</label>
               <input

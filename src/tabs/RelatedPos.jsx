@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { computePoTotals, formatMoney, poStatusLabel, truncate } from '../utils'
-import { relatedRequests } from '../invoiceSplit'
+import { relatedRequests } from '../poLinks'
 
 // The POs that belong with this one: those that share one of its invoices (same vendor, same invoice number --
 // found automatically, e.g. a second PO raised for the shipping the vendor added to the invoice afterwards) and
@@ -39,7 +39,7 @@ function RelatedPos({ request, purchaseRequests, poLinks, poLinksReady, canLink,
                 <span className="sub" style={{ margin: 0 }}>
                   ({reasons.join(', ')})
                 </span>
-                {link && canLink && (
+                {link && canLink && link.reason !== 'regenerated' && (
                   <>
                     {' '}
                     <button type="button" className="inv-undo" disabled={busy} onClick={() => onRemoveLink(link)}>

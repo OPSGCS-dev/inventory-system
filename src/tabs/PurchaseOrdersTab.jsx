@@ -290,6 +290,9 @@ function PurchaseOrdersTab({
   closePoDraftForm,
   poDraftId,
   allPurchaseRequests,
+  handleSetInvoiceExceeds,
+  handleVoidAndRegeneratePo,
+  poRegen,
   poLinks,
   poLinksReady,
   handleAddPoLink,
@@ -1722,6 +1725,8 @@ function PurchaseOrdersTab({
               handleReturnInvoice={handleReturnInvoice}
               handleHoldInvoice={handleHoldInvoice}
               handleReleaseInvoice={handleReleaseInvoice}
+              handleSetInvoiceExceeds={handleSetInvoiceExceeds}
+              handleVoidAndRegeneratePo={handleVoidAndRegeneratePo}
               handleResubmitInvoice={handleResubmitInvoice}
               paymentBatchSummaries={paymentBatchSummaries}
               poPdfRequest={withShownPoNumber(r)}
@@ -1773,6 +1778,34 @@ function PurchaseOrdersTab({
             )}
           </div>
 
+          {poRegen && (
+            <div className="status" style={{ margin: '0 0 12px', background: '#fdf1d6', color: 'var(--ink)', border: '1px solid var(--warn)' }}>
+              {(() => {
+                const draftTotal = computePoTotals({
+                  purchase_request_lines: poDraftLines.map((l) => ({
+                    line_type: l.line_type,
+                    quantity: Number(l.quantity) || 0,
+                    unit_cost: Number(l.unit_cost) || 0,
+                  })),
+                  markup_rate: Number(poDraftMarkupRate) || 0,
+                  tax_rate: Number(poDraftTaxRate) || 0,
+                  shipping_handling: Number(poDraftShippingHandling) || 0,
+                  credit: Number(poDraftCredit) || 0,
+                }).grandTotal
+                const gap = poRegen.invoiceAmount - draftTotal
+                return (
+                  <>
+                    <strong>Regenerated from {poRegen.fromLabel}</strong> (voided) because invoice
+                    {poRegen.invoiceNumber ? ` #${poRegen.invoiceNumber}` : ''} is {formatMoney(poRegen.invoiceAmount)}, more than that PO's{' '}
+                    {formatMoney(poRegen.oldTotal)}. Raise the prices below so the total covers the invoice, then save and submit it for approval again.
+                    <br />
+                    Total now {formatMoney(draftTotal)} — invoice {formatMoney(poRegen.invoiceAmount)}
+                    {gap > 0.005 ? ` (still ${formatMoney(gap)} short)` : ' ✓'}
+                  </>
+                )
+              })()}
+            </div>
+          )}
           <div className="field-row">
             {programsReady && (
               <div>
@@ -2512,6 +2545,7 @@ function PurchaseOrdersTab({
           handleReturnInvoice={handleReturnInvoice}
           handleHoldInvoice={handleHoldInvoice}
           handleReleaseInvoice={handleReleaseInvoice}
+          handleVoidAndRegeneratePo={handleVoidAndRegeneratePo}
           poActionBusyId={poActionBusyId}
           loggedInUser={loggedInUser}
           users={users}

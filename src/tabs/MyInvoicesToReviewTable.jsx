@@ -1,4 +1,4 @@
-import { totalsByCurrencyText, formatMoney, findUserName, isInvoiceHeld, canHoldInvoice, canReleaseInvoice, formatDate, formatDateTime } from '../utils'
+import { totalsByCurrencyText, formatMoney, findUserName, isInvoiceHeld, canHoldInvoice, canReleaseInvoice, formatDate, formatDateTime, isInvoiceOverPo, regenerateBlockReason } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
 
@@ -25,6 +25,7 @@ function MyInvoicesToReviewTable({
   handleReturnInvoice,
   handleHoldInvoice,
   handleReleaseInvoice,
+  handleVoidAndRegeneratePo,
   poActionBusyId,
   loggedInUser,
   users,
@@ -100,6 +101,11 @@ function MyInvoicesToReviewTable({
                           </div>
                         </div>
                       )}
+                      {isInvoiceOverPo(invoice) && (
+                        <div style={{ color: 'var(--warn)', fontWeight: 600 }} title="This invoice is for more than the PO">
+                          Over the PO{invoice.exceeds_note ? ` — ${invoice.exceeds_note}` : ''}
+                        </div>
+                      )}
                     </td>
                     <td className="center-cell">{formatMoney(invoice.amount)}</td>
                     <td>{request.po_number || `#${request.id}`}</td>
@@ -120,9 +126,20 @@ function MyInvoicesToReviewTable({
                         )
                       ) : (
                         <>
-                          <button className="btn-primary" onClick={() => handleReviewInvoice(invoice, true)} disabled={busy}>
-                            Approve
-                          </button>{' '}
+                          {isInvoiceOverPo(invoice) ? (
+                            <button
+                              className="btn-primary"
+                              onClick={() => handleVoidAndRegeneratePo(request, invoice)}
+                              disabled={busy || Boolean(regenerateBlockReason(request, invoice))}
+                              title={regenerateBlockReason(request, invoice) || 'Void this PO and re-create it at the new amount'}
+                            >
+                              Void &amp; regenerate PO
+                            </button>
+                          ) : (
+                            <button className="btn-primary" onClick={() => handleReviewInvoice(invoice, true)} disabled={busy}>
+                              Approve
+                            </button>
+                          )}{' '}
                           {canHoldInvoice(loggedInUser, invoice, request) && (
                             <>
                               <button className="btn-secondary" onClick={() => handleHoldInvoice(invoice)} disabled={busy}>

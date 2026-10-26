@@ -900,6 +900,43 @@ export function canReleaseInvoice(user, invoice, request) {
   return invoiceStage(invoice, request) === 'review' ? isRequisitioner(user, request) : isPaymentApprover(user, request)
 }
 
+// An invoice flagged as for MORE than its PO (add_invoice_over_po.sql): the PO can't just be paid over its total, so
+// the requisitioner's only way forward is to void the PO and regenerate it at the new amount. The person adding
+// the invoice flags it; nothing shows until the SQL has been run (`invoiceOverPoReady`).
+export function invoiceOverPoReady(invoice) {
+  return Boolean(invoice) && 'exceeds_po' in invoice
+}
+
+export function isInvoiceOverPo(invoice) {
+  return Boolean(invoice?.exceeds_po)
+}
+
+// Flagging (or clearing the flag) is for whoever adds and matches invoices, while it is still waiting for the requisitioner.
+export function canFlagInvoiceOverPo(user, invoice, request) {
+  return (
+    invoiceOverPoReady(invoice) &&
+    ['matching', 'review'].includes(invoiceStage(invoice, request)) &&
+    (isAdmin(user) || canMatchInvoices(user, request))
+  )
+}
+
+// Why a PO can't be voided and regenerated right now (null = it can). Same limits as voiding, except the invoice
+// that triggered it is allowed to be on the PO.
+export function regenerateBlockReason(request, invoice) {
+  if (request?.status !== 'issued') return 'Only an issued PO can be voided and regenerated.'
+  if (poHasParts(request) && request.received_at) {
+    return 'Its parts have been received into stock — reverse that with an inventory adjustment first.'
+  }
+  const others = (request.invoices || []).filter((inv) => inv.id !== invoice?.id)
+  if (others.some((inv) => inv.paid)) return 'Another invoice on this PO has been paid — clear that payment first.'
+  if (others.some((inv) => inv.approved)) return 'Another invoice on this PO is approved for payment — withdraw that approval first.'
+  return null
+}
+
+export function canRegeneratePo(user, invoice, request) {
+  return isInvoiceOverPo(invoice) && canReviewInvoice(user, invoice, request)
+}
+
 export function canApproveInvoice(user, invoice, request) {
   return invoiceStage(invoice, request) === 'payment_approval' && isPaymentApprover(user, request)
 }

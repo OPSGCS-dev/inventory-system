@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import InvoiceReview from './InvoiceReview'
 import { findDuplicateInvoices, isBlockingDuplicate, MIN_DUPLICATE_REASON } from '../invoiceDuplicates'
-import { allocateInvoice, invoiceItemRows } from '../invoiceSplit'
 import PaymentConfirm from './PaymentConfirm'
 import {
   canMatchInvoices,
@@ -19,6 +18,11 @@ import {
   canReleaseInvoice,
   isInvoiceHeld,
   canResubmitInvoice,
+  canFlagInvoiceOverPo,
+  isInvoiceOverPo,
+  canRegeneratePo,
+  regenerateBlockReason,
+  compareInvoicesToPo,
   canDeleteInvoice,
   formatDateOnly,
   paymentBatchLabel,
@@ -60,6 +64,8 @@ function InvoicesPanel({
   handleReviewInvoice,
   handleReturnInvoice,
   handleHoldInvoice,
+  handleSetInvoiceExceeds,
+  handleVoidAndRegeneratePo,
   handleReleaseInvoice,
   handleResubmitInvoice,
   paymentBatchSummaries,
@@ -132,7 +138,7 @@ function InvoicesPanel({
     const token = ++scanToken.current
     const fresh = (patch) => setPending((p) => (p && token === scanToken.current ? { ...p, ...patch } : p))
     setDupes({ ready: null, matches: [] })
-    setPending({ file, receiptId, number: '', amount: '', dupReason: '', splitShared: false, rows: [], selected: [], scan: { busy: true }, review: null, error: '' })
+    setPending({ file, receiptId, number: '', amount: '', dupReason: '', exceedsPo: null, exceedsNote: '', scan: { busy: true }, review: null, error: '' })
     if (file.type !== 'application/pdf') {
       fresh({ scan: { note: 'Please choose a PDF file.' } })
       return
@@ -159,8 +165,6 @@ function InvoicesPanel({
               ...p,
               number: p.number || (invoiceNumber ? invoiceNumber.value : ''),
               amount: p.amount === '' && amount ? String(amount.value) : p.amount,
-              rows: invoiceItemRows(review.extracted),
-              selected: invoiceItemRows(review.extracted).map((r) => r.key),
               scan: { note },
               review,
             }
@@ -177,19 +181,12 @@ function InvoicesPanel({
     }
   }
 
-  // Ticking or unticking an item of the invoice: the amount follows what this PO takes.
-  function toggleItem(key) {
-    setPending((p) => {
-      const selected = p.selected.includes(key) ? p.selected.filter((k) => k !== key) : [...p.selected, key]
-      const split = allocateInvoice(p.review?.extracted, p.rows, selected)
-      return { ...p, selected, amount: selected.length > 0 ? String(split.amount) : '', error: '' }
-    })
-  }
-  function selectAllItems() {
-    setPending((p) => {
-      const selected = p.rows.map((r) => r.key)
-      return { ...p, selected, amount: String(allocateInvoice(p.review?.extracted, p.rows, selected).amount), error: '' }
-    })
+  // Would adding an invoice of this amount take the PO's invoiced total past what it allows?
+  function overPoFor(amount) {
+    const n = Number(amount)
+    if (!n || Number.isNaN(n) || n <= 0) return { auto: false, invoiced: 0, expected: 0, basis: 'po' }
+    const m = compareInvoicesToPo({ ...request, invoices: [...(request.invoices || []), { amount: n }] })
+    return { auto: m?.state === 'over', invoiced: m?.invoiced ?? 0, expected: m?.expected ?? 0, basis: m?.basis ?? 'po' }
   }
 
   async function submitPending() {
@@ -202,17 +199,7 @@ function InvoicesPanel({
     // this vendor has to be explained before it can go in (the database insists on it too).
     const check = await findDuplicateInvoices({ vendorId: request.vendor_id, number: pending.number, amount: pending.amount })
     const clash = check.matches.some(isBlockingDuplicate)
-    const split = pending.rows.length > 0 ? allocateInvoice(pending.review?.extracted, pending.rows, pending.selected) : null
-    // The same invoice split across POs explains itself: the reason names the POs it is shared with.
-    const sharedWith = check.matches.filter((m) => m.same_number && m.po_status !== 'voided').map((m) => m.po_number || 'a draft PO')
-    const reason =
-      clash && pending.splitShared
-        ? `Same invoice split across POs (shared with ${[...new Set(sharedWith)].join(', ')})`
-        : (pending.dupReason || '').trim()
-    if (clash && pending.splitShared && split && !split.partial) {
-      setPending((p) => ({ ...p, error: 'This PO would take the whole invoice. Untick the items that belong on the other PO, or untick "split across POs".' }))
-      return
-    }
+    const reason = (pending.dupReason || '').trim()
     if (clash && reason.length < MIN_DUPLICATE_REASON) {
       setDupes(check)
       setPending((p) => ({
@@ -227,9 +214,8 @@ function InvoicesPanel({
       file: pending.file,
       matchToReceiptId: pending.receiptId,
       duplicateReason: clash ? reason : null,
-      // Only when this PO takes part of the invoice: the whole invoice's total and which items are this PO's.
-      invoiceTotal: split?.partial ? split.documentTotal : null,
-      covers: split?.partial ? split.covers : null,
+      exceedsPo: pending.exceedsPo ?? overPoFor(pending.amount).auto,
+      exceedsNote: (pending.exceedsNote || '').trim(),
     })
     if (ok) {
       scanToken.current++
@@ -358,11 +344,25 @@ function InvoicesPanel({
                       {row.invoice ? (
                         <>
                           {row.invoice.invoice_number || '—'} — {formatMoney(row.invoice.amount)}
-                          {row.invoice.covers && (
-                            <div className="sub" style={{ margin: 0 }} title="This PO takes only part of the invoice">
-                              Covers: {row.invoice.covers}
-                              {row.invoice.invoice_total != null ? ` (invoice total ${formatMoney(row.invoice.invoice_total)})` : ''}
+                          {isInvoiceOverPo(row.invoice) && (
+                            <div style={{ color: 'var(--warn)', fontWeight: 600 }} title="This invoice is for more than the PO">
+                              Over the PO{row.invoice.exceeds_note ? ` — ${row.invoice.exceeds_note}` : ''}
                             </div>
+                          )}
+                          {canFlagInvoiceOverPo(loggedInUser, row.invoice, request) && (
+                            <button
+                              type="button"
+                              className="inv-undo"
+                              disabled={busy}
+                              onClick={() =>
+                                isInvoiceOverPo(row.invoice)
+                                  ? handleSetInvoiceExceeds(row.invoice, false)
+                                  : handleSetInvoiceExceeds(row.invoice, true)
+                              }
+                              title={isInvoiceOverPo(row.invoice) ? 'This invoice is not over the PO after all' : 'This invoice is for more than the PO'}
+                            >
+                              {isInvoiceOverPo(row.invoice) ? 'Clear flag' : 'Flag: over the PO'}
+                            </button>
                           )}
                           <br />
                           <span className="sub" style={{ margin: 0 }}>
@@ -442,6 +442,15 @@ function InvoicesPanel({
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                             {isInvoiceHeld(inv) ? (
                               <HoldNote inv={inv} users={users} />
+                            ) : isInvoiceOverPo(inv) ? (
+                              <button
+                                className="btn-primary"
+                                disabled={busy || Boolean(regenerateBlockReason(request, inv))}
+                                title={regenerateBlockReason(request, inv) || 'Void this PO and re-create it at the new amount'}
+                                onClick={() => handleVoidAndRegeneratePo(request, inv)}
+                              >
+                                Void &amp; regenerate PO
+                              </button>
                             ) : (
                               <button className="btn-primary" disabled={busy} onClick={() => handleReviewInvoice(inv, true)}>
                                 Approve
@@ -638,12 +647,14 @@ function InvoicesPanel({
       {pending && (
         <InvoiceReview
           pending={pending}
+          overPo={(() => {
+            const o = overPoFor(pending.amount)
+            return { ...o, flagged: pending.exceedsPo ?? o.auto }
+          })()}
           dupes={dupes}
           request={request}
           busy={busy}
           onChange={(field, value) => setPending((p) => ({ ...p, [field]: value, error: '' }))}
-          onToggleItem={toggleItem}
-          onSelectAllItems={selectAllItems}
           onSubmit={submitPending}
           onCancel={() => {
             scanToken.current++

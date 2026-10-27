@@ -3656,6 +3656,10 @@ function App() {
       return
     }
     const request = purchaseRequests.find((r) => r.id === invoice.purchase_request_id)
+    if (isInvoiceOverPo(invoice) && invoiceStage(invoice, request) === 'review') {
+      flashPoStatus('This invoice is for more than the PO: the only way forward is to void the PO and regenerate it.', false)
+      return
+    }
     if (!canReturnInvoice(loggedInUserWithScopes, invoice, request)) {
       flashPoStatus("You can't send this invoice back from where it is now.", false)
       return

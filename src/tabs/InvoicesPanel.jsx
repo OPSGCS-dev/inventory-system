@@ -440,9 +440,7 @@ function InvoicesPanel({
                       ) : stage === 'review' ? (
                         canReviewInvoice(loggedInUser, inv, request) ? (
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {isInvoiceHeld(inv) ? (
-                              <HoldNote inv={inv} users={users} />
-                            ) : isInvoiceOverPo(inv) ? (
+                            {isInvoiceOverPo(inv) ? (
                               <button
                                 className="btn-primary"
                                 disabled={busy || Boolean(regenerateBlockReason(request, inv))}
@@ -451,6 +449,8 @@ function InvoicesPanel({
                               >
                                 Void &amp; regenerate PO
                               </button>
+                            ) : isInvoiceHeld(inv) ? (
+                              <HoldNote inv={inv} users={users} />
                             ) : (
                               <button className="btn-primary" disabled={busy} onClick={() => handleReviewInvoice(inv, true)}>
                                 Approve
@@ -466,14 +466,16 @@ function InvoicesPanel({
                                 Release
                               </button>
                             )}
-                            <button
-                              className="btn-secondary"
-                              style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                              disabled={busy}
-                              onClick={() => handleReturnInvoice(inv)}
-                            >
-                              Send Back
-                            </button>
+                            {!isInvoiceOverPo(inv) && (
+                              <button
+                                className="btn-secondary"
+                                style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                                disabled={busy}
+                                onClick={() => handleReturnInvoice(inv)}
+                              >
+                                Send Back
+                              </button>
+                            )}
                           </div>
                         ) : isInvoiceHeld(inv) ? (
                           <HoldNote inv={inv} users={users} />

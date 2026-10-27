@@ -25,6 +25,12 @@ begin
   if new.exceeds_po and new.reviewed and not coalesce(old.reviewed, false) then
     raise exception 'This invoice is for more than the PO, so the PO has to be voided and regenerated at the new amount instead of approving it.' using errcode = 'P0001';
   end if;
+  -- Nor can it be put on hold or sent back: voiding and regenerating the PO is the only way forward.
+  if new.exceeds_po and coalesce(old.exceeds_po, false) and not coalesce(new.reviewed, false) then
+    if (to_jsonb(new) ->> 'held_at' is not null and to_jsonb(old) ->> 'held_at' is null) or (new.returned_at is not null and old.returned_at is null) then
+      raise exception 'This invoice is for more than the PO, so it can''t be put on hold or sent back: the PO has to be voided and regenerated at the new amount.' using errcode = 'P0001';
+    end if;
+  end if;
   return new;
 end;
 $$;

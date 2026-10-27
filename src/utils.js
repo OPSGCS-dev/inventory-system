@@ -888,7 +888,8 @@ export function isInvoiceHeld(invoice) {
 export function canHoldInvoice(user, invoice, request) {
   if (!invoiceHoldReady(invoice) || isInvoiceHeld(invoice)) return false
   const stage = invoiceStage(invoice, request)
-  if (stage === 'review') return isRequisitioner(user, request)
+  // A flagged invoice (over its PO) can only be dealt with by voiding and regenerating the PO.
+  if (stage === 'review') return !isInvoiceOverPo(invoice) && isRequisitioner(user, request)
   return ['payment_approval', 'to_pay'].includes(stage) && isPaymentApprover(user, request)
 }
 
@@ -954,7 +955,7 @@ export function canPayInvoice(user, invoice, request) {
 export function canReturnInvoice(user, invoice, request) {
   if (!invoiceFlowReady(invoice)) return false
   const stage = invoiceStage(invoice, request)
-  if (stage === 'review') return canReviewInvoice(user, invoice, request)
+  if (stage === 'review') return !isInvoiceOverPo(invoice) && canReviewInvoice(user, invoice, request)
   if (stage === 'payment_approval') return canApproveInvoice(user, invoice, request)
   return false
 }

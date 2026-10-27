@@ -116,7 +116,16 @@ function MyInvoicesToReviewTable({
                       <button className="btn-secondary" onClick={() => toggleExpandedPo(request.id)}>
                         View
                       </button>{' '}
-                      {isInvoiceHeld(invoice) ? (
+                      {isInvoiceOverPo(invoice) ? (
+                        <button
+                          className="btn-primary"
+                          onClick={() => handleVoidAndRegeneratePo(request, invoice)}
+                          disabled={busy || Boolean(regenerateBlockReason(request, invoice))}
+                          title={regenerateBlockReason(request, invoice) || 'Void this PO and re-create it at the new amount'}
+                        >
+                          Void &amp; regenerate PO
+                        </button>
+                      ) : isInvoiceHeld(invoice) ? (
                         canReleaseInvoice(loggedInUser, invoice, request) && (
                           <>
                             <button className="btn-secondary" onClick={() => handleReleaseInvoice(invoice)} disabled={busy}>
@@ -126,20 +135,9 @@ function MyInvoicesToReviewTable({
                         )
                       ) : (
                         <>
-                          {isInvoiceOverPo(invoice) ? (
-                            <button
-                              className="btn-primary"
-                              onClick={() => handleVoidAndRegeneratePo(request, invoice)}
-                              disabled={busy || Boolean(regenerateBlockReason(request, invoice))}
-                              title={regenerateBlockReason(request, invoice) || 'Void this PO and re-create it at the new amount'}
-                            >
-                              Void &amp; regenerate PO
-                            </button>
-                          ) : (
-                            <button className="btn-primary" onClick={() => handleReviewInvoice(invoice, true)} disabled={busy}>
-                              Approve
-                            </button>
-                          )}{' '}
+                          <button className="btn-primary" onClick={() => handleReviewInvoice(invoice, true)} disabled={busy}>
+                            Approve
+                          </button>{' '}
                           {canHoldInvoice(loggedInUser, invoice, request) && (
                             <>
                               <button className="btn-secondary" onClick={() => handleHoldInvoice(invoice)} disabled={busy}>
@@ -149,14 +147,16 @@ function MyInvoicesToReviewTable({
                           )}
                         </>
                       )}
-                      <button
-                        className="btn-secondary"
-                        style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                        onClick={() => handleReturnInvoice(invoice)}
-                        disabled={busy}
-                      >
-                        Send Back
-                      </button>
+                      {!isInvoiceOverPo(invoice) && (
+                        <button
+                          className="btn-secondary"
+                          style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                          onClick={() => handleReturnInvoice(invoice)}
+                          disabled={busy}
+                        >
+                          Send Back
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )

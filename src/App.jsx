@@ -71,6 +71,8 @@ import {
   canViewPoLedger,
   canViewAudit,
   canViewPoHistory,
+  canViewBudget,
+  canEditBudget,
   TICKETING_URL,
   formatMoney,
 } from './utils'
@@ -91,6 +93,7 @@ import {
 } from './imageUtils'
 import PurchaseOrdersTab from './tabs/PurchaseOrdersTab'
 import PoLedgerTab from './tabs/PoLedgerTab'
+import BudgetTab from './tabs/BudgetTab'
 import AuditTab from './tabs/AuditTab'
 import SuggestionsTab from './tabs/SuggestionsTab'
 import PoHistoryTab from './tabs/PoHistoryTab'
@@ -163,6 +166,9 @@ function App() {
   // POs linked to each other by hand (add_po_links_and_invoice_split.sql); `poLinksReady` is false until that SQL is run.
   const [poLinks, setPoLinks] = useState([])
   const [poLinksReady, setPoLinksReady] = useState(false)
+  // Budget amounts (add_budget_amounts.sql); `budgetReady` is false until that SQL is run, or for someone who can't read them.
+  const [budgetAmounts, setBudgetAmounts] = useState([])
+  const [budgetReady, setBudgetReady] = useState(false)
   // Set while a PO that was voided and regenerated is open as a draft: what the invoice needs the new total to cover.
   const [poRegen, setPoRegen] = useState(null)
   const [newProjectPrograms, setNewProjectPrograms] = useState([])
@@ -524,6 +530,18 @@ function App() {
     }
     setPoLinks(data ?? [])
     setPoLinksReady(true)
+  }
+
+  async function loadBudgetAmounts() {
+    const { data, error } = await supabase.from('budget_amounts').select('*')
+    if (error) {
+      console.warn("The budget isn't set up yet (run supabase/add_budget_amounts.sql):", error.message)
+      setBudgetAmounts([])
+      setBudgetReady(false)
+      return
+    }
+    setBudgetAmounts(data ?? [])
+    setBudgetReady(true)
   }
 
   async function loadPrograms() {
@@ -893,6 +911,7 @@ function App() {
       loadSubProjects()
       loadPrograms()
       loadPoLinks()
+      if (canViewBudget(loggedInUser)) loadBudgetAmounts()
     }
   }, [loggedInUser])
 
@@ -4949,6 +4968,48 @@ function App() {
     await loadPrograms()
   }
 
+  // Saves the budget amounts an admin changed in the Budget tab: [{ projectId, categoryId, subcategoryId, amount }],
+  // where an amount of null means "not budgeted" (the row is removed).
+  async function handleSaveBudgetAmounts(year, entries) {
+    if (!canEditBudget(loggedInUser)) return { ok: false, message: 'Only an admin can change the budget.' }
+    const sameCell = (b, e) =>
+      b.year === year &&
+      b.project_id === e.projectId &&
+      b.category_id === e.categoryId &&
+      (b.subcategory_id || 0) === (e.subcategoryId || 0)
+    const toInsert = []
+    const toUpdate = []
+    const toDelete = []
+    for (const e of entries) {
+      const existing = budgetAmounts.find((b) => sameCell(b, e))
+      if (e.amount === null) {
+        if (existing) toDelete.push(existing.id)
+      } else if (existing) {
+        toUpdate.push({ id: existing.id, amount: e.amount })
+      } else {
+        toInsert.push({
+          year,
+          project_id: e.projectId,
+          category_id: e.categoryId,
+          subcategory_id: e.subcategoryId || null,
+          amount: e.amount,
+        })
+      }
+    }
+    const results = await Promise.all([
+      toInsert.length ? supabase.from('budget_amounts').insert(toInsert) : null,
+      toDelete.length ? supabase.from('budget_amounts').delete().in('id', toDelete) : null,
+      ...toUpdate.map((u) => supabase.from('budget_amounts').update({ amount: u.amount }).eq('id', u.id)),
+    ])
+    const failed = results.find((r) => r && r.error)
+    await loadBudgetAmounts()
+    if (failed) {
+      console.error(failed.error)
+      return { ok: false, message: 'Could not save the budget — check the console for details. Some amounts may have been saved.' }
+    }
+    return { ok: true, message: `Budget saved (${entries.length} amount${entries.length === 1 ? '' : 's'} changed).` }
+  }
+
   async function handleUpdateProjectCode(projectId, code) {
     const trimmed = code.trim()
     setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, project_code: trimmed } : p)))
@@ -4979,6 +5040,13 @@ function App() {
   // ever gets set to 'users' some other way for a non-admin.
   useEffect(() => {
     if (activeTab === 'users' && !isAdmin(loggedInUser)) {
+      setActiveTab('master')
+    }
+  }, [activeTab, loggedInUser])
+
+  // And the Budget tab: admin and accounting only.
+  useEffect(() => {
+    if (activeTab === 'budget' && !canViewBudget(loggedInUser)) {
       setActiveTab('master')
     }
   }, [activeTab, loggedInUser])
@@ -5122,6 +5190,8 @@ function App() {
           ? 'Users'
           : activeTab === 'ledger'
           ? 'PO Ledger'
+          : activeTab === 'budget'
+          ? 'Budget'
           : activeTab === 'audit'
           ? 'Accounting Audit'
           : activeTab === 'poHistory'
@@ -5179,6 +5249,14 @@ function App() {
             onClick={() => setActiveTab('audit')}
           >
             Audit
+          </button>
+        )}
+        {canViewBudget(loggedInUser) && (
+          <button
+            className={'tab-btn' + (activeTab === 'budget' ? ' active' : '')}
+            onClick={() => setActiveTab('budget')}
+          >
+            Budget
           </button>
         )}
         {canViewPoLedger(loggedInUser) && (
@@ -5625,6 +5703,21 @@ function App() {
 
       {activeTab === 'audit' && canViewAudit(loggedInUser) && (
         <AuditTab stockItems={stockItems} stockLoading={stockLoading} parts={parts} userName={userDisplayName(loggedInUser)} />
+      )}
+
+      {activeTab === 'budget' && canViewBudget(loggedInUser) && (
+        <BudgetTab
+          purchaseRequests={purchaseRequests}
+          projects={projects}
+          programs={programs}
+          programSites={programSites}
+          budgetCategories={budgetCategories}
+          budgetSubcategories={budgetSubcategories}
+          budgetAmounts={budgetAmounts}
+          budgetReady={budgetReady}
+          canEdit={canEditBudget(loggedInUser)}
+          onSaveBudget={handleSaveBudgetAmounts}
+        />
       )}
 
       {activeTab === 'ledger' && canViewPoLedger(loggedInUser) && (

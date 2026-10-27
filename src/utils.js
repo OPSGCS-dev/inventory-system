@@ -629,6 +629,17 @@ export function canViewPoHistory(user) {
   )
 }
 
+// The Budget tab (budget against issued POs and approved invoices): admins and the accounting roles, like the
+// Audit tab. Only an admin changes the budget amounts. The database enforces the same (add_budget_amounts.sql).
+export function canViewBudget(user) {
+  if (!user || isVendorUser(user)) return false
+  return ['admin', 'invoice_matching', 'invoice_approval', 'payment'].some((role) => userHasRole(user, role))
+}
+
+export function canEditBudget(user) {
+  return isAdmin(user)
+}
+
 // Accounting Audit (inventory vs accounting's books): admins and the accounting roles.
 export function canViewAudit(user) {
   return (
@@ -1210,6 +1221,9 @@ export const formatAmount = (n) =>
   Number(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export const formatMoney = (n) => (Number(n) < 0 ? '-$' + formatAmount(-Number(n)) : '$' + formatAmount(n))
+
+// The same, in whole dollars (1,234) -- for the Budget tab, where cents would only be noise.
+export const formatAmountWhole = (n) => Number(n || 0).toLocaleString('en-CA', { maximumFractionDigits: 0 })
 
 // Total of a list of { amount, currency } entries, never adding across currencies:
 // "$1,234.00 CAD" or, with a mix, "$1,234.00 CAD · $500.00 USD".

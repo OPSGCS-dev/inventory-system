@@ -5,6 +5,7 @@ import { computeTargetSum, shortProjectName, normalizeHeader } from '../utils'
 import { INCOMING_BG, downloadCsv, hasSiteStock, offSiteUnits, ownedBy, rpcErrorText, totalOwned } from '../stockUtils'
 
 import PartDescription from './PartDescription'
+import { AdjustmentLocationDialog } from './StockLocationDialogs'
 
 // Who owns how many of each part. Counts and uploads change ownership; Stock Transfer
 // moves ownership between entities (and, in the same step, where the units are).
@@ -20,6 +21,7 @@ function OwnershipTab({
   incomingByKey,
   reloadStock,
   reloadPurchaseRequests,
+  locationChoiceReady,
   focusGcsId,
   onFocusDone,
   onShowLocation,
@@ -35,6 +37,7 @@ function OwnershipTab({
   const [editNote, setEditNote] = useState('')
   const [editSearch, setEditSearch] = useState('')
   const [saving, setSaving] = useState(false)
+  const [locPrompt, setLocPrompt] = useState(null) // the changed counts waiting for a physical location each
 
   // stock transfer
   const [transferMode, setTransferMode] = useState(false)
@@ -158,14 +161,21 @@ function OwnershipTab({
   }
 
   // ------- individual adjustment -------
-  async function saveEdits() {
+  // Save Adjustment: once add_stock_location_choice.sql has been run, first asks where each changed count's
+  // units are (extra units go there, removed units come from there); before that it saves straight away.
+  function saveEdits() {
     if (!editNote.trim()) return flash('A reason is required before saving.', false)
     const rows = []
+    const changes = []
     for (const row of draft) {
       const item = stockItems.find((i) => i.gcs_id === row.gcs_id)
       for (const [pidStr, val] of Object.entries(row.qtyByProject)) {
         const quantity = val === '' ? 0 : Number(val)
-        if (quantity !== ownedBy(item, Number(pidStr))) rows.push({ part: row.gcs_id, project: Number(pidStr), quantity })
+        const from = ownedBy(item, Number(pidStr))
+        if (quantity === from) continue
+        rows.push({ part: row.gcs_id, project: Number(pidStr), quantity })
+        const project = projects.find((p) => p.id === Number(pidStr))
+        if (project) changes.push({ key: `${row.gcs_id}:${pidStr}`, gcs_id: row.gcs_id, part: row.part, project, item, from, to: quantity })
       }
     }
     if (rows.length === 0) {
@@ -173,9 +183,22 @@ function OwnershipTab({
       setDraft([])
       return flash('No changes to save.', true)
     }
+    if (locationChoiceReady && changes.length === rows.length) return setLocPrompt({ rows, changes })
+    return applyAdjustment(rows)
+  }
+  function confirmLocations(locations) {
+    const { rows, changes } = locPrompt
+    const withPlaces = rows.map((r, i) => {
+      const place = locations[changes[i].key]
+      return place ? { ...r, location: place } : r
+    })
+    return applyAdjustment(withPlaces)
+  }
+  async function applyAdjustment(rows) {
     setSaving(true)
     const { error } = await supabase.rpc('fn_apply_count', { p_entry_type: 'adjustment', p_note: editNote.trim(), p_rows: rows })
     setSaving(false)
+    setLocPrompt(null)
     if (error) {
       console.error(error)
       return flash(rpcErrorText(error, 'Could not save changes.'), false)
@@ -354,6 +377,10 @@ function OwnershipTab({
             </>
           )}
         </div>
+
+        {locPrompt && (
+          <AdjustmentLocationDialog changes={locPrompt.changes} busy={saving} onConfirm={confirmLocations} onCancel={() => setLocPrompt(null)} />
+        )}
 
         {editMode && (
           <div className="edit-toolbar" style={{ marginTop: 8 }}>

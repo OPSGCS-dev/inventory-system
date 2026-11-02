@@ -81,7 +81,7 @@ import RequiredInventoryTab from './tabs/RequiredInventoryTab'
 import OwnershipTab from './tabs/OwnershipTab'
 import PhysicalLocationTab from './tabs/PhysicalLocationTab'
 import HistoryPanel from './tabs/HistoryPanel'
-import { fetchAllRows } from './stockUtils'
+import { fetchAllRows, locKeyOf, locLabel } from './stockUtils'
 import {
   PART_IMAGE_BUCKET,
   PART_DATASHEET_BUCKET,
@@ -169,6 +169,8 @@ function App() {
   // Budget amounts (add_budget_amounts.sql); `budgetReady` is false until that SQL is run, or for someone who can't read them.
   const [budgetAmounts, setBudgetAmounts] = useState([])
   const [budgetReady, setBudgetReady] = useState(false)
+  // add_stock_location_choice.sql: false until it is run, in which case receiving and adjusting stock don't ask for a location.
+  const [stockChoiceReady, setStockChoiceReady] = useState(false)
   // Set while a PO that was voided and regenerated is open as a draft: what the invoice needs the new total to cover.
   const [poRegen, setPoRegen] = useState(null)
   const [newProjectPrograms, setNewProjectPrograms] = useState([])
@@ -912,6 +914,7 @@ function App() {
       loadPrograms()
       loadPoLinks()
       if (canViewBudget(loggedInUser)) loadBudgetAmounts()
+      supabase.rpc('fn_stock_location_choice_ready').then(({ data, error }) => setStockChoiceReady(!error && data === true))
     }
   }, [loggedInUser])
 
@@ -3325,7 +3328,8 @@ function App() {
   // are kept as spares into stock; re-selecting it after moving away would roll
   // stock in again, so this only fires on the actual transition into it. Parts
   // marked Used immediately and consumables are never added.
-  async function handleSetWorkStatus(request, kind, status) {
+  // `location` (parts only, when the person was asked where the units are) is 'site' | 'storage' | 'barn' | 'office'.
+  async function handleSetWorkStatus(request, kind, status, location) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return
@@ -3340,7 +3344,10 @@ function App() {
         // Spare lines add to this entity's count and land on its own site. One database
         // function applies the rules and writes the History entry (does nothing if the PO
         // has no spare lines).
-        const { error: receiveError } = await supabase.rpc('fn_receive_po_parts', { p_request_id: request.id })
+        const { error: receiveError } = await supabase.rpc(
+          'fn_receive_po_parts',
+          location ? { p_request_id: request.id, p_location: location } : { p_request_id: request.id }
+        )
         if (receiveError) throw receiveError
       }
 
@@ -3358,7 +3365,8 @@ function App() {
       if (error) throw error
       await logPoActivity(
         request.id,
-        `${isParts ? 'Parts' : 'Service'} status: ${workStatusLabel(previous)} → ${workStatusLabel(status)}`
+        `${isParts ? 'Parts' : 'Service'} status: ${workStatusLabel(previous)} → ${workStatusLabel(status)}` +
+          (enteringDone && isParts && location ? ` (spare units put in ${locLabel(locKeyOf(location, request.project_id), projects)})` : '')
       )
       flashPoStatus('Status updated.', true)
       await Promise.all([refreshPurchaseRequest(request.id), loadStock()])
@@ -5493,6 +5501,7 @@ function App() {
           incomingByKey={incomingByKey}
           reloadStock={loadStock}
           reloadPurchaseRequests={loadPurchaseRequests}
+          locationChoiceReady={stockChoiceReady}
           focusGcsId={focusPart?.tab === 'ownership' ? focusPart.gcsId : null}
           onFocusDone={() => setFocusPart(null)}
           onShowLocation={(gcsId) => {
@@ -5645,6 +5654,7 @@ function App() {
           computingPoNumber={computingPoNumber}
           handleIssuePurchaseOrder={handleIssuePurchaseOrder}
           handleSetWorkStatus={handleSetWorkStatus}
+          stockChoiceReady={stockChoiceReady}
           handleSetPaymentStatus={handleSetPaymentStatus}
           handleAddInvoice={handleAddInvoice}
           handleApproveInvoice={handleApproveInvoice}

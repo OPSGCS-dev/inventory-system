@@ -1035,3 +1035,7 @@ table.budget-table { border-collapse: collapse; font-family: Calibri, Carlito, '
 .budget-drill-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .budget-drill-head .btn-secondary { width: auto; margin-top: 0; }
 table.budget-drill-table thead th { position: static; }
+
+/* Where-are-these-units prompts (tabs/StockLocationDialogs.jsx): the picture pop-up's frame, made wider for a table. */
+.loc-dialog { max-width: min(92vw, 640px); width: 100%; padding: 16px; }
+.loc-dialog select { max-width: 100%; }

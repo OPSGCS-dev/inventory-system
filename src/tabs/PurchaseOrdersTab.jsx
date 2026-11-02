@@ -91,6 +91,7 @@ import InvoiceMatchChip from './InvoiceMatchChip'
 import VendorRequestPanel from './VendorRequestPanel'
 import VendorsToApproveTable from './VendorsToApproveTable'
 import DateInput from './DateInput'
+import { ReceiveLocationDialog } from './StockLocationDialogs'
 
 function formatTicketNumber(n) {
   return `TK-${String(n).padStart(5, '0')}`
@@ -394,6 +395,7 @@ function PurchaseOrdersTab({
   computingPoNumber,
   handleIssuePurchaseOrder,
   handleSetWorkStatus,
+  stockChoiceReady,
   handleSetPaymentStatus,
   handleAddInvoice,
   handleApproveInvoice,
@@ -482,6 +484,16 @@ function PurchaseOrdersTab({
   // printable layout used by Print PO, just inline on screen instead of
   // off-screen-until-printed.
   const [showPoPreview, setShowPoPreview] = useState(false)
+
+  // Marking parts Received on a PO with spare lines first asks where the units are (add_stock_location_choice.sql).
+  const [receiveFor, setReceiveFor] = useState(null)
+  function changeWorkStatus(r, kind, value) {
+    if (kind === 'parts' && value === 'received' && partsStatus(r) !== 'received' && hasSparePartLines(r) && stockChoiceReady) {
+      setReceiveFor(r)
+      return
+    }
+    handleSetWorkStatus(r, kind, value)
+  }
 
   // An approved request has no PO number until it is issued, but its printed PO
   // and PDF should already carry the number it will be issued with.
@@ -828,6 +840,20 @@ function PurchaseOrdersTab({
           {poStatus && <div className={'status ' + (poStatus.ok ? 'ok' : 'err')}>{poStatus.msg}</div>}
         </div>
 
+        {receiveFor && receiveFor.id === r.id && (
+          <ReceiveLocationDialog
+            request={r}
+            project={projects.find((p) => p.id === r.project_id)}
+            parts={parts}
+            busy={busy}
+            onCancel={() => setReceiveFor(null)}
+            onConfirm={async (place) => {
+              await handleSetWorkStatus(r, 'parts', 'received', place)
+              setReceiveFor(null)
+            }}
+          />
+        )}
+
         <div className="card">
           <div className="card-header">
             <h2>
@@ -1071,7 +1097,7 @@ function PurchaseOrdersTab({
                       <select
                         value={entry.status}
                         disabled={busy}
-                        onChange={(e) => handleSetWorkStatus(r, entry.kind, e.target.value)}
+                        onChange={(e) => changeWorkStatus(r, entry.kind, e.target.value)}
                       >
                         {statusOptions(entry.kind === 'parts' ? partsStatusOptions(r) : SERVICE_STATUS_OPTIONS).map(
                           ({ value, label }) => (

@@ -32,6 +32,7 @@ function PhysicalLocationTab({
   const [status, setStatus] = useState(null)
   const [gcsFilter, setGcsFilter] = useState('')
   const [placeFilter, setPlaceFilter] = useState('')
+  const [search, setSearch] = useState('')
   const [note, setNote] = useState('')
   const [moves, setMoves] = useState({}) // gcs -> { from, to, qty }
   const [uses, setUses] = useState({}) // gcs -> { from, owner, qty }
@@ -60,8 +61,19 @@ function PhysicalLocationTab({
     let list = stockItems
     if (placeFilter) list = list.filter((i) => qtyAt(i, placeFilter) > 0)
     if (gcsFilter) list = list.filter((i) => String(i.gcs_id) === gcsFilter)
+    // Search: every word typed has to appear somewhere in the part's number, part ID, description, maker or maker's part number.
+    const words = search.trim().toLowerCase().split(/s+/).filter(Boolean)
+    if (words.length) {
+      list = list.filter((i) => {
+        const hay = [i.gcs_id, i.part?.gcs_part_id, i.part?.description, i.part?.manufacturer, i.part?.manufacturer_part_number]
+          .filter((v) => v !== null && v !== undefined)
+          .join(' ')
+          .toLowerCase()
+        return words.every((w) => hay.includes(w))
+      })
+    }
     return list
-  }, [stockItems, placeFilter, gcsFilter])
+  }, [stockItems, placeFilter, gcsFilter, search])
   const gcsOptions = useMemo(() => stockItems.map((i) => i.gcs_id).sort((a, b) => a - b), [stockItems])
 
   useEffect(() => {
@@ -253,6 +265,8 @@ function PhysicalLocationTab({
               <h2>
                 {mode === 'move' ? 'Update Location' : mode === 'use' ? 'Record Part Use' : 'Physical Location'} {stockLoading ? '' : `(${items.length})`}
               </h2>
+              <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 280 }}
+                placeholder="Search part number, description, maker…" aria-label="Search parts" />
               <div className="project-select-wrap" style={{ maxWidth: 280, flex: 'none' }}>
                 <select value={placeFilter} onChange={(e) => setPlaceFilter(e.target.value)} title="Show only the parts that have units in this place">
                   <option value="">All locations</option>
@@ -326,7 +340,7 @@ function PhysicalLocationTab({
                   {items.length === 0 ? (
                     <tr>
                       <td className="empty" colSpan={baseCols + extraCols}>
-                        {gcsFilter || placeFilter ? 'No parts match your filter.' : 'No parts yet.'}
+                        {gcsFilter || placeFilter || search.trim() ? 'No parts match your filter.' : 'No parts yet.'}
                       </td>
                     </tr>
                   ) : (

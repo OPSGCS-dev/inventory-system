@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticketing Guide</title>
+<style>
+@page { size: letter; margin: 0.6in 0.65in; }
+:root {
+  --bg: #f6f5f1; --surface: #ffffff; --surface-2: #edeae2; --ink: #1c1d1f; --ink-soft: #55575c;
+  --line: #dcd8cd; --accent: #1f5f4d; --accent-soft: #e4ede9; --warn: #8a5a00; --warn-soft: #fbf1d9;
+  --bad: #b42318; --bad-soft: #fbe9e7;
+  /* one colour per role */
+  --r-req: #2563eb; --r-appr: #b45309; --r-issue: #6d28d9; --r-match: #0e7490; --r-sup: #9d174d;
+  --r-pay: #15803d; --r-vend: #4b5563; --r-admin: #1c1d1f; --r-inv: #0f766e; --r-tick: #7c3aed; --r-all: #6b7280;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17181a; --surface: #202225; --surface-2: #2a2c30; --ink: #ececec; --ink-soft: #a7a9ae;
+    --line: #3a3d42; --accent: #6fc2a8; --accent-soft: #1f3a32; --warn: #e8b64f; --warn-soft: #3a2f14;
+    --bad: #ff8a7a; --bad-soft: #3b1f1c;
+    --r-req: #7aa2ff; --r-appr: #e0a05a; --r-issue: #b79bff; --r-match: #5fc4d8; --r-sup: #f08ab4;
+    --r-pay: #6fcf8e; --r-vend: #aab0ba; --r-admin: #ececec; --r-inv: #5fd0c2; --r-tick: #b79bff; --r-all: #aab0ba;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: "Segoe UI", system-ui, -apple-system, sans-serif; font-size: 15px; line-height: 1.55; padding: 28px 16px 70px; }
+.wrap { max-width: 900px; margin: 0 auto; }
+h1, h2, h3, h4 { font-weight: 700; letter-spacing: -0.01em; line-height: 1.25; text-wrap: balance; }
+h1 { font-size: 30px; margin: 0 0 6px; }
+h2 { font-size: 22px; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
+h2 .num { font-size: 13px; color: var(--accent); border: 1.5px solid var(--accent); border-radius: 999px; min-width: 28px; height: 28px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+h3 { font-size: 16px; margin: 20px 0 8px; }
+h4 { font-size: 14px; margin: 0 0 4px; }
+p { margin: 0 0 10px; max-width: 76ch; }
+ul, ol { margin: 0 0 10px; padding-left: 22px; max-width: 78ch; }
+li { margin: 3px 0; }
+a { color: var(--accent); }
+.lede { color: var(--ink-soft); font-size: 16.5px; }
+.small { font-size: 13px; color: var(--ink-soft); }
+.masthead { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; border-bottom: 2px solid var(--ink); padding-bottom: 14px; margin-bottom: 8px; }
+.tag { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft); text-align: right; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 14px 0 26px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+nav.toc a { font-size: 13px; color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+nav.toc a:hover { background: var(--surface-2); color: var(--ink); }
+section { margin-bottom: 44px; scroll-margin-top: 12px; }
+section > h2 { border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
+.card p:last-child, .card ul:last-child { margin-bottom: 0; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 680px) { .grid2 { grid-template-columns: 1fr; } }
+.callout { border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 12px 0; }
+.callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.callout.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+.callout p:last-child { margin-bottom: 0; }
+.callout b.lbl { text-transform: uppercase; font-size: 11px; letter-spacing: .07em; display: block; margin-bottom: 2px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 8px 0 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+th, td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+thead th { background: var(--surface-2); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+tbody tr:last-child td { border-bottom: none; }
+td.nowrap, th.nowrap { white-space: nowrap; }
+.tablewrap { overflow-x: auto; }
+code, .btn, .tab { font-family: Consolas, "Cascadia Mono", monospace; font-size: .9em; }
+code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; }
+/* names of buttons / tabs / fields exactly as they appear on screen */
+.btn { background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; white-space: nowrap; color: var(--ink); }
+.field { font-weight: 650; }
+.status-pill { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 1px 9px; border: 1.5px solid currentColor; white-space: nowrap; }
+.s-draft { color: #6b7280; } .s-req { color: #2563eb; } .s-appr { color: #b45309; } .s-issued { color: #6d28d9; }
+.s-prog { color: #0e7490; } .s-paid { color: #15803d; } .s-closed { color: #15803d; } .s-bad { color: #b42318; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .s-draft{color:#aab0ba} .s-req{color:#7aa2ff} .s-appr{color:#e0a05a} .s-issued{color:#b79bff} .s-prog{color:#5fc4d8} .s-paid,.s-closed{color:#6fcf8e} .s-bad{color:#ff8a7a} }
+/* role chips and the "if you are ..." boxes */
+.role { display: inline-block; font-size: 11.5px; font-weight: 700; letter-spacing: .03em; color: #fff; background: var(--c, var(--r-all)); border-radius: 999px; padding: 1px 9px; white-space: nowrap; vertical-align: 1px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .role { color: #111; } }
+.r-req { --c: var(--r-req); } .r-appr { --c: var(--r-appr); } .r-issue { --c: var(--r-issue); } .r-match { --c: var(--r-match); }
+.r-sup { --c: var(--r-sup); } .r-pay { --c: var(--r-pay); } .r-vend { --c: var(--r-vend); } .r-admin { --c: var(--r-admin); }
+.r-inv { --c: var(--r-inv); } .r-tick { --c: var(--r-tick); } .r-all { --c: var(--r-all); }
+.rolebox { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; align-items: start; border: 1px solid var(--line); border-left: 5px solid var(--c, var(--r-all)); background: var(--surface); border-radius: 8px; padding: 9px 12px; margin: 8px 0; }
+.rolebox > .who { padding-top: 1px; }
+.rolebox > div:last-child > :last-child { margin-bottom: 0; }
+.rolebox p, .rolebox ul { margin-bottom: 6px; }
+@media (max-width: 680px) { .rolebox { grid-template-columns: 1fr; } }
+.stage-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; color: var(--ink-soft); margin: -4px 0 12px; }
+.stage-meta .role { margin-right: 2px; }
+/* the process strip at the top of the PO guide */
+.strip { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.strip a { text-decoration: none; flex: 1 1 120px; border: 1px solid var(--line); border-top: 4px solid var(--c); border-radius: 8px; background: var(--surface); padding: 6px 9px; color: var(--ink); font-size: 13px; line-height: 1.3; }
+.strip a:hover { background: var(--surface-2); }
+.strip a b { display: block; font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .05em; }
+.steps { counter-reset: s; list-style: none; padding-left: 0; }
+.steps > li { counter-increment: s; position: relative; padding-left: 34px; margin: 8px 0; }
+.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .steps > li::before { color: #111; } }
+.steps > li > :last-child { margin-bottom: 0; }
+footer { margin-top: 50px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-soft); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+details summary { cursor: pointer; font-weight: 650; }
+details[open] summary { margin-bottom: 6px; }
+@media print {
+  body { background: #fff; padding: 0; font-size: 10.5pt; }
+  nav.toc { display: none; }
+  section { break-inside: auto; margin-bottom: 22px; }
+  h2, h3 { break-after: avoid; }
+  .card, .rolebox, .callout, table, details, .strip a { break-inside: avoid; }
+  details { display: block; } details > * { display: block; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="masthead">
+  <div><h1>The Ticket System</h1><div class="lede" style="margin:0">Logging and tracking work at a site, and starting a purchase request from it.</div></div>
+  <div class="tag">Great Circle Solar Operations<br>Ticket System</div>
+</header>
+<nav class="toc" aria-label="Contents"><a href="#intro">Overview</a><a href="#signin">Getting in</a><a href="#find">Finding tickets</a><a href="#create">Creating</a><a href="#work">Working a ticket</a><a href="#files">Files and history</a><a href="#po">POs and tickets</a><a href="#projects">Projects and users</a><a href="#tips">Good to know</a></nav>
+<section id="intro">
+  <p class="lede">The ticket system is where every piece of operations and maintenance work at a site is logged: what happened, which equipment is affected, who owns it, the vendor and quote, photos and files, and a history of every change. When the work needs money, a ticket starts the purchase request for it.</p>
+
+  <h3>Three kinds of user</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Tag</th><th>Who</th><th>What they can do</th></tr></thead>
+    <tbody>
+      <tr><td><span class="role r-tick">Employee</span></td><td>Anyone with the <b>Ticketing</b> role in the inventory system</td><td>Create, edit, comment on and delete tickets; upload and delete attachments; acknowledge assignments; link POs. View (not edit) projects and equipment.</td></tr>
+      <tr><td><span class="role r-admin">Admin</span></td><td>Anyone with the <b>Admin</b> role</td><td>Everything an employee can do, plus add and edit projects, locations and equipment, manage the equipment catalog and manage users.</td></tr>
+      <tr><td><span class="role r-vend">Vendor</span></td><td>A vendor's own login</td><td><b>Read-only.</b> Sees only the tickets where they are the selected vendor, with their files, history and linked PO status.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="small">Your role comes from the inventory system and is refreshed each time you sign in. Holding only Purchase Rec (no Ticketing) does <b>not</b> give you ticket access. Someone who needs both needs both roles.</p>
+
+  <div class="callout warn"><b class="lbl">A word that means two things</b><p>Here a solar site is called a <b>Project</b> and a place within it is a <b>Location</b>. In the inventory system the same site is called a <b>Site</b>, and a "Project" there is the top layer (Regular O&amp;M, Repower). When you create a purchase request from a ticket, the ticket's Project becomes the PO's Site.</p></div>
+
+  <h3>The shape of a ticket</h3>
+  <p><span class="status-pill s-req">Open</span> → <span class="status-pill s-prog">In progress</span> → <span class="status-pill s-paid">Resolved</span> → <span class="status-pill s-draft">Closed</span> (and <span class="status-pill s-draft">On hold</span> when waiting). Any employee or admin can move a ticket from any status to any other. There are no required steps and no approval.</p>
+</section>
+
+<section id="signin">
+  <h2><span class="num">1</span> Getting in</h2>
+  <div class="stage-meta"><span><span class="role r-all">Everyone</span></span></div>
+  <h3>You already have an account</h3>
+  <p>Go to the ticket system's sign-in page, enter your <b>Email</b> and <b>Password</b> and press <span class="btn">Sign in</span>. Then you land on the ticket list. The <span class="btn">Inventory ↗</span> link in the top bar opens the inventory system in a new tab.</p>
+  <ul>
+    <li>The ticket system has its own login, but it checks the inventory system too. If your password does not work here but works in inventory (for example after you changed it there), signing in here picks up the inventory password.</li>
+    <li>Each time you sign in it re-checks your inventory account. If your inventory account has no Ticketing, Admin or Vendor role (or has been deactivated) you are refused with <i>"Your inventory account doesn't have ticket system access…"</i>.</li>
+    <li>A deactivated ticket account says <i>"This account has been deactivated. Contact an admin if you think this is a mistake."</i></li>
+    <li>There is <b>no "forgot password" page</b>. If you cannot sign in, ask an admin.</li>
+  </ul>
+  <h3>You are new</h3>
+  <ol class="steps">
+    <li>First get the Ticketing (or Admin, or Vendor) role in the inventory system. Ask an admin.</li>
+    <li>On the sign-in page press <span class="btn">Request access</span> and enter your email. If the inventory system recognises you, you are sent an email invite.</li>
+    <li>Open the link in the email, choose a password (at least 8 characters, typed twice) and you are in.</li>
+  </ol>
+  <p class="small">If the email is not recognised the page says <i>"No matching … access found for that email in the inventory system. Get access there first."</i> Do not click an invite link while you are already signed in to another account here; sign out first.</p>
+  <h3>Your account page</h3>
+  <p>Click your name in the top bar. You can change your <b>Display name</b> (required). It replaces your email on tickets and in the activity log. Your email is read-only.</p>
+</section>
+
+<section id="find">
+  <h2><span class="num">2</span> Finding tickets</h2>
+  <div class="stage-meta"><span><span class="role r-tick">Employee</span> <span class="role r-admin">Admin</span></span><span><span class="role r-vend">Vendor</span> sees "My tickets"</span></div>
+  <p>The top bar has <span class="btn">All tickets</span>, <span class="btn">Assigned to me</span>, <span class="btn">New ticket</span> and <span class="btn">Projects</span> (admins also get <span class="btn">Equipment catalog</span> and <span class="btn">Manage users</span>).</p>
+  <ul>
+    <li><b>Search box</b> ("Ticket # or title"): type a ticket number as <code>TK-06-26-001</code>, <code>06-26-001</code>, <code>42</code> or <code>TK-00042</code>, or any word from the title. It does not search descriptions, vendors or project names.</li>
+    <li><b>Project</b> and <b>Status</b> dropdowns, then <span class="btn">Filter</span>; <span class="btn">Clear filters</span> resets.</li>
+    <li>Columns: #, Title, Project, Vendor, Status, Notes, Assigned to, Opened. Newest first. A purple <b>Planned</b> chip marks planned work. A <b>blue dot</b> means a ticket was assigned to you and you have not acknowledged it yet; on <span class="btn">Assigned to me</span> those float to the top.</li>
+    <li>There is no export, sorting or paging.</li>
+  </ul>
+  <div class="rolebox r-tick"><div class="who"><span class="role r-tick">Employee</span><br><span class="role r-admin">Admin</span></div><div>
+    <p><b>Quick edit in the list.</b> The Status pill in each row is a dropdown, and the <i>Quick note…</i> box in the Notes column takes a one-line current-status note. Neither saves until you press that row's <span class="btn">Save</span>. Saving writes an entry to the ticket's activity log. If a save fails the list does not tell you, so reopen the ticket to check.</p>
+  </div></div>
+</section>
+
+<section id="create">
+  <h2><span class="num">3</span> Creating a ticket</h2>
+  <div class="stage-meta"><span><span class="role r-tick">Employee</span> <span class="role r-admin">Admin</span></span></div>
+  <p>Press <span class="btn">New ticket</span> (or <span class="btn">New ticket for this project →</span> on a project page, which does not pre-pick the project). Complete the form and press <span class="btn">Create ticket</span>.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Field</th><th>Required?</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="field">Title</td><td><b>Yes</b></td><td>Short and specific. <b>It cannot be changed afterwards.</b></td></tr>
+      <tr><td class="field">Project</td><td><b>Yes</b></td><td>The solar site. <b>It cannot be changed afterwards.</b> A ticket cannot be created without one.</td></tr>
+      <tr><td class="field">Description</td><td>No</td><td>Also fixed once created. Put what is known now; add the rest as notes later.</td></tr>
+      <tr><td class="field">Planned or unplanned?</td><td>Defaults to Unplanned</td><td><b>Planned</b> shows an optional <i>Start</i> and <i>End</i> (date and time). <b>Unplanned</b> shows an optional <i>Issue start date</i>. Only the matching set is saved.</td></tr>
+      <tr><td class="field">Affected equipment</td><td>No</td><td>Appears once a Project is chosen. Search, or drill down by <i>Location type</i> then <i>Location</i>, and tick the equipment. Chips with × show what is selected. "Other equipment" holds items with no typed location.</td></tr>
+      <tr><td class="field">Assign to</td><td>No</td><td>Active admins and employees (never vendors).</td></tr>
+      <tr><td class="field">Vendor</td><td>No</td><td>Active vendors from the inventory system's approved vendor list.</td></tr>
+      <tr><td class="field">Vendor quote #</td><td>No</td><td>Free text. It carries into the purchase request.</td></tr>
+      <tr><td class="field">PO #</td><td>No</td><td>Free text only. Linking a PO does <b>not</b> fill this in or change it.</td></tr>
+      <tr><td class="field">Invoice # and Invoice amount</td><td>No</td><td>Free text and a number (shown as $x.xx).</td></tr>
+      <tr><td class="field">Purchase order (PDF) and Photo of the issue</td><td>No</td><td>One PDF and one picture can be attached right away. More can be added later.</td></tr>
+    </tbody>
+  </table></div>
+  <p><b>The ticket number.</b> A new ticket is numbered <code>TK-06-26-001</code>: <b>TK</b>, the project's two-digit <b>entity code</b>, the two-digit <b>year</b>, and a running number for that code and year (it restarts at 001 each year). The entity code matches the PO numbers of the same site, so <code>TK-06-26-001</code> and <code>PO-06-26-001</code> are obviously related. A project with no entity code, and older tickets, show as <code>TK-00042</code>.</p>
+  <p class="small">If a file cannot be saved, the ticket is still created and you land on it with a message "Ticket created, but: …". Errors seen here: <i>"Title and project are required"</i>.</p>
+</section>
+
+<section id="work">
+  <h2><span class="num">4</span> Working a ticket</h2>
+  <div class="stage-meta"><span><span class="role r-tick">Employee</span> <span class="role r-admin">Admin</span> work it</span><span><span class="role r-vend">Vendor</span> reads it</span></div>
+  <p>Open a ticket by clicking its row. From top to bottom the page shows:</p>
+  <ul>
+    <li><b>Header:</b> the ticket number, title and status pill; "Opened by … on …" and who it is assigned to; the vendor, quote #, PO #, invoice number and amount, and dates.</li>
+    <li><b>Acknowledge banner</b> (if it is assigned to you and you have not yet): press <span class="btn">Acknowledge</span>. Re-assigning a ticket resets it.</li>
+    <li><b>Project</b> card with the site's address and notes, and the <b>Description</b>.</li>
+    <li><b>Equipment on site</b>: the whole project's equipment, with the affected items in red. Search it, filter by location, or tick <i>Affected only</i>.</li>
+    <li><b>Attachments</b>: linked purchase orders first, then files (see section 5).</li>
+    <li><b>Activity</b> (collapsed): who did what and when.</li>
+    <li><b>Update this ticket</b> (collapsed, employees and admins).</li>
+  </ul>
+  <div class="rolebox r-tick"><div class="who"><span class="role r-tick">Employee</span><br><span class="role r-admin">Admin</span></div><div>
+    <h4>Update this ticket</h4>
+    <ul>
+      <li>One form holds: Status, Status note, Assigned to, Vendor, Vendor quote #, PO #, Invoice #, Invoice amount, Planned or unplanned (and dates), Affected equipment, and <b>Add a note</b> ("What changed, what you found, next steps…"). Press <span class="btn">Save update</span>.</li>
+      <li>Only fields you actually changed are logged, each as a bullet. A note on its own still creates an entry.</li>
+      <li><b>Title, Description and Project cannot be edited.</b> If one is wrong, say so in a note, or delete the ticket and create a correct one.</li>
+      <li>The Status dropdown next to the title (with its <i>Short current-status note</i>) saves with its own <span class="btn">Save</span> button.</li>
+      <li><span class="btn">Delete ticket</span> (red link) removes the ticket after a confirmation. <b>Any employee can delete any ticket.</b> It cannot be undone, and a purchase order that was linked is left pointing at a ticket that no longer exists.</li>
+    </ul>
+  </div></div>
+  <div class="rolebox r-vend"><div class="who"><span class="role r-vend">Vendor</span></div><div>
+    <p>You see only tickets where you are the Vendor ("My tickets"). You can read everything on them, including the whole activity log and the invoice fields, and download the files. You cannot create, edit, upload, link or delete anything.</p>
+  </div></div>
+</section>
+
+<section id="files">
+  <h2><span class="num">5</span> Files, photos and history</h2>
+  <h3>Attachments</h3>
+  <ul>
+    <li><b>Allowed:</b> PDF, JPEG, PNG, WEBP, HEIC and HEIF. <b>Maximum 15 MB</b> per file. Anything else says <i>"Attachments must be a PDF or a photo (JPEG, PNG, WEBP, or HEIC)"</i> or <i>"Attachment must be under 15MB"</i>.</li>
+    <li><span class="role r-tick">Employee</span> <span class="role r-admin">Admin</span> add files at creation or later with <b>Upload attachment</b> in the Attachments section (one file at a time), and can delete them (<i>"Delete … ? This cannot be undone."</i>).</li>
+    <li>Photos (JPEG, PNG, WEBP) are shrunk to a sensible size automatically; HEIC and HEIF are stored as they are.</li>
+    <li>File links are valid for 24 hours. If a page has been open a long time and a link fails, refresh the page.</li>
+  </ul>
+  <h3>Activity</h3>
+  <ul>
+    <li>Every update becomes an entry: who, the date and time, and one bullet per change (status, status note, assignment, vendor, quote #, PO #, invoice, dates, equipment, files attached or removed, POs linked or unlinked), plus any note.</li>
+    <li>It is oldest first, and visible to employees, admins and the ticket's vendor.</li>
+    <li>It is <b>not tamper-proof</b>: an employee or admin can delete an entry (<i>"Delete this activity log entry?"</i>). Use notes to correct, rather than deleting. Creating a ticket is not a log entry; the header's "Opened by … on …" is the record. Deleting a ticket is not recorded.</li>
+  </ul>
+</section>
+
+<section id="po">
+  <h2><span class="num">6</span> Purchase orders and tickets</h2>
+  <div class="stage-meta"><span><span class="role r-tick">Employee</span> <span class="role r-admin">Admin</span> start and link</span><span><span class="role r-req">Requisitioner</span> finishes the request in inventory</span></div>
+  <h3>Start a purchase request from a ticket</h3>
+  <ol class="steps">
+    <li>On the ticket, press <span class="btn">Create Purchase Rec ↗</span>. The inventory system opens in a new tab. You have to be signed in there, which is a separate login; the link waits for you.</li>
+    <li>Inventory opens its Purchase Orders tab with a <b>New Purchase Request</b> already filled in: the <b>Site</b> (from the ticket's project; if the ticket's project is a location of a site, that site), the <b>Location</b>, the <b>Vendor</b> (matched by name, so it stays empty if there is no exact match), the <b>Vendor Quote #</b>, and a <b>Description</b> of <code>TK-06-26-001: title</code>.</li>
+    <li>Nothing else is filled in. The person with the <span class="role r-req">Purchase Rec</span> role chooses the Project and Budget Category, adds the lines and saves the draft, then carries on as in the Purchase Order guide.</li>
+    <li>A request made this way from an <b>existing</b> ticket is <b>linked automatically</b>, and a link shows on the ticket.</li>
+  </ol>
+  <div class="callout warn"><b class="lbl">If nothing opens</b><p>Without the Purchase Rec role in inventory you land on the Purchase Orders tab with no form. On the <b>New ticket</b> page the button is greyed until you pick a Project, and a request started from there is <b>not linked</b> (the ticket does not exist yet). Link it afterwards.</p></div>
+  <h3>Link a purchase order that already exists</h3>
+  <div class="rolebox r-tick"><div class="who"><span class="role r-tick">Employee</span><br><span class="role r-admin">Admin</span></div><div>
+    <ol class="steps">
+      <li>In the ticket's Attachments section press <span class="btn">Link existing PO</span>.</li>
+      <li>Type a PO number or words from its description and press <span class="btn">Search</span> (it shows the 15 newest if you type nothing, across all sites).</li>
+      <li>Press <span class="btn">Link</span> on the right row. A line "Linked PO …" is added to the activity.</li>
+      <li>To remove it, press <span class="btn">Unlink</span> beside the PO (the PO itself is not changed).</li>
+    </ol>
+    <p class="small">A PO already linked to another ticket cannot be taken over: <i>"That PO is already linked to TK-… Unlink it from that ticket first."</i> A PO already on this ticket says "Already linked".</p>
+  </div></div>
+  <h3>The linked PO badge</h3>
+  <p>The top of Attachments shows one row per linked PO: its number, a status word, and <span class="btn">Inventory ↗</span> to open it. The status is read <b>live from inventory</b> every time the page loads.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Badge</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><span class="status-pill s-draft">Draft</span></td><td>Not yet submitted.</td></tr>
+      <tr><td><span class="status-pill s-req">Requested</span></td><td>Submitted, waiting for an approver.</td></tr>
+      <tr><td><span class="status-pill s-appr">Approved</span></td><td>Approved but not yet issued to the vendor.</td></tr>
+      <tr><td><span class="status-pill s-issued">PO Issued</span></td><td>Issued to the vendor. It stays "PO Issued" while the work, payment and invoices progress in inventory; the badge does not show In Progress or Paid. Open it in inventory for the detail.</td></tr>
+      <tr><td><span class="status-pill s-closed">Closed</span></td><td>Finished and paid.</td></tr>
+      <tr><td><span class="status-pill s-bad">Rejected</span> / <span class="status-pill s-bad">Voided</span></td><td>Turned down by an approver / cancelled by an admin (shown struck through).</td></tr>
+    </tbody>
+  </table></div>
+  <h3>From the inventory side</h3>
+  <p>A PO in inventory has a <b>Ticket</b> field with <span class="btn">Link ticket</span>, <span class="btn">Change</span> and <span class="btn">Unlink</span>. Type the ticket number (<code>TK-06-26-001</code>, <code>06-26-001</code>, <code>TK-00042</code> or <code>42</code>). A bad entry says <i>"Enter a ticket number like TK-06-26-001 or TK-00042."</i> The linked ticket then also shows on the ticket's page. In that PO the label may still read in the old style (<code>TK-00042</code>) for a newer ticket; it still opens the right one.</p>
+</section>
+
+<section id="projects">
+  <h2><span class="num">7</span> Projects, equipment and users</h2>
+  <div class="stage-meta"><span><span class="role r-tick">Employee</span> view</span><span><span class="role r-admin">Admin</span> edit</span></div>
+  <ul>
+    <li><b>Projects:</b> the table lists each project's Name and Address. A project page shows its notes, its <b>entity code</b> (read-only), its locations grouped by <i>Location type</i>, and the equipment at each (Name, Type, Manufacturer / model, Serial #, Installed, AC kW, DC kW). Equipment with no location is under "Unassigned equipment".</li>
+    <li><span class="role r-admin">Admin</span> only: add or edit or delete projects, locations and equipment on those pages. A new project asks for Name (required), Address and Notes; the entity code is set by whoever maintains the database, not on the screen.</li>
+    <li><span class="role r-admin">Admin</span> <b>Equipment catalog</b>: the list of equipment types, manufacturers and models with AC and DC ratings, used when adding equipment. Type, manufacturer and model are required.</li>
+    <li><span class="role r-admin">Admin</span> <b>Manage users</b>: <span class="btn">Sync now</span> pulls approved vendors and every Admin, Ticketing and Vendor logon from inventory, creates their ticket accounts, updates roles, and <b>deactivates</b> people who are no longer in inventory. It never reactivates, so use <span class="btn">Reactivate</span> on a person by hand. You can also edit a display name, deactivate, or remove an account (a person with history can only be deactivated). You cannot deactivate or remove your own account. A vendor with no email in inventory cannot be synced.</li>
+  </ul>
+</section>
+
+<section id="tips">
+  <h2>Things worth knowing</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>You notice</th><th>Why, and what to do</th></tr></thead>
+    <tbody>
+      <tr><td>A status change in the list did not stick</td><td>Press the row's <b>Save</b>. The pill alone saves nothing.</td></tr>
+      <tr><td>I typed the wrong title or picked the wrong project</td><td>These cannot be edited. Add a note, or delete the ticket and recreate it.</td></tr>
+      <tr><td>I linked a PO but the "PO #" is empty</td><td>That field is just text; linking does not fill it. Type it in if you want it.</td></tr>
+      <tr><td>The vendor is blank on the purchase request</td><td>The vendor is matched by display name. If a vendor's name differs between the two systems it will not match. Pick it by hand.</td></tr>
+      <tr><td>The invoice amount has no commas or currency</td><td>The ticket system shows plain $x.xx. Dates and times here follow the browser, not inventory's yyyy/mm/dd.</td></tr>
+      <tr><td>A vendor cannot sign in</td><td>A vendor that exists only in inventory's vendor table (no logon) can be assigned on tickets but cannot sign in.</td></tr>
+      <tr><td>"No ticket matches that number."</td><td>The number is wrong, or you are a vendor and it is not one of your tickets.</td></tr>
+      <tr><td>Opening a ticket link from an email or inventory sends me to the sign-in page</td><td>Sign in, then open the link again. The page does not bring you back to it automatically.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<footer><span>The other guides: <a href="gcs-purchase-order-guide.html">Purchase Order Guide</a> · <a href="gcs-inventory-guide.html">Inventory Guide</a></span><span>Written from how the system works in November 2026. If a button or message differs from this guide, the screen is right: tell an admin.</span></footer>
+</div>
+<script>window.addEventListener('beforeprint', function () { document.querySelectorAll('details').forEach(function (d) { d.open = true }) })</script>
+</body>
+</html>

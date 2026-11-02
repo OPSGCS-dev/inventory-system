@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Purchase Order Guide</title>
+<style>
+@page { size: letter; margin: 0.6in 0.65in; }
+:root {
+  --bg: #f6f5f1; --surface: #ffffff; --surface-2: #edeae2; --ink: #1c1d1f; --ink-soft: #55575c;
+  --line: #dcd8cd; --accent: #1f5f4d; --accent-soft: #e4ede9; --warn: #8a5a00; --warn-soft: #fbf1d9;
+  --bad: #b42318; --bad-soft: #fbe9e7;
+  /* one colour per role */
+  --r-req: #2563eb; --r-appr: #b45309; --r-issue: #6d28d9; --r-match: #0e7490; --r-sup: #9d174d;
+  --r-pay: #15803d; --r-vend: #4b5563; --r-admin: #1c1d1f; --r-inv: #0f766e; --r-tick: #7c3aed; --r-all: #6b7280;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17181a; --surface: #202225; --surface-2: #2a2c30; --ink: #ececec; --ink-soft: #a7a9ae;
+    --line: #3a3d42; --accent: #6fc2a8; --accent-soft: #1f3a32; --warn: #e8b64f; --warn-soft: #3a2f14;
+    --bad: #ff8a7a; --bad-soft: #3b1f1c;
+    --r-req: #7aa2ff; --r-appr: #e0a05a; --r-issue: #b79bff; --r-match: #5fc4d8; --r-sup: #f08ab4;
+    --r-pay: #6fcf8e; --r-vend: #aab0ba; --r-admin: #ececec; --r-inv: #5fd0c2; --r-tick: #b79bff; --r-all: #aab0ba;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: "Segoe UI", system-ui, -apple-system, sans-serif; font-size: 15px; line-height: 1.55; padding: 28px 16px 70px; }
+.wrap { max-width: 900px; margin: 0 auto; }
+h1, h2, h3, h4 { font-weight: 700; letter-spacing: -0.01em; line-height: 1.25; text-wrap: balance; }
+h1 { font-size: 30px; margin: 0 0 6px; }
+h2 { font-size: 22px; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
+h2 .num { font-size: 13px; color: var(--accent); border: 1.5px solid var(--accent); border-radius: 999px; min-width: 28px; height: 28px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+h3 { font-size: 16px; margin: 20px 0 8px; }
+h4 { font-size: 14px; margin: 0 0 4px; }
+p { margin: 0 0 10px; max-width: 76ch; }
+ul, ol { margin: 0 0 10px; padding-left: 22px; max-width: 78ch; }
+li { margin: 3px 0; }
+a { color: var(--accent); }
+.lede { color: var(--ink-soft); font-size: 16.5px; }
+.small { font-size: 13px; color: var(--ink-soft); }
+.masthead { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; border-bottom: 2px solid var(--ink); padding-bottom: 14px; margin-bottom: 8px; }
+.tag { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft); text-align: right; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 14px 0 26px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+nav.toc a { font-size: 13px; color: var(--ink-soft); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+nav.toc a:hover { background: var(--surface-2); color: var(--ink); }
+section { margin-bottom: 44px; scroll-margin-top: 12px; }
+section > h2 { border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
+.card p:last-child, .card ul:last-child { margin-bottom: 0; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 680px) { .grid2 { grid-template-columns: 1fr; } }
+.callout { border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 12px 0; }
+.callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.callout.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+.callout p:last-child { margin-bottom: 0; }
+.callout b.lbl { text-transform: uppercase; font-size: 11px; letter-spacing: .07em; display: block; margin-bottom: 2px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 8px 0 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+th, td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+thead th { background: var(--surface-2); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+tbody tr:last-child td { border-bottom: none; }
+td.nowrap, th.nowrap { white-space: nowrap; }
+.tablewrap { overflow-x: auto; }
+code, .btn, .tab { font-family: Consolas, "Cascadia Mono", monospace; font-size: .9em; }
+code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; }
+/* names of buttons / tabs / fields exactly as they appear on screen */
+.btn { background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; white-space: nowrap; color: var(--ink); }
+.field { font-weight: 650; }
+.status-pill { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 1px 9px; border: 1.5px solid currentColor; white-space: nowrap; }
+.s-draft { color: #6b7280; } .s-req { color: #2563eb; } .s-appr { color: #b45309; } .s-issued { color: #6d28d9; }
+.s-prog { color: #0e7490; } .s-paid { color: #15803d; } .s-closed { color: #15803d; } .s-bad { color: #b42318; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .s-draft{color:#aab0ba} .s-req{color:#7aa2ff} .s-appr{color:#e0a05a} .s-issued{color:#b79bff} .s-prog{color:#5fc4d8} .s-paid,.s-closed{color:#6fcf8e} .s-bad{color:#ff8a7a} }
+/* role chips and the "if you are ..." boxes */
+.role { display: inline-block; font-size: 11.5px; font-weight: 700; letter-spacing: .03em; color: #fff; background: var(--c, var(--r-all)); border-radius: 999px; padding: 1px 9px; white-space: nowrap; vertical-align: 1px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .role { color: #111; } }
+.r-req { --c: var(--r-req); } .r-appr { --c: var(--r-appr); } .r-issue { --c: var(--r-issue); } .r-match { --c: var(--r-match); }
+.r-sup { --c: var(--r-sup); } .r-pay { --c: var(--r-pay); } .r-vend { --c: var(--r-vend); } .r-admin { --c: var(--r-admin); }
+.r-inv { --c: var(--r-inv); } .r-tick { --c: var(--r-tick); } .r-all { --c: var(--r-all); }
+.rolebox { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; align-items: start; border: 1px solid var(--line); border-left: 5px solid var(--c, var(--r-all)); background: var(--surface); border-radius: 8px; padding: 9px 12px; margin: 8px 0; }
+.rolebox > .who { padding-top: 1px; }
+.rolebox > div:last-child > :last-child { margin-bottom: 0; }
+.rolebox p, .rolebox ul { margin-bottom: 6px; }
+@media (max-width: 680px) { .rolebox { grid-template-columns: 1fr; } }
+.stage-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; color: var(--ink-soft); margin: -4px 0 12px; }
+.stage-meta .role { margin-right: 2px; }
+/* the process strip at the top of the PO guide */
+.strip { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.strip a { text-decoration: none; flex: 1 1 120px; border: 1px solid var(--line); border-top: 4px solid var(--c); border-radius: 8px; background: var(--surface); padding: 6px 9px; color: var(--ink); font-size: 13px; line-height: 1.3; }
+.strip a:hover { background: var(--surface-2); }
+.strip a b { display: block; font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .05em; }
+.steps { counter-reset: s; list-style: none; padding-left: 0; }
+.steps > li { counter-increment: s; position: relative; padding-left: 34px; margin: 8px 0; }
+.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .steps > li::before { color: #111; } }
+.steps > li > :last-child { margin-bottom: 0; }
+footer { margin-top: 50px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-soft); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+details summary { cursor: pointer; font-weight: 650; }
+details[open] summary { margin-bottom: 6px; }
+@media print {
+  body { background: #fff; padding: 0; font-size: 10.5pt; }
+  nav.toc { display: none; }
+  section { break-inside: auto; margin-bottom: 22px; }
+  h2, h3 { break-after: avoid; }
+  .card, .rolebox, .callout, table, details, .strip a { break-inside: avoid; }
+  details { display: block; } details > * { display: block; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="masthead">
+  <div><h1>The Purchase Order Process</h1><div class="lede" style="margin:0">From request to close, step by step, with what each role needs to know.</div></div>
+  <div class="tag">Great Circle Solar Operations<br>Inventory System · Purchase Orders</div>
+</header>
+<nav class="toc" aria-label="Contents"><a href="#intro">Overview</a><a href="#s1">1 Vendor</a><a href="#s2">2 Draft</a><a href="#s3">3 Submit</a><a href="#s4">4 Approve</a><a href="#s5">5 Issue</a><a href="#s6">6 Receive</a><a href="#s7">7 Invoice</a><a href="#s8">8 Review</a><a href="#s9">9 Pay approval</a><a href="#s10">10 Pay</a><a href="#s11">11 Close</a><a href="#after">Special cases</a><a href="#roles">By role</a></nav>
+<section id="intro">
+  <p class="lede">This guide follows one purchase order from the first request to the day it is closed. Each step says what happens, then lists what each role needs to know at that step. Look for your colour-coded role tag and you can skip the rest.</p>
+
+  <h3>The journey at a glance</h3>
+  <div class="strip">
+    <a href="#s1" style="--c:var(--r-vend)"><b>Step 1</b>Vendor is approved</a>
+    <a href="#s2" style="--c:#6b7280"><b>Step 2</b>Draft the request</a>
+    <a href="#s3" style="--c:#2563eb"><b>Step 3</b>Submit</a>
+    <a href="#s4" style="--c:#b45309"><b>Step 4</b>Approve</a>
+    <a href="#s5" style="--c:#6d28d9"><b>Step 5</b>Issue the PO</a>
+    <a href="#s6" style="--c:#0e7490"><b>Step 6</b>Work done / parts received</a>
+    <a href="#s7" style="--c:#0e7490"><b>Step 7</b>Invoice comes in</a>
+    <a href="#s8" style="--c:#2563eb"><b>Step 8</b>Requisitioner review</a>
+    <a href="#s9" style="--c:#9d174d"><b>Step 9</b>Payment approval</a>
+    <a href="#s10" style="--c:#15803d"><b>Step 10</b>Payment</a>
+    <a href="#s11" style="--c:#15803d"><b>Step 11</b>Close the PO</a>
+  </div>
+
+  <h3>The words you will see on a PO</h3>
+  <p>The status shown in the PO list is one word. A PO moves through these in order:</p>
+  <p>
+    <span class="status-pill s-draft">Draft</span> →
+    <span class="status-pill s-req">Requested</span> →
+    <span class="status-pill s-appr">Approved</span> →
+    <span class="status-pill s-issued">PO Issued</span> →
+    <span class="status-pill s-prog">In Progress</span> →
+    <span class="status-pill s-paid">Paid</span> →
+    <span class="status-pill s-closed">Closed</span>
+  </p>
+  <p class="small">Two more can happen at the side: <span class="status-pill s-bad">Rejected</span> (an approver sent it back) and <span class="status-pill s-bad">Voided</span> (cancelled by an admin, kept on file). <b>In Progress</b> means the PO is issued but the work is not all done and paid; <b>Paid</b> means the work is done and the payment status is Paid, but nobody has closed it yet.</p>
+
+  <h3>Who does what: the roles</h3>
+  <p>Roles are given to each person by an admin (Admin tab → Users). A person can hold several. Some roles can be limited to particular sites, in which case you only see and act on those sites.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Tag in this guide</th><th>Role name in the Users tab</th><th>What the role is for</th></tr></thead>
+    <tbody>
+      <tr><td><span class="role r-req">Requisitioner</span></td><td>Purchase Rec</td><td>Raises purchase requests. <b>Whoever raised a PO stays its requisitioner</b>: they confirm the parts or work, review its invoices, and close it. Limited to your assigned sites.</td></tr>
+      <tr><td><span class="role r-appr">Approver</span></td><td>Purchase Rec Approval</td><td>Approves, holds or rejects submitted requests. Can be limited to sites.</td></tr>
+      <tr><td><span class="role r-issue">PO Issuer</span></td><td>PO Issue</td><td>Turns an approved request into a numbered PO and sends it to the vendor. Can be limited to sites.</td></tr>
+      <tr><td><span class="role r-vend">Vendor Approver</span></td><td>Vendor Approval</td><td>Approves or rejects new vendors people have asked for. Company-wide.</td></tr>
+      <tr><td><span class="role r-match">Invoice Matching</span></td><td>Invoice Matching</td><td>Accounting's first step: adds invoices and matches each to a receipt. Can be limited to sites.</td></tr>
+      <tr><td><span class="role r-sup">Payment Approval</span></td><td>Payment Approval</td><td>The supervisor who approves invoices for payment, in batches. Can be limited to sites.</td></tr>
+      <tr><td><span class="role r-pay">Payment</span></td><td>Payment</td><td>Accounting's last step: pays outside the system, then confirms each invoice paid here. Can be limited to sites.</td></tr>
+      <tr><td><span class="role r-admin">Admin</span></td><td>Admin</td><td>Manages users, vendors, categories and settings. Admin does <b>not</b> automatically hold the roles above, but can stand in at a few steps (shown below) and is the only one who can void a PO.</td></tr>
+      <tr><td><span class="role r-all">Vendor logon</span></td><td>(set up from the Vendors table)</td><td>A vendor's own login. It only sees the Purchase Orders tab and only that vendor's issued POs.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Finding your way around the Purchase Orders tab</h3>
+  <ul>
+    <li><b>All POs</b> is the full list. Use the status filter (it has <span class="field">Open (not closed)</span>), the site filter, the From/To date boxes, and the ▾ on each column heading for Excel-style filters. The search box at the top right of the page finds a PO by number or text.</li>
+    <li>Buttons beside it show only the work waiting for <i>you</i>, depending on your roles: <span class="btn">My POs for Approval</span>, <span class="btn">My POs to Issue</span>, <span class="btn">Vendors to Approve</span>, <span class="btn">My Invoices to Review</span>, <span class="btn">My Invoices for Payment Approval</span>, <span class="btn">My Invoices to Pay</span>.</li>
+    <li>A number badge on the <span class="btn">Purchase Orders</span> tab and on those buttons counts what is waiting on you.</li>
+    <li>Click a PO to open it. <span class="btn">← Back to Purchase Orders</span> returns to the list. <span class="btn">View Activity</span> at the bottom of a PO shows who did what and when.</li>
+  </ul>
+  <div class="callout"><b class="lbl">Dates, money and numbers</b><p>Dates are always yyyy/mm/dd and times are 24-hour. Money always has commas ($1,234.50). A PO number looks like <code>PO-03-26-007</code>: the site's code, the year, then a running number for that site and year.</p></div>
+</section>
+
+<section id="s1">
+  <h2><span class="num">1</span> The vendor has to be approved</h2>
+  <div class="stage-meta"><span><span class="role r-req">Requisitioner</span> asks</span><span><span class="role r-vend">Vendor Approver</span> decides</span></div>
+  <p>A request can be drafted for any vendor, but it cannot be <b>approved</b>, and its PO cannot be <b>issued</b>, until its vendor is approved. Check the vendor first so nothing stalls later.</p>
+  <div class="rolebox r-req"><div class="who"><span class="role r-req">Requisitioner</span></div><div>
+    <ul>
+      <li>Pick the vendor from the <span class="field">Vendor</span> list on the request form. If it is not there, press <span class="btn">+ New vendor</span> (the form also checks for a similar vendor that already exists, and offers to use it).</li>
+      <li>A new vendor needs approval. You can pick it on your request straight away; the request just waits.</li>
+      <li>A vendor that has been <b>deactivated</b> by an admin cannot be used on new requests. Choose another, or ask an admin to reactivate it. Its existing POs carry on.</li>
+    </ul>
+  </div></div>
+  <div class="rolebox r-vend"><div class="who"><span class="role r-vend">Vendor Approver</span></div><div>
+    <ul>
+      <li>Open <span class="btn">Vendors to Approve</span>, or use the <span class="btn">Approve vendor</span> / <span class="btn">Reject vendor</span> buttons on the warning that appears at the top of a PO whose vendor is pending.</li>
+      <li>Rejecting needs a reason, which the requisitioner sees.</li>
+      <li>A vendor requested by someone who already holds Vendor Approval is approved automatically.</li>
+    </ul>
+  </div></div>
+  <div class="rolebox r-admin"><div class="who"><span class="role r-admin">Admin</span></div><div>
+    <p>Deactivate and reactivate vendors, and manage a vendor's own logon, in Admin → Vendors. Deactivating also switches off the vendor's login.</p>
+  </div></div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">2</span> Draft the purchase request <span class="status-pill s-draft">Draft</span></h2>
+  <div class="stage-meta"><span><span class="role r-req">Requisitioner</span> does this step</span><span>Raising a request from a ticket does the same thing with some fields pre-filled (see the Ticketing guide)</span></div>
+  <p>On the Purchase Orders tab press <span class="btn">+ New Request</span>. You can only raise requests for the sites you are assigned to; if you try another site you will see <i>"You can only create purchase requests for the sites you're assigned to."</i></p>
+
+  <h3>The header</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Field</th><th>What to enter</th></tr></thead>
+    <tbody>
+      <tr><td class="field">Project *</td><td>Regular O&amp;M, Repower - Phase 1 or Repower - Phase 2. Choose it first: it filters the Site and Budget Category lists, and it sets the invoice email.</td></tr>
+      <tr><td class="field">Site</td><td>The solar site company the money belongs to.</td></tr>
+      <tr><td class="field">Vendor</td><td>See step 1.</td></tr>
+      <tr><td class="field">Location</td><td>Only appears for sites that have separate locations (for example Firelight Solar's rooftops), and is then required. A site that has just one location named after itself never asks.</td></tr>
+      <tr><td class="field">Description</td><td>A short summary shown in the PO list, e.g. "Inverter fans for Site 4".</td></tr>
+      <tr><td class="field">Notes</td><td>Anything the approver should know.</td></tr>
+      <tr><td class="field">Budget Category *</td><td>Required. Also pick a <span class="field">Sub-Category</span> if there is one. The Budget tab reports spending against these.</td></tr>
+      <tr><td class="field">Vendor Quote #</td><td>The vendor's own quote number, if there is one.</td></tr>
+      <tr><td class="field">Chargeable Expense</td><td>A Yes/No tick that is printed on the PO. Tick it if the expense is chargeable.</td></tr>
+      <tr><td class="field">Send Invoices To</td><td>Set by the project; you cannot change it here. It is printed on the PO so the vendor knows where to send the invoice.</td></tr>
+      <tr><td class="field">Quote File</td><td>Attach the vendor's quote as a PDF. The page reads it and offers what it found (vendor, quote number, lines, tax, shipping). Tick what you want and press apply: <b>nothing you already typed is overwritten without your say-so</b>. A scanned picture has no text to read, so type those by hand.</td></tr>
+      <tr><td class="field">Sales Tax %, Markup %, Shipping/Handling, Credit</td><td>Feed the totals. Markup and shipping only appear when the request has part lines.</td></tr>
+      <tr><td class="field">Currency</td><td>The PO's currency. Budget reporting counts non-CAD POs at face value (no exchange rate).</td></tr>
+      <tr><td class="field">Pre-paid</td><td>Only for requests with parts. Tick it if the vendor is paid up front, so there will be no receipt. See the pre-paid note in step 7.</td></tr>
+      <tr><td class="field">Not to Exceed / Spending Cap</td><td>Only for requests with service lines. The PO commits up to the cap rather than the line total, and invoices are compared to the cap.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Line items</h3>
+  <p>Add rows with <span class="btn">+ Add Part</span> and <span class="btn">+ Add Service</span>. One request can hold both. Each row has a quantity and unit cost.</p>
+  <ul>
+    <li><b>Service line:</b> a description of the work.</li>
+    <li><b>Part line:</b> you must say what happens to it in inventory. The options are:
+      <ul>
+        <li><b>Spare</b>: a part from the site's inventory list. When it is received it is <b>added to stock</b>.</li>
+        <li><b>Used immediately</b>: also a listed part, but it goes straight into a job and is never added to stock.</li>
+        <li><b>Consumable</b>: not tracked in inventory (free text). Each unit is capped at a dollar limit an admin sets, shown on the line. A part dearer than the cap has to be a real inventory part or go in a service line.</li>
+      </ul>
+      Spare and Used parts are searched by GCS P/N, Part ID, manufacturer P/N or description, and can only be parts on <b>that site's Required Inventory list</b>. To order a part the site does not list, an inventory editor adds it to the list first.
+    </li>
+  </ul>
+
+  <h3>Saving</h3>
+  <p>Press <span class="btn">Save Draft</span>. The required items are the Project, Site, Vendor, Budget Category, at least one line, and a Location where the site has locations. The ones you missed are outlined in red. A draft carries a <b>DRAFT</b> watermark on its printed view. A draft can be edited with <span class="btn">Edit Draft</span> and deleted by someone who can raise requests; <b>only drafts can be deleted</b>. Anything later is voided instead.</p>
+  <div class="callout warn"><b class="lbl">Check before you save</b><p>A part line left without a choice, a consumable over its limit, or a spare that is not on the site's list will stop the save and be highlighted. Fix the highlighted line and save again.</p></div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">3</span> Submit for approval <span class="status-pill s-req">Requested</span></h2>
+  <div class="stage-meta"><span><span class="role r-req">Requisitioner</span> does this step</span></div>
+  <div class="rolebox r-req"><div class="who"><span class="role r-req">Requisitioner</span></div><div>
+    <ul>
+      <li>Open the draft and press <span class="btn">Submit</span>. It becomes <b>Requested</b>. Nothing goes to the vendor yet.</li>
+      <li>You can still change it with <span class="btn">Edit Request</span> while it is Requested (only you or an admin). This is how you fix something an approver put on hold for.</li>
+      <li>If you hold Purchase Rec but have no permission for that site, Submit is disabled and says so.</li>
+    </ul>
+  </div></div>
+</section>
+
+<section id="s4">
+  <h2><span class="num">4</span> Approval <span class="status-pill s-appr">Approved</span></h2>
+  <div class="stage-meta"><span><span class="role r-appr">Approver</span> does this step</span><span><span class="role r-req">Requisitioner</span> waits, then may need to fix</span></div>
+  <p>Requests waiting for you are under <span class="btn">My POs for Approval</span>. Open one to review it. <span class="btn">View PO</span> shows it laid out as the finished PO, with markup, tax and total, so you can see exactly what you are signing.</p>
+  <div class="rolebox r-appr"><div class="who"><span class="role r-appr">Approver</span></div><div>
+    <ul>
+      <li><span class="btn">Approve</span>: the request becomes <b>Approved</b> and your name and the date go on the PO. Add your signature once under <span class="btn">My Signature</span> in the page header so it prints on every PO you approve.</li>
+      <li><span class="btn">Hold</span>: parks it, with an optional reason. It is still Requested but marked on hold, so the requisitioner can fix it. Use <span class="btn">Resume</span> to bring it back.</li>
+      <li><span class="btn">Reject</span>: needs a reason, which the requisitioner sees. The request becomes <b>Rejected</b>.</li>
+      <li>You can only act on requests for the sites you are approving for. You can approve a request you raised yourself.</li>
+      <li>Approval is blocked while the vendor is pending, rejected or deactivated, and for any part line that uses an old option that no longer exists (it asks the requisitioner to choose Spare, Used immediately or Consumable).</li>
+    </ul>
+  </div></div>
+  <div class="rolebox r-req"><div class="who"><span class="role r-req">Requisitioner</span></div><div>
+    <ul>
+      <li><b>Waiting on an approver</b> is shown while it is Requested. An on-hold request says <b>On hold</b>; edit it and the approver can resume it.</li>
+      <li>If it is <b>Rejected</b>, read the reason, press <span class="btn">Return to Draft</span>, fix it and submit again. Only you (the person who submitted it) or an admin can do this.</li>
+    </ul>
+  </div></div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">5</span> Issue the PO and tell the vendor <span class="status-pill s-issued">PO Issued</span></h2>
+  <div class="stage-meta"><span><span class="role r-issue">PO Issuer</span> does this step</span></div>
+  <p>Approved requests waiting to be turned into POs are under <span class="btn">My POs to Issue</span>.</p>
+  <div class="rolebox r-issue"><div class="who"><span class="role r-issue">PO Issuer</span></div><div>
+    <ol class="steps">
+      <li>Open the approved request and press <span class="btn">Issue PO</span>. The page works out the next PO number (for example <code>PO-03-26-007</code>) and asks <i>Assign PO number …?</i></li>
+      <li>Press <span class="btn">Confirm PO</span>. The request becomes <b>PO Issued</b>. It is blocked if the vendor is not approved.</li>
+      <li>Send it to the vendor. <span class="btn">Print PO</span> and <span class="btn">Download PDF</span> make the document. <span class="btn">Email Vendor</span> downloads a ready-to-send email draft (with the PDF) addressed to the vendor, with the site in the subject. It is only offered once the PO has a number and the vendor has an email on file.</li>
+      <li>The PO then shows who has told the vendor: a green <b>Vendor contacted</b> (with who, when, and how) or an amber <b>Not contacted</b>. Pressing <span class="btn">Email Vendor</span> sets it the first time. If you called or emailed from your own mail, press <span class="btn">Mark vendor contacted</span>. <span class="btn">Clear contacted</span> undoes it.</li>
+    </ol>
+    <p class="small">The printed PO has the same layout for every site: the header lists the Project, Site, Location and Requisitioner, the line items, the approver's signature and the invoice email address.</p>
+  </div></div>
+  <div class="rolebox r-req"><div class="who"><span class="role r-req">Requisitioner</span></div><div>
+    <p>From here the PO is yours to track. You will confirm the parts or work in step 6, review invoices in step 8, and close it in step 11.</p>
+  </div></div>
+  <div class="rolebox r-all"><div class="who"><span class="role r-all">Vendor logon</span></div><div>
+    <p>If the vendor has a login, they see this PO (and only their own issued POs) under Purchase Orders.</p>
+  </div></div>
+</section>
+
+<section id="s6">
+  <h2><span class="num">6</span> The work is done or the parts arrive <span class="status-pill s-prog">In Progress</span></h2>
+  <div class="stage-meta"><span><span class="role r-req">Requisitioner</span> does this step</span><span><span class="role r-all">Vendor logon</span> can add a service report</span><span><span class="role r-inv">Inventory</span> sees the stock change</span></div>
+  <p>This is where the real world catches up with the paperwork. On an issued PO the requisitioner sets the <b>status</b> of the parts or the services. These are plain dropdowns; no evidence file is required to change them.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>PO has</th><th>The dropdown</th><th>Choices</th></tr></thead>
+    <tbody>
+      <tr><td>Parts</td><td><span class="field">Parts Status</span> (shown as <span class="field">PO Status</span> if the PO is parts only)</td><td>Not Ordered → Ordered → Partially Received → Received (and Pre-paid on a pre-paid PO)</td></tr>
+      <tr><td>Services</td><td><span class="field">Service Status</span></td><td>Not Started → Partially Complete → Complete</td></tr>
+    </tbody>
+  </table></div>
+  <div class="rolebox r-req"><div class="who"><span class="role r-req">Requisitioner</span></div><div>
+    <ul>
+      <li>Only <b>you</b>, the person who raised the PO, can change these, and only while the PO is issued.</li>
+      <li>Add proof under <span class="field">Receipts &amp; Invoices</span> → <span class="field">Add Receipt</span>: a photo or PDF of what arrived (a parts photo, or a service report for work). Accounting can add receipts too.</li>
+      <li><b>When you set Parts Status to Received</b> and the PO has spare parts, a box asks <i>where the units are</i>. Choose Oshawa, Barn, Office, or the site's own shelf (if the site keeps parts on a shelf) and press <span class="btn">Mark Received</span>. The spare units are added to that site's count at the place you chose. There is no default: <span class="btn">Mark Received</span> stays off until you choose.</li>
+      <li>Setting Received only adds the units the <b>first</b> time. Used-immediately parts, consumables and services never add to stock.</li>
+      <li>If some of the order arrived, use <b>Partially Received</b> and set Received when the last of it is in. Stock is added once, at Received, for the whole PO.</li>
+    </ul>
+  </div></div>
+  <div class="rolebox r-inv"><div class="who"><span class="role r-inv">Inventory</span></div><div>
+    <p>Until the PO is received, its spare units show in <b>yellow</b> on Ownership and Physical Location as "on order". They are real stock only once the requisitioner marks the parts Received. Matching an invoice does not change stock. See the Inventory guide.</p>
+  </div></div>
+  <div class="rolebox r-all"><div class="who"><span class="role r-all">Vendor logon</span></div><div>
+    <p>On a services-only PO the vendor can upload their own service report as the receipt. They cannot do that for parts, which only your side can receive.</p>
+  </div></div>
+  <div class="callout warn"><b class="lbl">Pre-paid with spare parts</b><p>A pre-paid PO shows Parts Status <b>Pre-paid</b>. If it has spare parts you still have to set <b>Received</b> before it can be closed, because that is what adds them to stock. A pre-paid PO with only consumables, used-immediately parts or services can be closed from Pre-paid.</p></div>
+</section>
+
+<section id="s7">
+  <h2><span class="num">7</span> The invoice comes in</h2>
+  <div class="stage-meta"><span><span class="role r-match">Invoice Matching</span> does this step</span><span><span class="role r-admin">Admin</span> can too</span></div>
+  <p>Open the PO and find <span class="field">Receipts &amp; Invoices</span>. It is one table with a row per receipt and invoice and the columns <i>Receipt, Invoice, Requisitioner Review, Payment Approval, Paid</i>. The stages of an invoice are:</p>
+  <p><span class="status-pill s-req">Needs a receipt matched</span> → <span class="status-pill s-req">With the requisitioner</span> → <span class="status-pill s-appr">Waiting on payment approval</span> → <span class="status-pill s-paid">Approved, ready to pay</span> → <span class="status-pill s-closed">Paid</span> <span class="small">(or <b>Sent back to accounting</b>)</span></p>
+  <div class="rolebox r-match"><div class="who"><span class="role r-match">Invoice Matching</span></div><div>
+    <ol class="steps">
+      <li>Press <span class="field">Add Invoice (PDF)</span> and choose the vendor's invoice. The page <b>reads it</b>: the invoice number and amount are filled in (you can correct them) and a checklist compares it to the PO (vendor, PO number, total or cap, currency, subtotal, tax, shipping and line items). The PO is shown beside the invoice with disagreeing figures boxed. <b>It warns but never blocks.</b> A scanned PDF has no text, so type those in.</li>
+      <li><b>Same invoice twice:</b> the same vendor cannot have the same invoice number twice (case and punctuation ignored). If it really is a separate invoice, write why in <i>This is a separate invoice, because…</i> (at least five characters). The same vendor and amount in the last 90 days only gives a warning.</li>
+      <li><b>More than the PO:</b> if the total of invoices would pass the PO total (or the cap), the box <i>This invoice is for more than the PO</i> is ticked for you; add a note about the extra. Flagging forces the requisitioner to void and regenerate the PO (step 8). You can clear a wrong flag while the invoice is waiting for review.</li>
+      <li>Press <span class="btn">Add Invoice</span> (or <span class="btn">Add Invoice &amp; Match</span> when added to a receipt).</li>
+      <li><b>Match it to a receipt.</b> In the Invoice cell choose <i>Match to existing receipt…</i> (or in a receipt's row <i>Match to existing invoice…</i>). A small ▲/▼ chip shows whether the invoiced total is over or under the PO.</li>
+    </ol>
+    <ul>
+      <li>An invoice <b>sent back</b> by an approver comes back to you. Fix what was wrong and press <span class="btn">Resubmit</span>, or delete it and upload a corrected one (<span class="btn">Del. Invoice</span>).</li>
+      <li>You can also mark a parts PO <b>Pre-paid</b> (a toggle in this panel) if that was missed on the request.</li>
+    </ul>
+  </div></div>
+  <div class="rolebox r-req"><div class="who"><span class="role r-req">Requisitioner</span></div><div>
+    <p>If the parts are in, make sure you have added the receipt. Without a matched receipt the invoice waits at "Needs a receipt matched".</p>
+  </div></div>
+  <div class="callout"><b class="lbl">Pre-paid POs</b><p>Because there is no receipt, an invoice on a pre-paid PO skips matching and goes straight to the requisitioner's review.</p></div>
+  <div class="callout"><b class="lbl">Only issued POs</b><p>Invoice lists only include issued or closed POs. An invoice sitting on a regenerated draft waits until that draft is issued.</p></div>
+</section>
+
+<section id="s8">
+  <h2><span class="num">8</span> The requisitioner reviews the invoice</h2>
+  <div class="stage-meta"><span><span class="role r-req">Requisitioner</span> does this step</span><span><span class="role r-admin">Admin</span> can stand in</span></div>
+  <p>Invoices waiting for you are under <span class="btn">My Invoices to Review</span> (and in the PO's own table). You are confirming that the invoice matches what you actually received.</p>
+  <div class="rolebox r-req"><div class="who"><span class="role r-req">Requisitioner</span></div><div>
+    <ul>
+      <li><span class="btn">Approve</span>: it moves on to payment approval. You can <b>Undo</b> that while the supervisor has not acted on it.</li>
+      <li><span class="btn">Hold</span>: pause it with a reason (required) while you check something. You cannot approve a held invoice until you press <span class="btn">Release</span>. Held invoices do not count in the badges.</li>
+      <li><span class="btn">Send Back</span>: returns it to accounting with a reason (required), clearing any hold.</li>
+      <li><b>If accounting flagged it "Over the PO":</b> there is <b>no Approve, no Hold and no Send Back</b>. The only button is <span class="btn">Void &amp; regenerate PO</span>. It copies the PO as a new <b>draft</b> (same site, vendor, lines, category, ticket link), voids the original with the reason, moves the invoices and receipts onto the draft, and opens the draft with a banner showing the invoice amount against the draft's live total. Raise the prices until the banner shows ✓, then save and submit it again (step 3). It is only possible if the PO's parts were not received and no other invoice on it is approved or paid. The two POs are linked under <b>Related POs</b>. Only accounting or an admin clearing the flag frees the invoice otherwise.</li>
+    </ul>
+    <p class="small">The message <i>"Only the person who raised this PO can review its invoices."</i> means you are not that person.</p>
+  </div></div>
+</section>
+
+<section id="s9">
+  <h2><span class="num">9</span> Approval for payment (in batches)</h2>
+  <div class="stage-meta"><span><span class="role r-sup">Payment Approval</span> does this step</span></div>
+  <p>Open <span class="btn">My Invoices for Payment Approval</span>. Each row shows its PO, vendor, invoice and amount, with a total of what is pending.</p>
+  <div class="rolebox r-sup"><div class="who"><span class="role r-sup">Payment Approval</span></div><div>
+    <ul>
+      <li><b>Tick</b> the invoices you approve and press the approve button. You can name the batch (the box suggests <i>Approved invoice batch yyyy/mm/dd</i>) or leave it blank. Each approval is recorded as a <b>batch</b>: your name, the time and the list. An invoice approved one at a time from a PO's page is a batch of one. <b>Recent payment batches</b> at the bottom shows how many in each have been paid.</li>
+      <li><span class="btn">Hold</span> (reason required) pauses an invoice while it waits, or after you approved it but before it is paid. Held invoices cannot be ticked into a batch until released. <span class="btn">Release</span> restores it.</li>
+      <li><span class="btn">Send Back</span> (reason required) returns it to accounting. A flagged "over the PO" invoice never reaches you; it goes back through the requisitioner.</li>
+      <li>You can take back an approval (<b>Undo</b>) while the invoice is not yet paid.</li>
+    </ul>
+  </div></div>
+</section>
+
+<section id="s10">
+  <h2><span class="num">10</span> Pay, then confirm it here <span class="status-pill s-paid">Paid</span></h2>
+  <div class="stage-meta"><span><span class="role r-pay">Payment</span> does this step</span></div>
+  <p>The system does <b>not</b> send money. You pay by your own means (EFT, cheque), then record it.</p>
+  <div class="rolebox r-pay"><div class="who"><span class="role r-pay">Payment</span></div><div>
+    <ol class="steps">
+      <li>Open <span class="btn">My Invoices to Pay</span>. Filter by batch if you like (it shows "x of y paid"), and <span class="btn">Download List (CSV)</span> for your own records.</li>
+      <li>After paying an invoice, set the <b>date paid</b> and optionally a <b>reference</b> (cheque, EFT or transaction number), then press <span class="btn">Confirm Paid</span>. The same box is on the PO's Receipts &amp; Invoices table. <b>Clear</b> reverses it.</li>
+      <li>A held invoice cannot be marked paid until the supervisor releases it.</li>
+      <li>When every invoice on a PO is paid, set the PO's <span class="field">Payment Status</span> dropdown to <b>Paid</b>. (It is also available as Unpaid or Partially Paid. It refuses Paid until every invoice is marked paid.)</li>
+    </ol>
+  </div></div>
+</section>
+
+<section id="s11">
+  <h2><span class="num">11</span> Close the PO <span class="status-pill s-closed">Closed</span></h2>
+  <div class="stage-meta"><span><span class="role r-req">Requisitioner</span> does this step</span></div>
+  <p>The <span class="btn">Close PO</span> button appears for the requisitioner only when <b>all</b> of these are true:</p>
+  <ul>
+    <li>The PO is issued, and every part is <b>Received</b> and every service <b>Complete</b> (a pre-paid PO can stand on Pre-paid, unless it has spare parts).</li>
+    <li>Payment Status is <b>Paid</b>.</li>
+    <li>There is at least one invoice, every invoice is approved and paid, and every receipt is matched to an invoice (a pre-paid PO needs only the invoices approved and paid).</li>
+  </ul>
+  <p>The labels alone are not enough: someone cannot close a PO that is still marked Unpaid in the paperwork. Press <span class="btn">Close PO</span> and it becomes <b>Closed</b>. On the <b>Budget</b> tab a closed PO stops counting what is "to be invoiced".</p>
+</section>
+
+<section id="after">
+  <h2>After the PO and in special cases</h2>
+  <h3>Voiding a PO</h3>
+  <div class="rolebox r-admin"><div class="who"><span class="role r-admin">Admin</span></div><div>
+    <p>A PO past Draft is never deleted: an admin <b>voids</b> it, with a reason, and it stays on file. You cannot void a PO if its parts were already received, an invoice on it is paid or approved for payment, or it is closed. Reverse those first (an inventory adjustment for received stock, withdraw the approval, clear the payment). A voided PO keeps a read-only list of its receipts and invoices so the files can still be opened.</p>
+  </div></div>
+  <h3>Related POs</h3>
+  <p>Open a PO and look under <b>Related POs</b>. POs from the same vendor that share an invoice number or invoice file appear automatically. People with a PO role can also link two POs by hand by typing the other PO's number (<i>"There is no PO numbered …"</i>, <i>"A PO can't be linked to itself."</i> and <i>"Those two POs are already linked."</i> are the refusals).</p>
+  <h3>Linking a PO to a ticket</h3>
+  <p>A PO can carry a link to a ticket so each can find the other. See the Ticketing guide. The number must look like <code>TK-06-26-001</code>.</p>
+  <h3>Who can see history and money reports</h3>
+  <ul>
+    <li><b>PO History</b> tab (admin, Invoice Matching, Payment Approval, Payment, Purchase Rec Approval and PO Issue): a tamper-proof record of every change, who made it and when, with filters and a CSV export.</li>
+    <li><b>Budget</b> tab (admin and the three accounting roles): each site's budget against issued POs, approved invoices and what is still to be invoiced, by category. Only an admin edits the budget numbers.</li>
+  </ul>
+</section>
+
+<section id="roles">
+  <h2>Quick reference by role</h2>
+  <p>What each role is responsible for, in one place.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Role</th><th>Steps</th><th>Your lists</th><th>Remember</th></tr></thead>
+    <tbody>
+      <tr><td><span class="role r-req">Requisitioner</span></td><td>2, 3, 4 (fix), 6, 8, 11</td><td>All POs, My Invoices to Review</td><td>You stay responsible for a PO you raised: receive it, review its invoices, close it. Only you (or an admin) can.</td></tr>
+      <tr><td><span class="role r-appr">Approver</span></td><td>4</td><td>My POs for Approval</td><td>Approve, hold or reject. Rejecting needs a reason. Blocked if the vendor is not approved.</td></tr>
+      <tr><td><span class="role r-issue">PO Issuer</span></td><td>5</td><td>My POs to Issue</td><td>Confirm the PO number, send the PO, mark the vendor contacted.</td></tr>
+      <tr><td><span class="role r-vend">Vendor Approver</span></td><td>1</td><td>Vendors to Approve</td><td>A pending vendor blocks approval and issue.</td></tr>
+      <tr><td><span class="role r-match">Invoice Matching</span></td><td>7</td><td>Receipts &amp; Invoices on each PO</td><td>Add the invoice, check the comparison, flag "over the PO", match it to a receipt.</td></tr>
+      <tr><td><span class="role r-sup">Payment Approval</span></td><td>9</td><td>My Invoices for Payment Approval</td><td>Approve in batches. Hold or send back with a reason.</td></tr>
+      <tr><td><span class="role r-pay">Payment</span></td><td>10</td><td>My Invoices to Pay</td><td>Pay outside the system, then Confirm Paid with the date and a reference.</td></tr>
+      <tr><td><span class="role r-admin">Admin</span></td><td>Any (stand-in), voiding</td><td>All, plus the Admin tab</td><td>Admin does not get the PO roles automatically. Voids POs; can stand in as requisitioner for invoice review.</td></tr>
+      <tr><td><span class="role r-all">Vendor logon</span></td><td>5, 6</td><td>Own issued POs</td><td>Sees only that vendor's issued POs; can add a service report on a services-only PO.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>When something is blocked</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>What you see</th><th>What it means / what to do</th></tr></thead>
+    <tbody>
+      <tr><td>"<i>… is still pending approval as a vendor.</i>"</td><td>A Vendor Approver has to approve the vendor first.</td></tr>
+      <tr><td>"<i>… has been deactivated as a vendor — choose another vendor, or ask an admin to reactivate it.</i>"</td><td>The vendor can't take new work.</td></tr>
+      <tr><td>"<i>A reason is required to reject a request.</i>" (also for voiding, holding an invoice, sending an invoice back)</td><td>Type a reason in the box that pops up.</td></tr>
+      <tr><td>"<i>Only the person who raised this PO can review its invoices.</i>"</td><td>Ask the requisitioner, or an admin.</td></tr>
+      <tr><td>"<i>An invoice on hold can't be approved — release it first.</i>"</td><td>Press Release, or ask the person who held it.</td></tr>
+      <tr><td>"<i>This invoice is for more than the PO: void the PO and regenerate it at the new amount instead.</i>"</td><td>Use Void &amp; regenerate PO, or ask accounting to clear a wrong flag.</td></tr>
+      <tr><td>"<i>Every invoice must be marked paid first.</i>"</td><td>Payment Status can't be Paid until each invoice is confirmed paid.</td></tr>
+      <tr><td>"<i>Only a draft can be deleted — void the PO instead, which keeps it on file.</i>"</td><td>Ask an admin to void it.</td></tr>
+      <tr><td>Close PO button is missing</td><td>Check, in this order: parts Received / services Complete, Payment Status Paid, every invoice approved and paid, every receipt matched. For a pre-paid PO with spare parts, Received must be set.</td></tr>
+      <tr><td>Invoice duplicate message</td><td>The vendor already has that invoice number. Explain why it is separate, or it is probably a duplicate.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<footer><span>The other guides: <a href="gcs-inventory-guide.html">Inventory Guide</a> · <a href="gcs-ticketing-guide.html">Ticketing Guide</a></span><span>Written from how the system works in November 2026. If a button or message differs from this guide, the screen is right: tell an admin.</span></footer>
+</div>
+<script>window.addEventListener('beforeprint', function () { document.querySelectorAll('details').forEach(function (d) { d.open = true }) })</script>
+</body>
+</html>

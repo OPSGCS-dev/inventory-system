@@ -988,6 +988,13 @@ function App() {
     setLoggedInUser(null)
   }
 
+  // Supabase says why it refused a new password (same as the old one, too short, too easy to guess, ...);
+  // show that rather than sending the person to the browser console.
+  function passwordErrorText(error, action) {
+    const reason = String(error?.message || '').trim()
+    return reason ? `Could not ${action} — ${reason}` : `Could not ${action} — try again, or ask an admin to reset it.`
+  }
+
   async function handlePasswordSetup(e) {
     e.preventDefault()
     setPasswordSetupError(null)
@@ -1021,7 +1028,7 @@ function App() {
       await loadUserForSession(session)
     } catch (error) {
       console.error(error)
-      setPasswordSetupError('Could not set password — check the console for details.')
+      setPasswordSetupError(passwordErrorText(error, 'set password'))
     } finally {
       setPasswordSetupBusy(false)
     }
@@ -1057,7 +1064,7 @@ function App() {
       setChangePasswordConfirm('')
     } catch (error) {
       console.error(error)
-      setChangePasswordError('Could not change password — check the console for details.')
+      setChangePasswordError(passwordErrorText(error, 'change password'))
     } finally {
       setChangePasswordBusy(false)
     }

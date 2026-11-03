@@ -629,25 +629,22 @@ export function canViewPoHistory(user) {
   )
 }
 
-// The Budget tab (budget against issued POs and approved invoices): admins and the accounting roles, like the
-// Audit tab. Only an admin changes the budget amounts. The database enforces the same (add_budget_amounts.sql).
+// The Budget tab (budget against issued POs and approved invoices). Admin only for the launch; to open it to the
+// accounting roles again, return ['admin', 'invoice_matching', 'invoice_approval', 'payment'].some(...) here (the
+// database already lets those roles read it: add_budget_amounts.sql). Only an admin changes the amounts.
 export function canViewBudget(user) {
   if (!user || isVendorUser(user)) return false
-  return ['admin', 'invoice_matching', 'invoice_approval', 'payment'].some((role) => userHasRole(user, role))
+  return isAdmin(user)
 }
 
 export function canEditBudget(user) {
   return isAdmin(user)
 }
 
-// Accounting Audit (inventory vs accounting's books): admins and the accounting roles.
+// Accounting Audit (inventory vs accounting's books). Admin only for the launch; to open it to the accounting
+// roles again, add userHasRole(user, 'invoice_matching' | 'invoice_approval' | 'payment') back here.
 export function canViewAudit(user) {
-  return (
-    isAdmin(user) ||
-    userHasRole(user, 'invoice_matching') ||
-    userHasRole(user, 'invoice_approval') ||
-    userHasRole(user, 'payment')
-  )
+  return isAdmin(user)
 }
 
 // A PO past draft is never hard-deleted -- it's voided, so the row, its

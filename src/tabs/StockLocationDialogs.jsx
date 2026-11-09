@@ -10,7 +10,7 @@ import PartDescription from './PartDescription'
 
 const placeName = (value, project) =>
   value === 'site'
-    ? `${shortProjectName(project?.name || '')} site (its own)`
+    ? `${shortProjectName(project?.name || '')} (on-site shelf)`
     : value === STORAGE ? 'Oshawa' : value === BARN ? 'Barn' : 'Office'
 
 // The places an entity's units can be put: its own site (only if it keeps parts on one), Oshawa, Barn, Office.
@@ -46,7 +46,7 @@ export function ReceiveLocationDialog({ request, project, parts, busy, onConfirm
   return (
     <Shell title={`Receive parts on ${request.po_number || '#' + request.id}`} onCancel={busy ? () => {} : onCancel}>
       <p className="sub" style={{ margin: '0 0 8px' }}>
-        These spare parts are added to {project?.name || 'the site'}&apos;s count. Choose where the units are now. You can move them later with Update Location.
+        These spare parts are added to {project?.name || 'the entity'}&apos;s count. Choose where the units are now. You can move them later with Update Location.
       </p>
       <table className="sheet" style={{ marginBottom: 12 }}>
         <thead>
@@ -95,7 +95,7 @@ export function AdjustmentLocationDialog({ changes, busy, onConfirm, onCancel })
     out.push({ value: 'auto', disabled: false, why: '' })
     return out
   }
-  const labelFor = (c, o) => (o.value === 'auto' ? 'Automatic (own site first, then Oshawa, Barn, Office)' : placeName(o.value, c.project) + o.why)
+  const labelFor = (c, o) => (o.value === 'auto' ? 'Automatic (on-site shelf first, then Oshawa, Barn, Office)' : placeName(o.value, c.project) + o.why)
 
   function setAll(value) {
     if (!value) return
@@ -122,7 +122,7 @@ export function AdjustmentLocationDialog({ changes, busy, onConfirm, onCancel })
           <option value={STORAGE}>Oshawa</option>
           <option value={BARN}>Barn</option>
           <option value={OFFICE}>Office</option>
-          <option value="site">Each site&apos;s own shelf</option>
+          <option value="site">Each entity&apos;s on-site shelf</option>
         </select>
         <span className="sub" style={{ margin: 0 }}>(rows where that isn&apos;t possible are left for you to choose)</span>
       </div>
@@ -130,7 +130,7 @@ export function AdjustmentLocationDialog({ changes, busy, onConfirm, onCancel })
         <table className="sheet">
           <thead>
             <tr className="header-row">
-              <th className="row-head">GCS P/N</th><th>Description</th><th>Site</th>
+              <th className="row-head">GCS P/N</th><th>Description</th><th>Entity</th>
               <th className="center-cell">Count</th><th>Location</th>
             </tr>
           </thead>

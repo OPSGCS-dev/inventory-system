@@ -240,8 +240,8 @@ function PoHistoryTab({ users, projects, vendors, purchaseRequests, focus, onCle
               </option>
             ))}
         </select>
-        <select value={draft.entity} onChange={set('entity')} aria-label="Site">
-          <option value="">All sites</option>
+        <select value={draft.entity} onChange={set('entity')} aria-label="Entity">
+          <option value="">All entities</option>
           {projects.map((p) => (
             <option value={p.id} key={p.id}>
               {p.name}

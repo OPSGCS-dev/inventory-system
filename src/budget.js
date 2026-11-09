@@ -189,7 +189,7 @@ export function buildBudgetReport({
     totals,
     unbudgeted: [...unbudgeted.entries()].map(([siteId, a]) => ({
       siteId,
-      name: projects.find((p) => p.id === siteId)?.name || `Site ${siteId}`,
+      name: projects.find((p) => p.id === siteId)?.name || `Entity ${siteId}`,
       pos: money(a.pos),
       invoiced: money(a.invoiced),
       toBe: money(a.toBe),

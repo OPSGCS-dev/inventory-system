@@ -7,6 +7,7 @@
 // actually emails or downloads a PO.
 import {
   COMPANY_ADDRESS_BLOCK,
+  locationVisible,
   poInstructions,
   computeInvoicedTotal,
   computePoTotals,
@@ -86,7 +87,8 @@ export async function buildPoPdf(request, stamp = null) {
       ['PO Date', formatDate(request.issued_at || Date.now())],
       ...(request.program_name ? [['Project', clean(request.program_name)]] : []),
       ['PO #', clean(poLabel(request))],
-      ['Location', clean(request.sub_projects?.name || request.projects?.name || '-')],
+      ['Entity', clean(request.projects?.name || '-')],
+      ...(locationVisible(request) ? [['Site', clean(request.sub_projects.name)]] : []),
       ['Requisitioner', clean(request.requisitioner_name || '-')],
       ['Budget Category', clean(budgetCategoryLabel(request))],
       ['Chargeable Expense', request.chargeable_expense ? 'Yes' : 'No'],

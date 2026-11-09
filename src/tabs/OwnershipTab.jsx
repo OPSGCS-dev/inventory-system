@@ -213,7 +213,7 @@ function OwnershipTab({
   // ------- stock transfer -------
   async function doTransfer(item) {
     const qty = Number(qtyByPart[item.gcs_id])
-    if (!fromId || !toId) return flash('Choose both the sending and the receiving site.', false)
+    if (!fromId || !toId) return flash('Choose both the sending and the receiving entity.', false)
     if (!transferNote.trim()) return flash('A reason is required before saving.', false)
     if (!qty || qty <= 0) return flash('Enter a quantity greater than zero.', false)
     // A receiver with no site of its own (FLOPS, Firelight) can't have units "on its site": they go to Oshawa.
@@ -269,7 +269,7 @@ function OwnershipTab({
     const projectKey = fieldMap.entity || fieldMap.project || fieldMap.site
     const qtyKey = fieldMap.quantity || fieldMap.qty || fieldMap.stockonhand
     if (!gcsKey || !projectKey || !qtyKey) {
-      setUploadErrors(['CSV must have columns for GCS P/N, Site, and Quantity (column names not recognized).'])
+      setUploadErrors(['CSV must have columns for GCS P/N, Entity, and Quantity (column names not recognized).'])
       return
     }
     const errors = []
@@ -281,7 +281,7 @@ function OwnershipTab({
       const project = findProject(row[projectKey])
       const qty = parseInt(row[qtyKey], 10)
       if (!part) return errors.push(`Row ${n}: GCS P/N "${row[gcsKey]}" not found in Master List.`)
-      if (!project) return errors.push(`Row ${n}: Site "${row[projectKey]}" does not match any site.`)
+      if (!project) return errors.push(`Row ${n}: Entity "${row[projectKey]}" does not match any entity.`)
       if (Number.isNaN(qty) || qty < 0) return errors.push(`Row ${n}: Quantity "${row[qtyKey]}" is not a valid number.`)
       const item = stockItems.find((s) => s.gcs_id === gcsId)
       rows.push({
@@ -324,7 +324,7 @@ function OwnershipTab({
     for (const item of stockItems) {
       for (const p of projects) {
         const e = item.perProject[p.id]
-        if (e) rows.push({ 'GCS P/N': item.gcs_id, Site: p.name, Quantity: e.onHand ?? 0 })
+        if (e) rows.push({ 'GCS P/N': item.gcs_id, Entity: p.name, Quantity: e.onHand ?? 0 })
       }
     }
     downloadCsv(`inventory-ownership-${new Date().toISOString().slice(0, 10)}.csv`, Papa.unparse(rows))
@@ -337,7 +337,7 @@ function OwnershipTab({
         const e = item.perProject[p.id]
         if (!e) continue
         rows.push({
-          Site: p.name,
+          Entity: p.name,
           'GCS P/N': item.gcs_id,
           'Part ID': item.part?.gcs_part_id || '',
           Manufacturer: item.part?.manufacturer || '',
@@ -349,7 +349,7 @@ function OwnershipTab({
         })
       }
     }
-    const name = selected ? shortProjectName(selected.name).replace(/[^a-z0-9]+/gi, '-') : 'all-sites'
+    const name = selected ? shortProjectName(selected.name).replace(/[^a-z0-9]+/gi, '-') : 'all-entities'
     downloadCsv(`ownership-${name}-${new Date().toISOString().slice(0, 10)}.csv`, Papa.unparse(rows))
   }
 
@@ -421,7 +421,7 @@ function OwnershipTab({
               <select value={fromLoc} onChange={(e) => setFromLoc(e.target.value)}>
                 <option value="">Wherever they are (automatic)</option>
                 {(!fromProject || hasSiteStock(fromProject)) && (
-                  <option value="site">{fromProject ? `${shortProjectName(fromProject.name)}'s own site` : "The sender's own site"}</option>
+                  <option value="site">{fromProject ? `${shortProjectName(fromProject.name)}'s on-site shelf` : "The sender's on-site shelf"}</option>
                 )}
                 <option value="storage">Oshawa</option>
                 <option value="barn">Barn</option>
@@ -430,7 +430,7 @@ function OwnershipTab({
               <span className="sub" style={{ margin: 0 }}>and end up in:</span>
               <select value={toLoc === 'site' && toProject && !hasSiteStock(toProject) ? 'storage' : toLoc} onChange={(e) => setToLoc(e.target.value)}>
                 {(!toProject || hasSiteStock(toProject)) && (
-                  <option value="site">{toProject ? `${shortProjectName(toProject.name)}'s own site` : "The receiver's own site"}</option>
+                  <option value="site">{toProject ? `${shortProjectName(toProject.name)}'s on-site shelf` : "The receiver's on-site shelf"}</option>
                 )}
                 <option value="storage">Oshawa</option>
                 <option value="barn">Barn</option>
@@ -453,8 +453,8 @@ function OwnershipTab({
           <div className="card-header">
             <h2>Update Count</h2>
             <p className="sub" style={{ margin: 0 }}>
-              A count sets how many a site owns. Extra units appear on that site's own shelf; removed units come off its own site first,
-              then Oshawa, the Barn, then the Office. (A site that doesn't keep parts of its own gets extra units in Oshawa.) Every change is recorded in History.
+              A count sets how many an entity owns. Extra units appear on that entity's on-site shelf; removed units come off its on-site shelf first,
+              then Oshawa, the Barn, then the Office. (An entity that doesn't keep parts on a site of its own gets extra units in Oshawa.) Every change is recorded in History.
             </p>
           </div>
           <div className="edit-toolbar">
@@ -467,7 +467,7 @@ function OwnershipTab({
           </div>
           <h3 style={{ fontSize: 14, margin: '16px 0 4px' }}>Upload a count</h3>
           <p className="sub" style={{ margin: '0 0 8px' }}>
-            CSV with columns: GCS P/N, Site, Quantity. Every row replaces that part's count at that site. One bad row cancels the whole upload.
+            CSV with columns: GCS P/N, Entity, Quantity. Every row replaces that part's count for that entity. One bad row cancels the whole upload.
           </p>
           <input type="file" accept=".csv" onChange={onUploadFile} />
           {uploadErrors.length > 0 && (
@@ -484,7 +484,7 @@ function OwnershipTab({
                   </colgroup>
                   <thead>
                     <tr className="header-row">
-                      <th className="row-head">GCS P/N</th><th>Site</th><th>Description</th>
+                      <th className="row-head">GCS P/N</th><th>Entity</th><th>Description</th>
                       <th className="center-cell">Previous</th><th className="center-cell">New</th>
                     </tr>
                   </thead>
@@ -524,14 +524,14 @@ function OwnershipTab({
                 <>
                   <div className="project-select-wrap" style={{ maxWidth: 280, flex: 'none' }}>
                     <select value={entityFilter} onChange={(e) => { setEntityFilter(e.target.value); setGcsFilter('') }}>
-                      <option value="all">All Sites</option>
+                      <option value="all">All Entities</option>
                       {projects.map((p) => (
                         <option value={p.id} key={p.id}>{p.name}</option>
                       ))}
                     </select>
                   </div>
                   <button className="btn-secondary" style={{ whiteSpace: 'nowrap' }} onClick={exportList} disabled={stockLoading || visibleItems.length === 0}
-                    title="Download this list as a CSV: the selected site, or every site grouped by site">
+                    title="Download this list as a CSV: the selected entity, or every entity grouped by entity">
                     Export CSV
                   </button>
                 </>
@@ -547,12 +547,12 @@ function OwnershipTab({
             )}
             {editMode && (
               <p className="sub" style={{ margin: 0 }}>
-                Each cell is how many that site owns. Editing a count changes the units on its own site (up) or removes them from its site first, then Oshawa, the Barn, then the Office (down). An entity with no site of its own gets extra units in Oshawa.
+                Each cell is how many that entity owns. Editing a count changes the units on its on-site shelf (up) or removes them from it first, then Oshawa, the Barn, then the Office (down). An entity with no on-site shelf gets extra units in Oshawa.
               </p>
             )}
             {transferMode && (
               <p className="sub" style={{ margin: 0 }}>
-                The sender and receiver columns are highlighted. Enter a quantity and press Transfer on the part's row. &quot;Site / off&quot; is how many of the sender&apos;s units are on its own site and how many are in Oshawa, the Barn or the Office.
+                The sender and receiver columns are highlighted. Enter a quantity and press Transfer on the part's row. &quot;On site / off&quot; is how many of the sender&apos;s units are on its on-site shelf and how many are in Oshawa, the Barn or the Office.
               </p>
             )}
           </div>
@@ -585,8 +585,8 @@ function OwnershipTab({
                       )
                     })}
                     <th className="center-cell total-col">Target Stock</th>
-                    <th className="center-cell total-col">{singleEntity ? 'Total - All Sites' : 'Total Owned'}</th>
-                    {transferMode && (<><th className="center-cell">Site / off</th><th className="center-cell">Qty</th><th className="center-cell"></th></>)}
+                    <th className="center-cell total-col">{singleEntity ? 'Total - All Entities' : 'Total Owned'}</th>
+                    {transferMode && (<><th className="center-cell">On site / off</th><th className="center-cell">Qty</th><th className="center-cell"></th></>)}
                   </tr>
                   {!editMode && (
                     <tr className="filter-row">
@@ -630,7 +630,7 @@ function OwnershipTab({
                   ) : visibleItems.length === 0 ? (
                     <tr>
                       <td className="empty" colSpan={headCols + 4 + (transferMode ? 3 : 0)}>
-                        {gcsFilter ? 'No parts match your filter.' : singleEntity ? 'No parts required for this site.' : 'No parts yet — required parts must be added on the Required Inventory tab first.'}
+                        {gcsFilter ? 'No parts match your filter.' : singleEntity ? 'No parts required for this entity.' : 'No parts yet — required parts must be added on the Required Inventory tab first.'}
                       </td>
                     </tr>
                   ) : (
@@ -677,7 +677,7 @@ function OwnershipTab({
                               </td>
                               <td className="center-cell">
                                 <button className="btn-secondary" style={{ whiteSpace: 'nowrap' }} onClick={() => doTransfer(item)}
-                                  title={toId && !toOk ? "The receiving site doesn't use this part — add it on Required Inventory first." : undefined}
+                                  title={toId && !toOk ? "The receiving entity doesn't use this part — add it on Required Inventory first." : undefined}
                                   disabled={busyPart === item.gcs_id || !toId || !toOk || !transferNote.trim() || !qtyByPart[item.gcs_id]}>
                                   {busyPart === item.gcs_id ? 'Saving…' : 'Transfer'}
                                 </button>

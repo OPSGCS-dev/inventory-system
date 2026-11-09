@@ -177,8 +177,8 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users, programs = []
         'PO #': r.po_number || `#${r.id}`,
         Status: poStatusLabel(r.status),
         ...(r.program_id && programNameFor(r.program_id) ? { Project: programNameFor(r.program_id) } : {}),
-        Site: r.projects?.name || '',
-        Location: r.sub_projects?.name || '',
+        Entity: r.projects?.name || '',
+        Site: r.sub_projects?.name || '',
         Vendor: r.vendors?.name || '',
         Issued: fmtDate(row.issuedAt),
         'Received / Completed': fmtDate(row.workDoneAt),
@@ -254,7 +254,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users, programs = []
           </select>
         )}
         <select value={entityFilter} onChange={(e) => setEntityFilter(e.target.value)}>
-          <option value="">All Sites</option>
+          <option value="">All Entities</option>
           {projects.map((p) => (
             <option value={p.id} key={p.id}>
               {p.name}
@@ -310,7 +310,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users, programs = []
                 <th className="row-head">PO #</th>
                 <th>Status</th>
                 {programs.length > 0 && <th>Project</th>}
-                <th>Site</th>
+                <th>Entity</th>
                 <th>Vendor</th>
                 <th>Issued</th>
                 <th>Received / Done</th>

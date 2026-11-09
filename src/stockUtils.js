@@ -1,7 +1,7 @@
 // Shared helpers for the Ownership and Physical Location tabs.
 //
 // A "location key" names one physical place: 'storage' (shown as Oshawa), 'barn', 'office', or 'site:<entity id>'
-// (the site that entity owns). It's what the location dropdowns hold.
+// (the entity's own on-site shelf). It's what the location dropdowns hold.
 import { shortProjectName } from './utils'
 
 // PostgREST returns at most 1,000 rows per request, silently. Read a table in pages so a
@@ -45,7 +45,7 @@ export function locLabel(key, projects) {
   if (key === OFFICE) return 'Office'
   const { projectId } = parseLocKey(key)
   const p = (projects || []).find((x) => x.id === projectId)
-  return p ? `${shortProjectName(p.name)} site` : 'Unknown site'
+  return p ? `${shortProjectName(p.name)} (on site)` : 'Unknown place'
 }
 
 // How many of a part sit in one place (a location key).

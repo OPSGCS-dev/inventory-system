@@ -457,7 +457,7 @@ function PurchaseOrdersTab({
       },
       { key: 'description', label: 'Description', values: (r) => r.description },
       ...(programsReady ? [{ key: 'program', label: 'Project', values: (r) => programName(r.program_id) }] : []),
-      { key: 'entity', label: 'Site', values: (r) => r.projects?.name },
+      { key: 'entity', label: 'Entity', values: (r) => r.projects?.name },
       { key: 'vendor', label: 'Vendor', values: (r) => r.vendors?.name },
       {
         key: 'amount',
@@ -644,7 +644,7 @@ function PurchaseOrdersTab({
     const entity = matchers.matchEntity(pages, cur.projects)
     if (entity && entity.id !== cur.poDraftProjectId) {
       data.entity = entity.id
-      add('entity', 'Site', entity.name, nameOf(cur.projects, cur.poDraftProjectId))
+      add('entity', 'Entity', entity.name, nameOf(cur.projects, cur.poDraftProjectId))
     }
     const entityId = entity ? entity.id : cur.poDraftProjectId
     const site = matchers.matchSubProject(pages, cur.subProjects.filter((sp) => sp.project_id === entityId))
@@ -933,7 +933,7 @@ function PurchaseOrdersTab({
             )}
             {locationVisible(r) && (
               <div className="po-detail-meta-item">
-                <span className="po-detail-label">Location</span>
+                <span className="po-detail-label">Site</span>
                 <span className="po-detail-value">{r.sub_projects.name}</span>
               </div>
             )}
@@ -1252,9 +1252,15 @@ function PurchaseOrdersTab({
                         <td>{shownPoNumber(r) || `#${r.id}`}</td>
                       </tr>
                       <tr>
-                        <th>Location</th>
-                        <td>{r.sub_projects?.name || r.projects?.name || '—'}</td>
+                        <th>Entity</th>
+                        <td>{r.projects?.name || '—'}</td>
                       </tr>
+                      {locationVisible(r) && (
+                        <tr>
+                          <th>Site</th>
+                          <td>{r.sub_projects.name}</td>
+                        </tr>
+                      )}
                       <tr>
                         <th>Requisitioner</th>
                         <td>{requisitionerName(users, r) || '—'}</td>
@@ -1852,7 +1858,7 @@ function PurchaseOrdersTab({
               </div>
             )}
             <div>
-              <label htmlFor="po_draft_project">Site</label>
+              <label htmlFor="po_draft_project">Entity</label>
               <select
                 id="po_draft_project"
                 className={poDraftFieldErrors?.project ? 'field-invalid' : ''}
@@ -1862,9 +1868,9 @@ function PurchaseOrdersTab({
                   setPoDraftSubProjectId(null)
                 }}
               >
-                <option value="">Select a site…</option>
+                <option value="">Select an entity…</option>
                 {siteChoices(entitiesAllowedFor(loggedInUser, 'purchase_req', projects))
-                  // a site already on an existing request stays in the list
+                  // an entity already on an existing request stays in the list
                   .concat(projects.filter((p) => p.id === poDraftProjectId && !isEntityAllowed(loggedInUser, 'purchase_req', p.id)))
                   .map((p) => (
                   <option value={p.id} key={p.id}>
@@ -1927,14 +1933,14 @@ function PurchaseOrdersTab({
           {siteNeedsLocation(projects.find((p) => p.id === poDraftProjectId), subProjects) && (
             <div className="field-row" style={{ marginTop: 12 }}>
               <div>
-                <label htmlFor="po_draft_sub_project">Location</label>
+                <label htmlFor="po_draft_sub_project">Site</label>
                 <select
                   id="po_draft_sub_project"
                   className={poDraftFieldErrors?.subProject ? 'field-invalid' : ''}
                   value={poDraftSubProjectId ?? ''}
                   onChange={(e) => setPoDraftSubProjectId(e.target.value ? Number(e.target.value) : null)}
                 >
-                  <option value="">Select a location…</option>
+                  <option value="">Select a site…</option>
                   {availableSubProjects.map((sp) => (
                     <option value={sp.id} key={sp.id}>
                       {sp.name}
@@ -2320,7 +2326,7 @@ function PurchaseOrdersTab({
                   </tr>
                 ) : (
                   poDraftLines.map((line, i) => {
-                    const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this site'
+                    const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this entity'
                     const listed = filterPartsForSearch(parts, line.partSearch)
                     // Only a part that is on the entity's list shows as chosen: one
                     // that isn't (an older request, or the entity was changed) reads
@@ -2631,7 +2637,7 @@ function PurchaseOrdersTab({
               ))}
             </select>
             <select value={poProjectFilter} onChange={(e) => setPoProjectFilter(e.target.value)}>
-              <option value="">All Sites</option>
+              <option value="">All Entities</option>
               {projects.map((p) => (
                 <option value={p.id} key={p.id}>
                   {p.name}
@@ -2705,7 +2711,7 @@ function PurchaseOrdersTab({
                     </FilterTh>
                   )}
                   <FilterTh filters={poFilters} col="entity">
-                    Site
+                    Entity
                   </FilterTh>
                   <FilterTh filters={poFilters} col="vendor">
                     Vendor

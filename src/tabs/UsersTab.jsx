@@ -13,7 +13,7 @@ function EntityAssignmentCell({ projects, assignedIds, onAdd, onRemove }) {
     <div>
       {assignedIds.length === 0 ? (
         <span className="sub" style={{ margin: 0 }}>
-          All sites
+          All entities
         </span>
       ) : (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
@@ -50,7 +50,7 @@ function EntityAssignmentCell({ projects, assignedIds, onAdd, onRemove }) {
       {available.length > 0 && (
         <div style={{ display: 'flex', gap: 6 }}>
           <select value={pendingId} onChange={(e) => setPendingId(e.target.value)} style={{ flex: 1 }}>
-            <option value="">Add site…</option>
+            <option value="">Add entity…</option>
             {available.map((p) => (
               <option value={p.id} key={p.id}>
                 {p.name}
@@ -214,7 +214,7 @@ function UsersTab({
         {adminImportPanelOpen && (
           <div style={{ marginTop: 12 }}>
             <p className="sub" style={{ margin: '0 0 8px' }}>
-              Excel file with one worksheet per category — Users, Vendors, Sites, Locations, Budget
+              Excel file with one worksheet per category — Users, Vendors, Entities, Sites, Budget
               Categories, Budget Sub-Categories — matching the file from "Export All (Excel)". Rows
               matching an existing name update it; anything else is added. New users aren't created
               this way — invite them from the Users section above instead, then re-import to set roles.
@@ -465,12 +465,12 @@ function UsersTab({
 
       <div className="card">
         <div className="card-header">
-          <h2>Site Assignments</h2>
+          <h2>Entity Assignments</h2>
         </div>
         <p className="sub" style={{ margin: '0 0 12px' }}>
           Limits each step of the PO process (creating requests, approving them, issuing POs,
-          matching invoices, approving invoices and payment) to specific sites for the people
-          holding that role. Leave a person's site list empty to allow every site — the
+          matching invoices, approving invoices and payment) to specific entities for the people
+          holding that role. Leave a person's entity list empty to allow every entity — the
           default. Saved together with the Users table above (Save button there).
         </p>
 
@@ -496,7 +496,7 @@ function UsersTab({
                     <thead>
                       <tr className="header-row">
                         <th>Person</th>
-                        <th>Sites (none selected = all)</th>
+                        <th>Entities (none selected = all)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -541,9 +541,9 @@ function UsersTab({
           <div className="card-header">
             <h2>Projects ({programs.length})</h2>
             <p className="sub" style={{ margin: 0 }}>
-              The top layer: every PO belongs to a project. Each project has its own sites, its own budget
+              The top layer: every PO belongs to a project. Each project has its own entities, its own budget
               categories (below) and the email address vendors send invoices to. Spare-parts inventory is only
-              kept for the sites of a project marked "Keeps inventory". Changes here save as you make them.
+              kept for the entities of a project marked "Keeps inventory". Changes here save as you make them.
             </p>
           </div>
           {programs.map((g) => {
@@ -588,14 +588,14 @@ function UsersTab({
                         aria-label={`${g.name} keeps inventory`}
                       />
                       <span className="sub" style={{ margin: 0 }}>
-                        Its sites appear on the inventory screens
+                        Its entities appear on the inventory screens
                       </span>
                     </div>
                   </div>
                 </div>
                 <div style={{ marginTop: 8 }}>
                   <span className="sub" style={{ margin: 0 }}>
-                    Sites ({inProject.length})
+                    Entities ({inProject.length})
                   </span>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, margin: '6px 0' }}>
                     {inProject.length === 0 && (
@@ -622,9 +622,9 @@ function UsersTab({
                       value=""
                       onChange={(e) => e.target.value && handleSetProgramSite(g.id, Number(e.target.value), true)}
                       style={{ maxWidth: 280 }}
-                      aria-label={`Add a site to ${g.name}`}
+                      aria-label={`Add an entity to ${g.name}`}
                     >
-                      <option value="">Add a site…</option>
+                      <option value="">Add an entity…</option>
                       {notIn.map((p) => (
                         <option value={p.id} key={p.id}>
                           {p.name}
@@ -1015,11 +1015,11 @@ function UsersTab({
 
       <div className="card">
         <div className="card-header">
-          <h2>Sites {projects.length ? `(${projects.length})` : ''}</h2>
+          <h2>Entities {projects.length ? `(${projects.length})` : ''}</h2>
         </div>
 
         <div className="add-form" style={{ marginBottom: 16 }}>
-          <label htmlFor="new_project_name">Site Name</label>
+          <label htmlFor="new_project_name">Entity Name</label>
           <div className="field-row">
             <input
               id="new_project_name"
@@ -1049,7 +1049,7 @@ function UsersTab({
           )}
           <div className="form-actions">
             <button className="btn-primary" onClick={handleAddProject} disabled={addingProject}>
-              {addingProject ? 'Adding…' : '+ Add Site'}
+              {addingProject ? 'Adding…' : '+ Add Entity'}
             </button>
           </div>
         </div>
@@ -1072,7 +1072,7 @@ function UsersTab({
               {projects.length === 0 ? (
                 <tr>
                   <td className="empty" colSpan={programs.length > 0 ? 3 : 2}>
-                    No sites yet.
+                    No entities yet.
                   </td>
                 </tr>
               ) : (
@@ -1109,10 +1109,10 @@ function UsersTab({
 
       <div className="card">
         <div className="card-header">
-          <h2>Locations {draftSubProjects.length ? `(${draftSubProjects.length})` : ''}</h2>
+          <h2>Sites {draftSubProjects.length ? `(${draftSubProjects.length})` : ''}</h2>
           <p className="sub" style={{ margin: 0 }}>
-            Individual locations within a Site (e.g. Firelight Solar LP's rooftop locations) — only used
-            when creating Purchase Requests. Spares inventory stays tracked at the Site level.
+            Individual sites within an Entity (e.g. Firelight Solar LP's rooftops) — only used
+            when creating Purchase Requests. Spares inventory stays tracked at the Entity level.
           </p>
         </div>
 
@@ -1125,7 +1125,7 @@ function UsersTab({
             </colgroup>
             <thead>
               <tr className="header-row">
-                <th>Site</th>
+                <th>Entity</th>
                 <th>Name</th>
                 <th className="col-last"></th>
               </tr>
@@ -1134,7 +1134,7 @@ function UsersTab({
               {draftSubProjects.length === 0 ? (
                 <tr>
                   <td className="empty" colSpan={3}>
-                    No locations yet.
+                    No sites yet.
                   </td>
                 </tr>
               ) : (
@@ -1184,7 +1184,7 @@ function UsersTab({
             onClick={addDraftSubProjectRow}
             disabled={savingSubProjects}
           >
-            + Add Project
+            + Add Site
           </button>
         </div>
       </div>

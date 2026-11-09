@@ -511,7 +511,7 @@ function App() {
     const { data, error } = await supabase.from('projects').select('*').order('name', { ascending: true })
     if (error) {
       console.error(error)
-      setProjectStatus({ ok: false, msg: 'Could not load sites — check the console for details.' })
+      setProjectStatus({ ok: false, msg: 'Could not load entities — check the console for details.' })
       return
     }
     setProjects(data ?? [])
@@ -584,7 +584,7 @@ function App() {
 
     if (error) {
       console.error(error)
-      setProjectStatus({ ok: false, msg: 'Could not load the site sheet — check the console for details.' })
+      setProjectStatus({ ok: false, msg: 'Could not load the required parts — check the console for details.' })
     } else {
       const sorted = (data ?? []).slice().sort((a, b) => (a.parts?.gcs_id ?? 0) - (b.parts?.gcs_id ?? 0))
       setProjectItems(sorted)
@@ -1297,8 +1297,8 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
-  // 'Entities' and 'Projects' are what the Sites and Locations sheets used to be called; files exported before
-  // the rename still import.
+  // The sheets are Entities and Sites. Older exports called them Sites and Locations (previous round), or Entities and
+  // Projects (before that); those still import (see handleAdminImportFileChange for how "Sites" is told apart).
   const ADMIN_SHEET_NAMES = [
     'Users',
     'Vendors',
@@ -1347,13 +1347,13 @@ function App() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vendorRows), 'Vendors')
 
     const projectRows = projects.map((p) => ({ Name: p.name, 'PO Code': p.project_code || '' }))
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(projectRows), 'Sites')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(projectRows), 'Entities')
 
     const subProjectRows = subProjects.map((sp) => ({
-      Site: projects.find((p) => p.id === sp.project_id)?.name || '',
+      Entity: projects.find((p) => p.id === sp.project_id)?.name || '',
       Name: sp.name,
     }))
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(subProjectRows), 'Locations')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(subProjectRows), 'Sites')
 
     // With projects set up, a category belongs to one, and the same name can be on several.
     const categoryRows = budgetCategories.map((c) => ({ ...(programsReady ? { Project: programNameOf(c.program_id) } : {}), Name: c.name }))
@@ -1395,7 +1395,7 @@ function App() {
 
     if (!wb.SheetNames.some((n) => ADMIN_SHEET_NAMES.includes(n))) {
       setAdminImportErrors([
-        'No recognized sheet names found — expected one or more of: Users, Vendors, Sites, Locations, Budget Categories, Budget Sub-Categories.',
+        'No recognized sheet names found — expected one or more of: Users, Vendors, Entities, Sites, Budget Categories, Budget Sub-Categories.',
       ])
       return
     }
@@ -1416,7 +1416,6 @@ function App() {
     }
     const categoryKey = (programId, name) => `${programId ?? ''}|${name.toLowerCase()}`
     const seenCategoryKeys = new Set(budgetCategories.map((c) => categoryKey(c.program_id, c.name)))
-    const sheetOrLegacy = (name, legacy) => (wb.Sheets[name] ? name : legacy)
     const seenEntityNames = new Set(projects.map((p) => p.name.toLowerCase()))
 
     sheetRows('Users').forEach((row, i) => {
@@ -1473,13 +1472,25 @@ function App() {
       })
     })
 
-    sheetRows(sheetOrLegacy('Sites', 'Entities')).forEach((row) => {
+    // "Sites" meant the entities in the previous round's files and means the sub-locations now. The new one has an
+    // Entity column (naming the entity each site belongs to); the old one never did.
+    const sheetHasColumn = (name, col) => {
+      const ws = wb.Sheets[name]
+      if (!ws) return false
+      const head = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })[0] || []
+      return head.some((h) => String(h).trim().toLowerCase() === col.toLowerCase())
+    }
+    const entitySheet = wb.Sheets['Entities'] ? 'Entities' : wb.Sheets['Sites'] && !sheetHasColumn('Sites', 'Entity') ? 'Sites' : null
+    const siteSheet =
+      wb.Sheets['Sites'] && sheetHasColumn('Sites', 'Entity') ? 'Sites' : wb.Sheets['Locations'] ? 'Locations' : wb.Sheets['Projects'] ? 'Projects' : null
+
+    sheetRows(entitySheet).forEach((row) => {
       const name = String(getCell(row, 'Name') || '').trim()
       if (!name) return
       const existing = projects.find((p) => p.name.toLowerCase() === name.toLowerCase())
       if (!existing) seenEntityNames.add(name.toLowerCase())
       rows.push({
-        section: 'Site',
+        section: 'Entity',
         name,
         action: existing ? 'update' : 'insert',
         existingId: existing?.id ?? null,
@@ -1487,17 +1498,17 @@ function App() {
       })
     })
 
-    sheetRows(sheetOrLegacy('Locations', 'Projects')).forEach((row, i) => {
+    sheetRows(siteSheet).forEach((row, i) => {
       const rowNum = i + 2
       const name = String(getCell(row, 'Name') || '').trim()
       if (!name) return
-      const entityName = String(getCell(row, 'Site') ?? getCell(row, 'Entity') ?? '').trim()
+      const entityName = String(getCell(row, 'Entity') ?? getCell(row, 'Site') ?? '').trim()
       if (!entityName) {
-        errors.push(`Locations row ${rowNum}: "${name}" needs a Site.`)
+        errors.push(`Sites row ${rowNum}: "${name}" needs an Entity.`)
         return
       }
       if (!seenEntityNames.has(entityName.toLowerCase())) {
-        errors.push(`Locations row ${rowNum}: Site "${entityName}" not found for location "${name}".`)
+        errors.push(`Sites row ${rowNum}: Entity "${entityName}" not found for site "${name}".`)
         return
       }
       const existing = subProjects.find(
@@ -1506,7 +1517,7 @@ function App() {
           projects.find((p) => p.id === sp.project_id)?.name.toLowerCase() === entityName.toLowerCase()
       )
       rows.push({
-        section: 'Location',
+        section: 'Site',
         name,
         action: existing ? 'update' : 'insert',
         existingId: existing?.id ?? null,
@@ -1591,7 +1602,7 @@ function App() {
       }
 
       const entityNameToId = new Map(projects.map((p) => [p.name.toLowerCase(), p.id]))
-      for (const row of byType('Site')) {
+      for (const row of byType('Entity')) {
         if (row.action === 'update') {
           const { error } = await supabase
             .from('projects')
@@ -1610,7 +1621,7 @@ function App() {
         }
       }
 
-      for (const row of byType('Location')) {
+      for (const row of byType('Site')) {
         const entityId = entityNameToId.get(row.data.entityName.toLowerCase())
         if (row.action === 'update') {
           const { error } = await supabase
@@ -2373,11 +2384,11 @@ function App() {
 
   async function handleCreatePurchaseRequest() {
     if (!canCreatePurchaseRequests(loggedInUserWithScopes, poDraftProjectId)) {
-      flashPoStatus("You can only create purchase requests for the sites you're assigned to.", false)
+      flashPoStatus("You can only create purchase requests for the entities you're assigned to.", false)
       return
     }
     const partLines = poDraftLines.filter((l) => l.line_type === 'part')
-    const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this site'
+    const entityName = projects.find((p) => p.id === poDraftProjectId)?.name || 'this entity'
     const flagLines = (lines, message) => {
       setPoDraftFieldErrors({ incompleteLines: lines.map((l) => l._tempId) })
       flashPoStatus(message, false)
@@ -2457,7 +2468,7 @@ function App() {
         errors.program
           ? 'Choose the project this request is for.'
           : errors.subProject
-          ? 'Select which location this request is for.'
+          ? 'Select which site this request is for.'
           : errors.budgetCategory
           ? 'Choose a budget category before saving.'
           : 'Fill in the highlighted fields before saving.',
@@ -2589,7 +2600,7 @@ function App() {
             changeLines.push(`Project: ${programName(existing.program_id)} → ${programName(poDraftProgramId)}`)
           }
           if (existing.project_id !== newValues.project_id) {
-            changeLines.push(`Site: ${projectName(existing.project_id)} → ${projectName(newValues.project_id)}`)
+            changeLines.push(`Entity: ${projectName(existing.project_id)} → ${projectName(newValues.project_id)}`)
           }
           if (existing.vendor_id !== newValues.vendor_id) {
             changeLines.push(`Vendor: ${vendorName(existing.vendor_id)} → ${vendorName(newValues.vendor_id)}`)
@@ -2874,7 +2885,7 @@ function App() {
   // role for the request's entity.
   function approvalBlockMessage(request) {
     if (canApproveRequests(loggedInUserWithScopes, request)) return null
-    return "You can only act on requests for the sites you're approving for."
+    return "You can only act on requests for the entities you're approving for."
   }
 
   async function handleApprovePurchaseRequest(request) {
@@ -4544,11 +4555,11 @@ function App() {
     const newRows = draftSubProjects.filter((sp) => !sp._existing)
     for (const row of newRows) {
       if (!(row.name || '').trim()) {
-        flashUsersStatus('Every new location needs a name.', false)
+        flashUsersStatus('Every new site needs a name.', false)
         return
       }
       if (!row.project_id) {
-        flashUsersStatus('Every new location needs a site.', false)
+        flashUsersStatus('Every new site needs an entity.', false)
         return
       }
     }
@@ -4928,13 +4939,13 @@ function App() {
 
   async function handleAddProject() {
     if (!newProjectName.trim()) {
-      flashUsersStatus('Site name is required.', false)
+      flashUsersStatus('Entity name is required.', false)
       return
     }
     setAddingProject(true)
     try {
       if (programsReady && newProjectPrograms.length === 0) {
-        flashUsersStatus('Choose at least one project for the new site.', false)
+        flashUsersStatus('Choose at least one project for the new entity.', false)
         setAddingProject(false)
         return
       }
@@ -4947,11 +4958,11 @@ function App() {
         if (linkError) throw linkError
       }
       setNewProjectName('')
-      flashUsersStatus('Site added.', true)
+      flashUsersStatus('Entity added.', true)
       await Promise.all([loadProjects(), loadPrograms()])
     } catch (error) {
       console.error(error)
-      flashUsersStatus('Could not add site — check the console for details.', false)
+      flashUsersStatus('Could not add entity — check the console for details.', false)
     } finally {
       setAddingProject(false)
     }
@@ -4978,7 +4989,7 @@ function App() {
       : await supabase.from('program_sites').delete().eq('program_id', programId).eq('project_id', projectId)
     if (error) {
       console.error(error)
-      flashUsersStatus("Could not change the project's sites — check the console for details.", false)
+      flashUsersStatus("Could not change the project's entities — check the console for details.", false)
     }
     await loadPrograms()
   }
@@ -5034,7 +5045,7 @@ function App() {
       .eq('id', projectId)
     if (error) {
       console.error(error)
-      flashUsersStatus('Could not save site code — check the console for details.', false)
+      flashUsersStatus('Could not save entity code — check the console for details.', false)
       await loadProjects()
     }
   }

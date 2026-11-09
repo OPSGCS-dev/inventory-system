@@ -4,7 +4,7 @@ import { buildBudgetReport, budgetYears, emptyAmounts, poSpend, remainingOf } fr
 import { downloadCsv } from '../stockUtils'
 import { formatAmountWhole, formatDate, formatMoney, poStatusLabel } from '../utils'
 
-// Budget against spending, per site: what each budget category was given for the year, what the issued POs
+// Budget against spending, per entity: what each budget category was given for the year, what the issued POs
 // commit, what has been invoiced (invoices approved for payment) and what is left. The sums are in
 // src/budget.js; budgets are edited here by an admin and saved to budget_amounts.
 
@@ -73,7 +73,7 @@ function BudgetTab({
   const years = useMemo(() => budgetYears(budgetAmounts, purchaseRequests), [budgetAmounts, purchaseRequests])
 
   const visibleRows = report.rows.filter((r) => showSubs || r.level !== 'sub')
-  const blocks = [{ id: 'all', name: 'All sites' }, ...report.sites.map((s) => ({ id: s.id, name: s.name }))]
+  const blocks = [{ id: 'all', name: 'All entities' }, ...report.sites.map((s) => ({ id: s.id, name: s.name }))]
   const categoryRows = report.rows.filter((r) => r.level === 'category')
 
   function flash(ok, msg) {
@@ -108,7 +108,7 @@ function BudgetTab({
         out.push({
           Year: year,
           Project: programs.find((g) => g.id === activeProgramId)?.name || '',
-          Site: s.name,
+          Entity: s.name,
           'Budget Category': row.level === 'sub' ? budgetCategories.find((c) => c.id === row.categoryId)?.name || '' : row.label,
           'Sub-category': row.level === 'sub' ? row.label : '',
           Budget: a.hasBudget ? a.budget.toFixed(2) : '',
@@ -253,7 +253,7 @@ function BudgetTab({
           {!editing && (
             <>
               <span className="budget-view-switch">
-                <button className={'sub-tab-btn' + (view === 'detail' ? ' active' : '')} onClick={() => setView('detail')}>By site</button>
+                <button className={'sub-tab-btn' + (view === 'detail' ? ' active' : '')} onClick={() => setView('detail')}>By entity</button>
                 <button className={'sub-tab-btn' + (view === 'summary' ? ' active' : '')} onClick={() => { setView('summary'); setDrill(null) }}>Remaining summary</button>
               </span>
               {view === 'detail' && (
@@ -274,7 +274,7 @@ function BudgetTab({
         <>
           <p className="muted budget-note">
             Editing the {year} budget{activeProgramId ? ` for ${programs.find((g) => g.id === activeProgramId)?.name}` : ''}. Leave an
-            amount empty for "not budgeted". A site's column disappears again if all its amounts are emptied.
+            amount empty for "not budgeted". An entity's column disappears again if all its amounts are emptied.
           </p>
           <div className="edit-toolbar">
             <button className="btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save budget'}</button>
@@ -284,9 +284,9 @@ function BudgetTab({
               <select
                 value=""
                 onChange={(e) => e.target.value && setExtraSiteIds((ids) => [...ids, Number(e.target.value)])}
-                aria-label="Add a site to this budget"
+                aria-label="Add an entity to this budget"
               >
-                <option value="">Add a site…</option>
+                <option value="">Add an entity…</option>
                 {siteChoices.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
@@ -424,7 +424,7 @@ function BudgetTab({
               </tr>
             </thead>
             <tbody>
-              {[...report.sites.map((s) => ({ id: s.id, name: s.name })), { id: 'all', name: 'All sites' }].map((b) => (
+              {[...report.sites.map((s) => ({ id: s.id, name: s.name })), { id: 'all', name: 'All entities' }].map((b) => (
                 <tr key={b.id} className={b.id === 'all' ? 'budget-row-total' : ''}>
                   <th className="budget-cat-col">{b.name}</th>
                   {[...categoryRows.map((r) => (b.id === 'all' ? r.total : r.cells[b.id])), report.totals[b.id]].map((a, i) => {
@@ -487,7 +487,7 @@ function BudgetTab({
 
       {!editing && report.unbudgeted.length > 0 && (
         <p className="muted budget-note">
-          Not in the table, because the site has no {year} budget:{' '}
+          Not in the table, because the entity has no {year} budget:{' '}
           {report.unbudgeted
             .map((u) => `${u.name} — ${formatMoney(u.pos)} on ${u.count} PO${u.count === 1 ? '' : 's'}`)
             .join('; ')}

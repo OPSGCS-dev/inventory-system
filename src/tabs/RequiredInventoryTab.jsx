@@ -29,7 +29,7 @@ function RequiredInventoryTab({
         <div className="project-row">
           <div className="project-select-wrap">
             <label htmlFor="project_select" className="project-select-label">
-              Site
+              Entity
             </label>
             <select
               id="project_select"
@@ -138,7 +138,7 @@ function RequiredInventoryTab({
                       <td className="empty" colSpan={6}>
                         {projectViewFilter
                           ? 'No parts match your filter.'
-                          : 'No required parts yet for this site.'}
+                          : 'No required parts yet for this entity.'}
                       </td>
                     </tr>
                   ) : (
@@ -173,8 +173,8 @@ function RequiredInventoryTab({
             </h2>
             <p className="sub" style={{ margin: 0 }}>
               Check a part as required and set the target stock level. Mark Shared if this
-              site's need can be met from its own stock, another site's stock, or Firelight Operations —
-              unshared rows only count stock physically at this site. Only unshared rows count
+              entity's need can be met from its own stock, another entity's stock, or Firelight Operations —
+              unshared rows only count stock physically on this entity's on-site shelf. Only unshared rows count
               toward the total Target shown on Inventory On Hand.
             </p>
           </div>

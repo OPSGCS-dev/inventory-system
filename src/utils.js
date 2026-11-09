@@ -520,14 +520,14 @@ export function lineCountsInStock(line) {
 // parts have been received yet. Null for service lines.
 export function describeLineInventory(line, entityName, received) {
   if (line.line_type !== 'part') return null
-  const where = entityName ? `${entityName}'s inventory` : "the site's inventory"
+  const where = entityName ? `${entityName}'s inventory` : "the entity's inventory"
   switch (line.inventory_action) {
     case 'used_immediately':
       return 'Used immediately — not added to inventory'
     case 'consumable':
       return 'Consumable — not tracked in inventory'
     case 'transfer':
-      return 'Stock transfer between sites — the stock already moved when the transfer was saved'
+      return 'Stock transfer between entities — the stock already moved when the transfer was saved'
     case 'add_new':
     case 'not_tracked':
       return 'Uses an older inventory option that no longer exists — edit the request and choose Spare, Used immediately or Consumable'
@@ -1159,14 +1159,14 @@ export function canLinkPos(user) {
   )
 }
 
-// Whether the PO page and list show a Location (the optional sub_projects row under its site, e.g. one of Firelight
-// Solar's rooftops). A location that is only the site again (a ground-mount site) isn't asked for and isn't shown
-// there; it is still stored on the PO, and the PO document (print view, PDF) always carries a Location row.
+// Whether the PO page and list show a Site (the optional sub_projects row under its entity, e.g. one of Firelight
+// Solar's rooftops). A site that is only the entity again (a ground-mount entity) isn't asked for and isn't shown
+// there; it is still stored on the PO, and the PO document (print view, PDF) carries a Site row only when it is shown.
 export function locationVisible(request) {
   return Boolean(request?.sub_projects?.name) && !locationIsSiteItself(request.sub_projects, request.projects)
 }
 
-// A location that is just the site again (a ground-mount site's one location, "Alfred" under "SunE Alfred LP"):
+// A site that is just the entity again (a ground-mount entity's one site, "Alfred" under "SunE Alfred LP"):
 // the names match once "SunE", "LP", "Solar", punctuation and spacing are ignored and "Highway" is read as "Hwy".
 const siteNameCore = (name) =>
   String(name || '')
@@ -1179,8 +1179,8 @@ export function locationIsSiteItself(location, site) {
   return a !== '' && a === siteNameCore(site?.name)
 }
 
-// Does a site ask which location a PO is for? Only when it has one that isn't the site itself (Firelight Solar's
-// rooftops do; a ground-mount site doesn't).
+// Does an entity ask which site a PO is for? Only when it has one that isn't the entity itself (Firelight Solar's
+// rooftops do; a ground-mount entity doesn't).
 export function siteNeedsLocation(site, subProjects) {
   return (subProjects || []).some((sp) => sp.project_id === site?.id && !locationIsSiteItself(sp, site))
 }
@@ -1296,8 +1296,8 @@ export function buildPoMailto(request) {
   const bodyLines = [
     `Purchase Order ${poLabel}`,
     ...(request.program_name ? [`Project: ${request.program_name}`] : []),
-    `Site: ${request.projects?.name || '—'}`,
-    ...(request.sub_projects?.name ? [`Location: ${request.sub_projects.name}`] : []),
+    `Entity: ${request.projects?.name || '—'}`,
+    ...(request.sub_projects?.name ? [`Site: ${request.sub_projects.name}`] : []),
     ...(request?.vendors?.address ? [`Ship to / Address: ${request.vendors.address}`] : []),
     '',
     'Line Items:',

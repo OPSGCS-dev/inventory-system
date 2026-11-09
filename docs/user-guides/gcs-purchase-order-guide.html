@@ -148,17 +148,17 @@ details[open] summary { margin-bottom: 6px; }
   <p class="small">Two more can happen at the side: <span class="status-pill s-bad">Rejected</span> (an approver sent it back) and <span class="status-pill s-bad">Voided</span> (cancelled by an admin, kept on file). <b>In Progress</b> means the PO is issued but the work is not all done and paid; <b>Paid</b> means the work is done and the payment status is Paid, but nobody has closed it yet.</p>
 
   <h3>Who does what: the roles</h3>
-  <p>Roles are given to each person by an admin (Admin tab → Users). A person can hold several. Some roles can be limited to particular sites, in which case you only see and act on those sites.</p>
+  <p>Roles are given to each person by an admin (Admin tab → Users). A person can hold several. Some roles can be limited to particular entities, in which case you only see and act on those entities.</p>
   <div class="tablewrap"><table>
     <thead><tr><th>Tag in this guide</th><th>Role name in the Users tab</th><th>What the role is for</th></tr></thead>
     <tbody>
-      <tr><td><span class="role r-req">Requisitioner</span></td><td>Purchase Rec</td><td>Raises purchase requests. <b>Whoever raised a PO stays its requisitioner</b>: they confirm the parts or work, review its invoices, and close it. Limited to your assigned sites.</td></tr>
-      <tr><td><span class="role r-appr">Approver</span></td><td>Purchase Rec Approval</td><td>Approves, holds or rejects submitted requests. Can be limited to sites.</td></tr>
-      <tr><td><span class="role r-issue">PO Issuer</span></td><td>PO Issue</td><td>Turns an approved request into a numbered PO and sends it to the vendor. Can be limited to sites.</td></tr>
+      <tr><td><span class="role r-req">Requisitioner</span></td><td>Purchase Rec</td><td>Raises purchase requests. <b>Whoever raised a PO stays its requisitioner</b>: they confirm the parts or work, review its invoices, and close it. Limited to your assigned entities.</td></tr>
+      <tr><td><span class="role r-appr">Approver</span></td><td>Purchase Rec Approval</td><td>Approves, holds or rejects submitted requests. Can be limited to entities.</td></tr>
+      <tr><td><span class="role r-issue">PO Issuer</span></td><td>PO Issue</td><td>Turns an approved request into a numbered PO and sends it to the vendor. Can be limited to entities.</td></tr>
       <tr><td><span class="role r-vend">Vendor Approver</span></td><td>Vendor Approval</td><td>Approves or rejects new vendors people have asked for. Company-wide.</td></tr>
-      <tr><td><span class="role r-match">Invoice Matching</span></td><td>Invoice Matching</td><td>Accounting's first step: adds invoices and matches each to a receipt. Can be limited to sites.</td></tr>
-      <tr><td><span class="role r-sup">Payment Approval</span></td><td>Payment Approval</td><td>The supervisor who approves invoices for payment, in batches. Can be limited to sites.</td></tr>
-      <tr><td><span class="role r-pay">Payment</span></td><td>Payment</td><td>Accounting's last step: pays outside the system, then confirms each invoice paid here. Can be limited to sites.</td></tr>
+      <tr><td><span class="role r-match">Invoice Matching</span></td><td>Invoice Matching</td><td>Accounting's first step: adds invoices and matches each to a receipt. Can be limited to entities.</td></tr>
+      <tr><td><span class="role r-sup">Payment Approval</span></td><td>Payment Approval</td><td>The supervisor who approves invoices for payment, in batches. Can be limited to entities.</td></tr>
+      <tr><td><span class="role r-pay">Payment</span></td><td>Payment</td><td>Accounting's last step: pays outside the system, then confirms each invoice paid here. Can be limited to entities.</td></tr>
       <tr><td><span class="role r-admin">Admin</span></td><td>Admin</td><td>Manages users, vendors, categories and settings. Admin does <b>not</b> automatically hold the roles above, but can stand in at a few steps (shown below) and is the only one who can void a PO.</td></tr>
       <tr><td><span class="role r-all">Vendor logon</span></td><td>(set up from the Vendors table)</td><td>A vendor's own login. It only sees the Purchase Orders tab and only that vendor's issued POs.</td></tr>
     </tbody>
@@ -166,12 +166,12 @@ details[open] summary { margin-bottom: 6px; }
 
   <h3>Finding your way around the Purchase Orders tab</h3>
   <ul>
-    <li><b>All POs</b> is the full list. Use the status filter (it has <span class="field">Open (not closed)</span>), the site filter, the From/To date boxes, and the ▾ on each column heading for Excel-style filters. The search box at the top right of the page finds a PO by number or text.</li>
+    <li><b>All POs</b> is the full list. Use the status filter (it has <span class="field">Open (not closed)</span>), the entity filter, the From/To date boxes, and the ▾ on each column heading for Excel-style filters. The search box at the top right of the page finds a PO by number or text.</li>
     <li>Buttons beside it show only the work waiting for <i>you</i>, depending on your roles: <span class="btn">My POs for Approval</span>, <span class="btn">My POs to Issue</span>, <span class="btn">Vendors to Approve</span>, <span class="btn">My Invoices to Review</span>, <span class="btn">My Invoices for Payment Approval</span>, <span class="btn">My Invoices to Pay</span>.</li>
     <li>A number badge on the <span class="btn">Purchase Orders</span> tab and on those buttons counts what is waiting on you.</li>
     <li>Click a PO to open it. <span class="btn">← Back to Purchase Orders</span> returns to the list. <span class="btn">View Activity</span> at the bottom of a PO shows who did what and when.</li>
   </ul>
-  <div class="callout"><b class="lbl">Dates, money and numbers</b><p>Dates are always yyyy/mm/dd and times are 24-hour. Money always has commas ($1,234.50). A PO number looks like <code>PO-03-26-007</code>: the site's code, the year, then a running number for that site and year.</p></div>
+  <div class="callout"><b class="lbl">Dates, money and numbers</b><p>Dates are always yyyy/mm/dd and times are 24-hour. Money always has commas ($1,234.50). A PO number looks like <code>PO-03-26-007</code>: the entity's code, the year, then a running number for that entity and year.</p></div>
 </section>
 
 <section id="s1">
@@ -200,17 +200,17 @@ details[open] summary { margin-bottom: 6px; }
 <section id="s2">
   <h2><span class="num">2</span> Draft the purchase request <span class="status-pill s-draft">Draft</span></h2>
   <div class="stage-meta"><span><span class="role r-req">Requisitioner</span> does this step</span><span>Raising a request from a ticket does the same thing with some fields pre-filled (see the Ticketing guide)</span></div>
-  <p>On the Purchase Orders tab press <span class="btn">+ New Request</span>. You can only raise requests for the sites you are assigned to; if you try another site you will see <i>"You can only create purchase requests for the sites you're assigned to."</i></p>
+  <p>On the Purchase Orders tab press <span class="btn">+ New Request</span>. You can only raise requests for the entities you are assigned to; if you try another entity you will see <i>"You can only create purchase requests for the entities you're assigned to."</i></p>
 
   <h3>The header</h3>
   <div class="tablewrap"><table>
     <thead><tr><th>Field</th><th>What to enter</th></tr></thead>
     <tbody>
-      <tr><td class="field">Project *</td><td>Regular O&amp;M, Repower - Phase 1 or Repower - Phase 2. Choose it first: it filters the Site and Budget Category lists, and it sets the invoice email.</td></tr>
-      <tr><td class="field">Site</td><td>The solar site company the money belongs to.</td></tr>
+      <tr><td class="field">Project *</td><td>Regular O&amp;M, Repower - Phase 1 or Repower - Phase 2. Choose it first: it filters the Entity and Budget Category lists, and it sets the invoice email.</td></tr>
+      <tr><td class="field">Entity *</td><td>The legal owner (an LP, such as SunE Alfred LP) the money belongs to.</td></tr>
       <tr><td class="field">Vendor</td><td>See step 1.</td></tr>
-      <tr><td class="field">Location</td><td>Only appears for sites that have separate locations (for example Firelight Solar's rooftops), and is then required. A site that has just one location named after itself never asks.</td></tr>
-      <tr><td class="field">Description</td><td>A short summary shown in the PO list, e.g. "Inverter fans for Site 4".</td></tr>
+      <tr><td class="field">Site</td><td>Only appears for an entity that has separate sites (today, Firelight Solar's rooftops), and is then required. An entity with no sites never asks.</td></tr>
+      <tr><td class="field">Description</td><td>A short summary shown in the PO list, e.g. "Inverter fans for Alfred".</td></tr>
       <tr><td class="field">Notes</td><td>Anything the approver should know.</td></tr>
       <tr><td class="field">Budget Category *</td><td>Required. Also pick a <span class="field">Sub-Category</span> if there is one. The Budget tab reports spending against these.</td></tr>
       <tr><td class="field">Vendor Quote #</td><td>The vendor's own quote number, if there is one.</td></tr>
@@ -230,17 +230,17 @@ details[open] summary { margin-bottom: 6px; }
     <li><b>Service line:</b> a description of the work.</li>
     <li><b>Part line:</b> you must say what happens to it in inventory. The options are:
       <ul>
-        <li><b>Spare</b>: a part from the site's inventory list. When it is received it is <b>added to stock</b>.</li>
+        <li><b>Spare</b>: a part from the entity's inventory list. When it is received it is <b>added to stock</b>.</li>
         <li><b>Used immediately</b>: also a listed part, but it goes straight into a job and is never added to stock.</li>
         <li><b>Consumable</b>: not tracked in inventory (free text). Each unit is capped at a dollar limit an admin sets, shown on the line. A part dearer than the cap has to be a real inventory part or go in a service line.</li>
       </ul>
-      Spare and Used parts are searched by GCS P/N, Part ID, manufacturer P/N or description, and can only be parts on <b>that site's Required Inventory list</b>. To order a part the site does not list, an inventory editor adds it to the list first.
+      Spare and Used parts are searched by GCS P/N, Part ID, manufacturer P/N or description, and can only be parts on <b>that entity's Required Inventory list</b>. To order a part the entity does not list, an inventory editor adds it to the list first.
     </li>
   </ul>
 
   <h3>Saving</h3>
-  <p>Press <span class="btn">Save Draft</span>. The required items are the Project, Site, Vendor, Budget Category, at least one line, and a Location where the site has locations. The ones you missed are outlined in red. A draft carries a <b>DRAFT</b> watermark on its printed view. A draft can be edited with <span class="btn">Edit Draft</span> and deleted by someone who can raise requests; <b>only drafts can be deleted</b>. Anything later is voided instead.</p>
-  <div class="callout warn"><b class="lbl">Check before you save</b><p>A part line left without a choice, a consumable over its limit, or a spare that is not on the site's list will stop the save and be highlighted. Fix the highlighted line and save again.</p></div>
+  <p>Press <span class="btn">Save Draft</span>. The required items are the Project, Entity, Vendor, Budget Category, at least one line, and a Site where the entity has sites. The ones you missed are outlined in red. A draft carries a <b>DRAFT</b> watermark on its printed view. A draft can be edited with <span class="btn">Edit Draft</span> and deleted by someone who can raise requests; <b>only drafts can be deleted</b>. Anything later is voided instead.</p>
+  <div class="callout warn"><b class="lbl">Check before you save</b><p>A part line left without a choice, a consumable over its limit, or a spare that is not on the entity's list will stop the save and be highlighted. Fix the highlighted line and save again.</p></div>
 </section>
 
 <section id="s3">
@@ -250,7 +250,7 @@ details[open] summary { margin-bottom: 6px; }
     <ul>
       <li>Open the draft and press <span class="btn">Submit</span>. It becomes <b>Requested</b>. Nothing goes to the vendor yet.</li>
       <li>You can still change it with <span class="btn">Edit Request</span> while it is Requested (only you or an admin). This is how you fix something an approver put on hold for.</li>
-      <li>If you hold Purchase Rec but have no permission for that site, Submit is disabled and says so.</li>
+      <li>If you hold Purchase Rec but have no permission for that entity, Submit is disabled and says so.</li>
     </ul>
   </div></div>
 </section>
@@ -264,7 +264,7 @@ details[open] summary { margin-bottom: 6px; }
       <li><span class="btn">Approve</span>: the request becomes <b>Approved</b> and your name and the date go on the PO. Add your signature once under <span class="btn">My Signature</span> in the page header so it prints on every PO you approve.</li>
       <li><span class="btn">Hold</span>: parks it, with an optional reason. It is still Requested but marked on hold, so the requisitioner can fix it. Use <span class="btn">Resume</span> to bring it back.</li>
       <li><span class="btn">Reject</span>: needs a reason, which the requisitioner sees. The request becomes <b>Rejected</b>.</li>
-      <li>You can only act on requests for the sites you are approving for. You can approve a request you raised yourself.</li>
+      <li>You can only act on requests for the entities you are approving for. You can approve a request you raised yourself.</li>
       <li>Approval is blocked while the vendor is pending, rejected or deactivated, and for any part line that uses an old option that no longer exists (it asks the requisitioner to choose Spare, Used immediately or Consumable).</li>
     </ul>
   </div></div>
@@ -284,10 +284,10 @@ details[open] summary { margin-bottom: 6px; }
     <ol class="steps">
       <li>Open the approved request and press <span class="btn">Issue PO</span>. The page works out the next PO number (for example <code>PO-03-26-007</code>) and asks <i>Assign PO number …?</i></li>
       <li>Press <span class="btn">Confirm PO</span>. The request becomes <b>PO Issued</b>. It is blocked if the vendor is not approved.</li>
-      <li>Send it to the vendor. <span class="btn">Print PO</span> and <span class="btn">Download PDF</span> make the document. <span class="btn">Email Vendor</span> downloads a ready-to-send email draft (with the PDF) addressed to the vendor, with the site in the subject. It is only offered once the PO has a number and the vendor has an email on file.</li>
+      <li>Send it to the vendor. <span class="btn">Print PO</span> and <span class="btn">Download PDF</span> make the document. <span class="btn">Email Vendor</span> downloads a ready-to-send email draft (with the PDF) addressed to the vendor, with the entity in the subject. It is only offered once the PO has a number and the vendor has an email on file.</li>
       <li>The PO then shows who has told the vendor: a green <b>Vendor contacted</b> (with who, when, and how) or an amber <b>Not contacted</b>. Pressing <span class="btn">Email Vendor</span> sets it the first time. If you called or emailed from your own mail, press <span class="btn">Mark vendor contacted</span>. <span class="btn">Clear contacted</span> undoes it.</li>
     </ol>
-    <p class="small">The printed PO has the same layout for every site: the header lists the Project, Site, Location and Requisitioner, the line items, the approver's signature and the invoice email address.</p>
+    <p class="small">The printed PO has the same layout for every entity: the header lists the Project, Entity and Requisitioner (and the Site, only when one is saved on the PO), the line items, the approver's signature and the invoice email address.</p>
   </div></div>
   <div class="rolebox r-req"><div class="who"><span class="role r-req">Requisitioner</span></div><div>
     <p>From here the PO is yours to track. You will confirm the parts or work in step 6, review invoices in step 8, and close it in step 11.</p>
@@ -312,7 +312,7 @@ details[open] summary { margin-bottom: 6px; }
     <ul>
       <li>Only <b>you</b>, the person who raised the PO, can change these, and only while the PO is issued.</li>
       <li>Add proof under <span class="field">Receipts &amp; Invoices</span> → <span class="field">Add Receipt</span>: a photo or PDF of what arrived (a parts photo, or a service report for work). Accounting can add receipts too.</li>
-      <li><b>When you set Parts Status to Received</b> and the PO has spare parts, a box asks <i>where the units are</i>. Choose Oshawa, Barn, Office, or the site's own shelf (if the site keeps parts on a shelf) and press <span class="btn">Mark Received</span>. The spare units are added to that site's count at the place you chose. There is no default: <span class="btn">Mark Received</span> stays off until you choose.</li>
+      <li><b>When you set Parts Status to Received</b> and the PO has spare parts, a box asks <i>where the units are</i>. Choose Oshawa, Barn, Office, or the entity's on-site shelf (if the entity keeps parts on a shelf) and press <span class="btn">Mark Received</span>. The spare units are added to that entity's count at the place you chose. There is no default: <span class="btn">Mark Received</span> stays off until you choose.</li>
       <li>Setting Received only adds the units the <b>first</b> time. Used-immediately parts, consumables and services never add to stock.</li>
       <li>If some of the order arrived, use <b>Partially Received</b> and set Received when the last of it is in. Stock is added once, at Received, for the whole PO.</li>
     </ul>
@@ -360,7 +360,7 @@ details[open] summary { margin-bottom: 6px; }
       <li><span class="btn">Approve</span>: it moves on to payment approval. You can <b>Undo</b> that while the supervisor has not acted on it.</li>
       <li><span class="btn">Hold</span>: pause it with a reason (required) while you check something. You cannot approve a held invoice until you press <span class="btn">Release</span>. Held invoices do not count in the badges.</li>
       <li><span class="btn">Send Back</span>: returns it to accounting with a reason (required), clearing any hold.</li>
-      <li><b>If accounting flagged it "Over the PO":</b> there is <b>no Approve, no Hold and no Send Back</b>. The only button is <span class="btn">Void &amp; regenerate PO</span>. It copies the PO as a new <b>draft</b> (same site, vendor, lines, category, ticket link), voids the original with the reason, moves the invoices and receipts onto the draft, and opens the draft with a banner showing the invoice amount against the draft's live total. Raise the prices until the banner shows ✓, then save and submit it again (step 3). It is only possible if the PO's parts were not received and no other invoice on it is approved or paid. The two POs are linked under <b>Related POs</b>. Only accounting or an admin clearing the flag frees the invoice otherwise.</li>
+      <li><b>If accounting flagged it "Over the PO":</b> there is <b>no Approve, no Hold and no Send Back</b>. The only button is <span class="btn">Void &amp; regenerate PO</span>. It copies the PO as a new <b>draft</b> (same entity, site, vendor, lines, category, ticket link), voids the original with the reason, moves the invoices and receipts onto the draft, and opens the draft with a banner showing the invoice amount against the draft's live total. Raise the prices until the banner shows ✓, then save and submit it again (step 3). It is only possible if the PO's parts were not received and no other invoice on it is approved or paid. The two POs are linked under <b>Related POs</b>. Only accounting or an admin clearing the flag frees the invoice otherwise.</li>
     </ul>
     <p class="small">The message <i>"Only the person who raised this PO can review its invoices."</i> means you are not that person.</p>
   </div></div>
@@ -419,7 +419,7 @@ details[open] summary { margin-bottom: 6px; }
   <h3>Who can see history and money reports</h3>
   <ul>
     <li><b>PO History</b> tab (admin, Invoice Matching, Payment Approval, Payment, Purchase Rec Approval and PO Issue): a tamper-proof record of every change, who made it and when, with filters and a CSV export.</li>
-    <li><b>Budget</b> tab (admin only for now): each site's budget against issued POs, approved invoices and what is still to be invoiced, by category. Only an admin edits the budget numbers.</li>
+    <li><b>Budget</b> tab (admin only for now): each entity's budget against issued POs, approved invoices and what is still to be invoiced, by category. Only an admin edits the budget numbers.</li>
   </ul>
 </section>
 

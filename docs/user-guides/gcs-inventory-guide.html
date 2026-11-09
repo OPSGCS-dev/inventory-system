@@ -112,12 +112,12 @@ details[open] summary { margin-bottom: 6px; }
 <body>
 <div class="wrap">
 <header class="masthead">
-  <div><h1>The Inventory System</h1><div class="lede" style="margin:0">Parts, what each site needs, who owns what is on hand, and where it is.</div></div>
+  <div><h1>The Inventory System</h1><div class="lede" style="margin:0">Parts, what each entity needs, who owns what is on hand, and where it is.</div></div>
   <div class="tag">Great Circle Solar Operations<br>Inventory System · Parts and stock</div>
 </header>
 <nav class="toc" aria-label="Contents"><a href="#intro">Overview</a><a href="#master">Master List</a><a href="#required">Required Inventory</a><a href="#ownership">Ownership</a><a href="#location">Physical Location</a><a href="#history">History</a><a href="#receiving">Receiving a PO</a><a href="#other">Other tabs</a><a href="#roles">Quick reference</a></nav>
 <section id="intro">
-  <p class="lede">The inventory system keeps the list of spare parts, how many of each every site needs, who owns the ones on hand, and where they physically are. It also holds the purchase order process, which has its own guide.</p>
+  <p class="lede">The inventory system keeps the list of spare parts, how many of each every entity needs, who owns the ones on hand, and where they physically are. It also holds the purchase order process, which has its own guide.</p>
 
   <div class="callout"><b class="lbl">Who can change things</b>
   <p>Everyone who is signed in can <b>see</b> the Master List, Required Inventory, Ownership, Physical Location and History. Only people with the <span class="role r-inv">Inventory</span> role can <b>change</b> any of them. If you do not have it you will not see the edit buttons. Ask an admin if you need it.</p></div>
@@ -127,13 +127,13 @@ details[open] summary { margin-bottom: 6px; }
     <thead><tr><th>Tab</th><th>What it is</th><th>Who sees it</th></tr></thead>
     <tbody>
       <tr><td class="field">Master List</td><td>Every part the company knows about, once, with its GCS P/N.</td><td>Everyone signed in (edit: <span class="role r-inv">Inventory</span>)</td></tr>
-      <tr><td class="field">Required Inventory</td><td>For each site: which parts it needs and how many it should keep (target stock).</td><td>Everyone signed in (edit: <span class="role r-inv">Inventory</span>)</td></tr>
+      <tr><td class="field">Required Inventory</td><td>For each entity: which parts it needs and how many it should keep (target stock).</td><td>Everyone signed in (edit: <span class="role r-inv">Inventory</span>)</td></tr>
       <tr><td class="field">Inventory On Hand</td><td>What we actually have. Three sub-tabs: <b>Ownership</b>, <b>Physical Location</b> and <b>History</b>.</td><td>Everyone signed in (edit: <span class="role r-inv">Inventory</span>)</td></tr>
       <tr><td class="field">Purchase Orders</td><td>See the Purchase Order guide.</td><td>Everyone, vendors included</td></tr>
       <tr><td class="field">PO History</td><td>Tamper-proof record of every PO change.</td><td>Admin and PO roles</td></tr>
       <tr><td class="field">Audit</td><td>Compares inventory against accounting's numbers. <b>Still a preview</b>: it opens on made-up data and saves nothing.</td><td>Admin only for now</td></tr>
-      <tr><td class="field">Budget</td><td>Budget against spending, by site and category.</td><td>Admin only for now</td></tr>
-      <tr><td class="field">Admin</td><td>Users, vendors, projects, sites, categories and settings.</td><td><span class="role r-admin">Admin</span></td></tr>
+      <tr><td class="field">Budget</td><td>Budget against spending, by entity and category.</td><td>Admin only for now</td></tr>
+      <tr><td class="field">Admin</td><td>Users, vendors, projects, entities, sites, categories and settings.</td><td><span class="role r-admin">Admin</span></td></tr>
       <tr><td class="field">Suggestions</td><td>Tell the admin about something broken, disliked, or an idea.</td><td>Everyone except vendor logons</td></tr>
     </tbody>
   </table></div>
@@ -141,20 +141,20 @@ details[open] summary { margin-bottom: 6px; }
 
   <h3>The ideas that explain everything else</h3>
   <ul>
-    <li><b>Owned</b> and <b>where it is</b> are two separate numbers. <b>Ownership</b> says which site's count a unit belongs to. <b>Physical Location</b> says where the unit is sitting. For every part the two totals always match; the system refuses any change that would break that.</li>
-    <li>Places a unit can be: <b>Oshawa</b>, the <b>Barn</b>, the <b>Office</b>, or a <b>site's own shelf</b>.</li>
-    <li>A site's own shelf can only hold parts <b>that site owns</b>. To move a part from one site's shelf to another's, transfer ownership first (Stock Transfer), which moves the units with it.</li>
-    <li>Some sites keep no parts on a shelf of their own (Firelight Operations and Firelight Solar). They still own parts, which are kept in Oshawa, the Barn or the Office, and they have no shelf column on Physical Location.</li>
+    <li><b>Owned</b> and <b>where it is</b> are two separate numbers. <b>Ownership</b> says which entity's count a unit belongs to. <b>Physical Location</b> says where the unit is sitting. For every part the two totals always match; the system refuses any change that would break that.</li>
+    <li>Places a unit can be: <b>Oshawa</b>, the <b>Barn</b>, the <b>Office</b>, or an entity's <b>on-site shelf</b> (shown as <i>&lt;Entity&gt; (on site)</i>).</li>
+    <li>An entity's on-site shelf can only hold parts <b>that entity owns</b>. To move a part from one entity's shelf to another's, transfer ownership first (Stock Transfer), which moves the units with it.</li>
+    <li>Some entities keep no parts on an on-site shelf (Firelight Operations and Firelight Solar). They still own parts, which are kept in Oshawa, the Barn or the Office, and they have no on-site column on Physical Location.</li>
     <li>Stock is never edited directly. Each change goes through a check that applies the rules and writes a line in <b>History</b>, so there is always a record of who did what and why. A reason is required for every change.</li>
     <li><span style="background:#fff3a8;color:#1c1d1f;padding:0 6px;border-radius:3px">Yellow</span> numbers are spares on <b>issued purchase orders that have not been received yet</b>. They are counted so you can see what is coming, but they are not on the shelf until the requisitioner marks the PO's parts Received.</li>
   </ul>
-  <div class="callout"><b class="lbl">Words</b><p>In this system a <b>Site</b> is a solar site company (SunE Alfred LP and so on). A <b>Location</b> is a place within a site that has several (Firelight's rooftops). A <b>Project</b> is the top layer (Regular O&amp;M, Repower - Phase 1, Repower - Phase 2). The ticket system calls a site a "project", which is a different thing.</p></div>
+  <div class="callout"><b class="lbl">Words</b><p>Three layers, from the top down. A <b>Project</b> is the top layer (Regular O&amp;M, Repower - Phase 1, Repower - Phase 2). An <b>Entity</b> is the legal owner, an LP such as SunE Alfred LP (378 Elgin and Manchester are entities in Repower - Phase 1). A <b>Site</b> is a place within an entity that has several, which today means only Firelight Solar's rooftops. A <b>Location</b> is something else: a physical place where stock sits (Oshawa, the Barn, the Office, or an entity's on-site shelf). The ticket system uses the same words.</p></div>
 </section>
 
 <section id="master">
   <h2><span class="num">1</span> Master List</h2>
   <div class="stage-meta"><span><span class="role r-all">Everyone</span> can view and export</span><span><span class="role r-inv">Inventory</span> edits</span></div>
-  <p>One row per part. Columns: GCS P/N, <b>Pic</b> (a reference picture), <b>Data</b> (datasheet), Manufacturer, Mfr Part #, Description, Category, <b>Used By</b> (the sites that require it) and Last Cost. Filter any column, and use <span class="btn">Clear filters</span> to start again.</p>
+  <p>One row per part. Columns: GCS P/N, <b>Pic</b> (a reference picture), <b>Data</b> (datasheet), Manufacturer, Mfr Part #, Description, Category, <b>Used By</b> (the entities that require it) and Last Cost. Filter any column, and use <span class="btn">Clear filters</span> to start again.</p>
   <h3>Descriptions have three lines</h3>
   <ol>
     <li><b>What it is</b>, a generic word (Relay, Contactor, Circuit Breaker, Fuse…).</li>
@@ -178,33 +178,33 @@ details[open] summary { margin-bottom: 6px; }
 <section id="required">
   <h2><span class="num">2</span> Required Inventory</h2>
   <div class="stage-meta"><span><span class="role r-inv">Inventory</span> edits</span></div>
-  <p>Pick a <span class="field">Site</span>. The table lists the parts that site requires: GCS P/N, Part ID, Manufacturer, Description, <b>Target Stock</b> (how many it should keep) and <b>Shared</b>.</p>
+  <p>Pick an <span class="field">Entity</span>. The table lists the parts that entity requires: GCS P/N, Part ID, Manufacturer, Description, <b>Target Stock</b> (how many it should keep) and <b>Shared</b>.</p>
   <ul>
-    <li><b>Shared</b> means the target is a pool several sites draw on, not each site's own. When totals are added up, shared targets count once (the largest) rather than being added together.</li>
+    <li><b>Shared</b> means the target is a pool several entities draw on, not each entity's own. When totals are added up, shared targets count once (the largest) rather than being added together.</li>
     <li><span class="btn">Edit List</span> (Inventory role) lets you tick parts on or off, set target stock and the Shared marks, with a search box to narrow the list. Press <span class="btn">Save Changes</span>.</li>
-    <li><b>Why it matters:</b> a site can only order a part on a PO (as a spare or used part) if the part is on its Required Inventory list, and only sites with the part on their list can receive it in a transfer.</li>
+    <li><b>Why it matters:</b> an entity can only order a part on a PO (as a spare or used part) if the part is on its Required Inventory list, and only entities with the part on their list can receive it in a transfer.</li>
   </ul>
 </section>
 
 <section id="ownership">
   <h2><span class="num">3</span> Inventory On Hand: Ownership</h2>
   <div class="stage-meta"><span><span class="role r-all">Everyone</span> can view</span><span><span class="role r-inv">Inventory</span> changes counts</span></div>
-  <p>A grid of parts down the side and sites across the top, showing how many each site <b>owns</b>, with the target stock and the total owned. Choose a site in the dropdown to see just that one, and <span class="btn">Export CSV</span> to download it. Click a part to jump to where it physically is.</p>
+  <p>A grid of parts down the side and entities across the top, showing how many each entity <b>owns</b>, with the target stock and the total owned. Choose an entity in the dropdown to see just that one, and <span class="btn">Export CSV</span> to download it. Click a part to jump to where it physically is.</p>
   <h3>Changing a count</h3>
   <div class="rolebox r-inv"><div class="who"><span class="role r-inv">Inventory</span></div><div>
     <p>Press <span class="btn">Update Count</span>. You have three ways to change ownership.</p>
     <ol class="steps">
-      <li><b>Individual Adjustment.</b> Press <span class="btn">Individual Adjustment</span>, type new numbers into the cells (search to narrow the list), write a <b>reason</b>, and press <span class="btn">Save Adjustment</span>. A window then asks <b>where the units are</b>, one row per changed count: for an increase, where the extra units are put; for a decrease, where they are taken from. Choose a location on every row (there is a <i>Set every row to</i> shortcut), then <span class="btn">Confirm &amp; Save</span>. Places that do not hold enough units are greyed out, and <i>Automatic</i> takes from the site's own shelf first, then Oshawa, the Barn, then the Office. A site with no shelf of its own cannot be given a shelf location.</li>
-      <li><b>Upload a count.</b> A CSV with columns GCS P/N, Site and Quantity. Every row replaces that part's count at that site, and you see a preview (previous and new) before confirming. One bad row cancels the whole upload. Extra units go on the site's own shelf (Oshawa for a site without one); removed units come off its shelf first, then Oshawa, the Barn, then the Office. <span class="btn">Export Current Counts (CSV)</span> gives you a starting file.</li>
-      <li><b>Stock Transfer.</b> Moves ownership from one site to another and moves the units with it (see below).</li>
+      <li><b>Individual Adjustment.</b> Press <span class="btn">Individual Adjustment</span>, type new numbers into the cells (search to narrow the list), write a <b>reason</b>, and press <span class="btn">Save Adjustment</span>. A window then asks <b>where the units are</b>, one row per changed count: for an increase, where the extra units are put; for a decrease, where they are taken from. Choose a location on every row (there is a <i>Set every row to</i> shortcut), then <span class="btn">Confirm &amp; Save</span>. Places that do not hold enough units are greyed out, and <i>Automatic</i> takes from the entity's on-site shelf first, then Oshawa, the Barn, then the Office. An entity with no on-site shelf cannot be given an on-site location.</li>
+      <li><b>Upload a count.</b> A CSV with columns GCS P/N, Entity and Quantity (a file that still says Site instead of Entity is accepted). Every row replaces that part's count for that entity, and you see a preview (previous and new) before confirming. One bad row cancels the whole upload. Extra units go on the entity's on-site shelf (Oshawa for an entity without one); removed units come off its on-site shelf first, then Oshawa, the Barn, then the Office. <span class="btn">Export Current Counts (CSV)</span> gives you a starting file.</li>
+      <li><b>Stock Transfer.</b> Moves ownership from one entity to another and moves the units with it (see below).</li>
     </ol>
   </div></div>
   <h3>Stock Transfer</h3>
   <div class="rolebox r-inv"><div class="who"><span class="role r-inv">Inventory</span></div><div>
     <ul>
-      <li>Press <span class="btn">Stock Transfer</span>, choose <b>From</b> and <b>To</b> sites, type a reason, and say where the units are being taken from and where they end up (the sender's own shelf, Oshawa, Barn or Office; the receiver's own shelf only if it has one). Type a quantity on the part's row and press <span class="btn">Transfer</span>.</li>
+      <li>Press <span class="btn">Stock Transfer</span>, choose <b>From</b> and <b>To</b> entities, type a reason, and say where the units are being taken from and where they end up (the sender's on-site shelf, Oshawa, Barn or Office; the receiver's on-site shelf only if it has one). In the table, <b>On site / off</b> shows how many of the sender's units are on its on-site shelf and how many are in Oshawa, the Barn or the Office. Type a quantity on the part's row and press <span class="btn">Transfer</span>.</li>
       <li>The move is treated as having already happened, so the owner and the location change together.</li>
-      <li>The receiving site must have the part on its Required Inventory list, or the Transfer button is off.</li>
+      <li>The receiving entity must have the part on its Required Inventory list, or the Transfer button is off.</li>
       <li><b>Each transfer also creates a PO</b> from the sender to the receiver, using the part's Last Cost as the price. It starts at the <i>Requested</i> stage and is taken through approval, issue, receiving and closing by hand like any other PO. Its number is shown on the History entry and in the confirmation message.</li>
     </ul>
   </div></div>
@@ -213,7 +213,7 @@ details[open] summary { margin-bottom: 6px; }
 <section id="location">
   <h2><span class="num">4</span> Inventory On Hand: Physical Location</h2>
   <div class="stage-meta"><span><span class="role r-all">Everyone</span> can view</span><span><span class="role r-inv">Inventory</span> moves and uses parts</span></div>
-  <p>A grid of parts against places: Oshawa, Barn, Office, then each site that has a shelf of its own, with a total. There are three ways to narrow it, and they work together:</p>
+  <p>A grid of parts against places: Oshawa, Barn, Office, then each entity that has an on-site shelf, with a total. There are three ways to narrow it, and they work together:</p>
   <ul>
     <li>The <b>search box</b> ("Search part number, description, maker…"). Every word you type must appear in the part number, Part ID, description, manufacturer or manufacturer part number. It also works while you are moving or using parts.</li>
     <li>The <b>location dropdown</b> shows only parts that have units in that place. <span class="btn">Export CSV</span> follows it, so with Oshawa chosen you export just what is in Oshawa.</li>
@@ -223,12 +223,12 @@ details[open] summary { margin-bottom: 6px; }
     <h4>Update Location (ownership does not change)</h4>
     <ul>
       <li>Type a reason (needed first). On the part's row choose <b>From</b> (where the units are now, with the count), <b>To</b>, a <b>Qty</b>, and press <span class="btn">Move</span>.</li>
-      <li>A site's shelf can only receive units that site owns. Options that cannot work are greyed with the reason, for example <i>(transfer ownership first)</i>, <i>(owns none off-site)</i> or <i>(no site)</i>.</li>
-      <li>Parts cannot go straight from one site's shelf to another's. Use Stock Transfer for that.</li>
+      <li>An entity's on-site shelf can only receive units that entity owns. Options that cannot work are greyed with the reason, for example <i>(transfer ownership first)</i>, <i>(owns none off-site)</i> or <i>(no on-site shelf)</i>.</li>
+      <li>Parts cannot go straight from one entity's on-site shelf to another's. Use Stock Transfer for that.</li>
     </ul>
     <h4>Record Part Use (the part was used)</h4>
     <ul>
-      <li>Type a reason, choose <b>Used from</b> (the place), and <b>Whose count</b> it comes from (automatic if it is a site's shelf; if it is Oshawa, the Barn or the Office, choose which owner), a quantity, and press <span class="btn">Record Use</span>. The units leave the place <b>and</b> that owner's count.</li>
+      <li>Type a reason, choose <b>Used from</b> (the place), and <b>Whose count</b> it comes from (automatic if it is an entity's on-site shelf; if it is Oshawa, the Barn or the Office, choose which owner), a quantity, and press <span class="btn">Record Use</span>. The units leave the place <b>and</b> that owner's count.</li>
     </ul>
     <p class="small">While you are moving or recording use, the yellow "on order" numbers are hidden, because these actions work on real stock only.</p>
   </div></div>
@@ -243,7 +243,7 @@ details[open] summary { margin-bottom: 6px; }
   <h2><span class="num">6</span> How stock goes up when a PO arrives</h2>
   <ul>
     <li>Stock rises only when the <b>requisitioner</b> sets the PO's <b>Parts Status</b> to <b>Received</b>. Issuing the PO does not add stock, and neither does matching an invoice.</li>
-    <li>If the PO has <b>spare</b> parts, a window asks where the units are (Oshawa, Barn, Office, or the site's own shelf if it has one). They are added to that site's count at that place, once.</li>
+    <li>If the PO has <b>spare</b> parts, a window asks where the units are (Oshawa, Barn, Office, or the entity's on-site shelf if it has one). They are added to that entity's count at that place, once.</li>
     <li>Used-immediately parts, consumables and services never add to stock.</li>
     <li>A pre-paid PO with spare parts must still be set to Received before it can be closed.</li>
   </ul>
@@ -253,7 +253,7 @@ details[open] summary { margin-bottom: 6px; }
   <h2><span class="num">7</span> The other tabs, briefly</h2>
   <ul>
     <li><b>Suggestions.</b> Choose the type, the page it concerns, write your suggestion, and send it. You see its status and any reply on your own list. Admins see everyone's, with a New badge, a status (New, Looking at it, Planned, Done, Won't do), a reply box and an export.</li>
-    <li><b>Budget</b> (admin only for now). Pick the Project and Year. Each site has its Budget, Issued POs, Actual Invoiced, To be invoiced and Remaining, by category (a <b>Remaining summary</b> view shows % used). Click a figure to list the POs behind it. Only an admin can use <span class="btn">Edit budget</span>.</li>
+    <li><b>Budget</b> (admin only for now). Pick the Project and Year. Each entity has its Budget, Issued POs, Actual Invoiced, To be invoiced and Remaining, by category (a <b>Remaining summary</b> view shows % used). Click a figure to list the POs behind it. Only an admin can use <span class="btn">Edit budget</span>.</li>
     <li><b>Audit</b> (admin only for now). A preview of an accounting comparison, on made-up data for now. Nothing it shows is saved.</li>
     <li><b>My Signature</b> in the page header: draw or upload your signature once and it prints on the POs you approve.</li>
   </ul>
@@ -264,15 +264,15 @@ details[open] summary { margin-bottom: 6px; }
   <div class="tablewrap"><table>
     <thead><tr><th>I want to…</th><th>Go to</th><th>Needs</th></tr></thead>
     <tbody>
-      <tr><td>See how many of a part a site owns</td><td>Inventory On Hand → Ownership</td><td>Sign in</td></tr>
+      <tr><td>See how many of a part an entity owns</td><td>Inventory On Hand → Ownership</td><td>Sign in</td></tr>
       <tr><td>Find where a part physically is</td><td>Inventory On Hand → Physical Location (use the search box)</td><td>Sign in</td></tr>
       <tr><td>Fix a count</td><td>Ownership → Update Count → Individual Adjustment</td><td><span class="role r-inv">Inventory</span></td></tr>
       <tr><td>Load a recount from a spreadsheet</td><td>Ownership → Update Count → Upload a count</td><td><span class="role r-inv">Inventory</span></td></tr>
-      <tr><td>Move a part to another shelf or room</td><td>Physical Location → Update Location</td><td><span class="role r-inv">Inventory</span></td></tr>
+      <tr><td>Move a part to another place</td><td>Physical Location → Update Location</td><td><span class="role r-inv">Inventory</span></td></tr>
       <tr><td>Record that a part was used</td><td>Physical Location → Record Part Use</td><td><span class="role r-inv">Inventory</span></td></tr>
-      <tr><td>Give a part to another site</td><td>Ownership → Stock Transfer</td><td><span class="role r-inv">Inventory</span></td></tr>
+      <tr><td>Give a part to another entity</td><td>Ownership → Stock Transfer</td><td><span class="role r-inv">Inventory</span></td></tr>
       <tr><td>Add or change a part</td><td>Master List → Edit List or Import List</td><td><span class="role r-inv">Inventory</span></td></tr>
-      <tr><td>Change what a site needs</td><td>Required Inventory → Edit List</td><td><span class="role r-inv">Inventory</span></td></tr>
+      <tr><td>Change what an entity needs</td><td>Required Inventory → Edit List</td><td><span class="role r-inv">Inventory</span></td></tr>
       <tr><td>Add parts to stock from an order</td><td>Purchase Orders → the PO → Parts Status → Received</td><td>The PO's <span class="role r-req">Requisitioner</span></td></tr>
       <tr><td>See who changed what</td><td>Inventory On Hand → History; Master List → Change History</td><td>Sign in</td></tr>
     </tbody>
@@ -282,10 +282,10 @@ details[open] summary { margin-bottom: 6px; }
     <thead><tr><th>Message (in short)</th><th>What to do</th></tr></thead>
     <tbody>
       <tr><td>A reason is required</td><td>Every change needs a reason typed first.</td></tr>
-      <tr><td>A site can only hold parts it owns</td><td>Change ownership first (Stock Transfer or a count), then place the units.</td></tr>
-      <tr><td>… has no site of its own — choose Oshawa, the Barn or the Office</td><td>That site (Firelight) keeps no shelf. Pick another place.</td></tr>
+      <tr><td>A site can only hold parts it owns <span class="small">(the database message says "site" for an entity's on-site shelf)</span></td><td>Change ownership first (Stock Transfer or a count), then place the units.</td></tr>
+      <tr><td>… has no site of its own — choose Oshawa, the Barn or the Office</td><td>That entity (Firelight) keeps no on-site shelf. Pick another place.</td></tr>
       <tr><td>Only N in that location</td><td>Pick the place that actually holds them, or move them there first.</td></tr>
-      <tr><td>… doesn't use this part — add it on Required Inventory first</td><td>The receiving site must list the part before it can be transferred to it.</td></tr>
+      <tr><td>… doesn't use this part — add it on Required Inventory first</td><td>The receiving entity must list the part before it can be transferred to it.</td></tr>
       <tr><td>Not enough owned by …</td><td>The sender does not own that many.</td></tr>
       <tr><td>Ownership and physical locations would no longer match</td><td>Something is off in the counts; fix the locations first (an inventory editor can use Update Location or an adjustment).</td></tr>
     </tbody>

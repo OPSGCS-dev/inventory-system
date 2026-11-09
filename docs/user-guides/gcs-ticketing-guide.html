@@ -112,25 +112,25 @@ details[open] summary { margin-bottom: 6px; }
 <body>
 <div class="wrap">
 <header class="masthead">
-  <div><h1>The Ticket System</h1><div class="lede" style="margin:0">Logging and tracking work at a site, and starting a purchase request from it.</div></div>
+  <div><h1>The Ticket System</h1><div class="lede" style="margin:0">Logging and tracking work at an entity or site, and starting a purchase request from it.</div></div>
   <div class="tag">Great Circle Solar Operations<br>Ticket System</div>
 </header>
-<nav class="toc" aria-label="Contents"><a href="#intro">Overview</a><a href="#signin">Getting in</a><a href="#find">Finding tickets</a><a href="#create">Creating</a><a href="#work">Working a ticket</a><a href="#files">Files and history</a><a href="#po">POs and tickets</a><a href="#projects">Projects and users</a><a href="#tips">Good to know</a></nav>
+<nav class="toc" aria-label="Contents"><a href="#intro">Overview</a><a href="#signin">Getting in</a><a href="#find">Finding tickets</a><a href="#create">Creating</a><a href="#work">Working a ticket</a><a href="#files">Files and history</a><a href="#po">POs and tickets</a><a href="#projects">Entities and users</a><a href="#tips">Good to know</a></nav>
 <section id="intro">
-  <p class="lede">The ticket system is where every piece of operations and maintenance work at a site is logged: what happened, which equipment is affected, who owns it, the vendor and quote, photos and files, and a history of every change. When the work needs money, a ticket starts the purchase request for it.</p>
+  <p class="lede">The ticket system is where every piece of operations and maintenance work at an entity or site is logged: what happened, which equipment is affected, who owns it, the vendor and quote, photos and files, and a history of every change. When the work needs money, a ticket starts the purchase request for it.</p>
 
   <h3>Three kinds of user</h3>
   <div class="tablewrap"><table>
     <thead><tr><th>Tag</th><th>Who</th><th>What they can do</th></tr></thead>
     <tbody>
-      <tr><td><span class="role r-tick">Employee</span></td><td>Anyone with the <b>Ticketing</b> role in the inventory system</td><td>Create, edit, comment on and delete tickets; upload and delete attachments; acknowledge assignments; link POs. View (not edit) projects and equipment.</td></tr>
-      <tr><td><span class="role r-admin">Admin</span></td><td>Anyone with the <b>Admin</b> role</td><td>Everything an employee can do, plus add and edit projects, locations and equipment, manage the equipment catalog and manage users.</td></tr>
+      <tr><td><span class="role r-tick">Employee</span></td><td>Anyone with the <b>Ticketing</b> role in the inventory system</td><td>Create, edit, comment on and delete tickets; upload and delete attachments; acknowledge assignments; link POs. View (not edit) entities, sites and equipment.</td></tr>
+      <tr><td><span class="role r-admin">Admin</span></td><td>Anyone with the <b>Admin</b> role</td><td>Everything an employee can do, plus add and edit entities, sites, locations and equipment, manage the equipment catalog and manage users.</td></tr>
       <tr><td><span class="role r-vend">Vendor</span></td><td>A vendor's own login</td><td><b>Read-only.</b> Sees only the tickets where they are the selected vendor, with their files, history and linked PO status.</td></tr>
     </tbody>
   </table></div>
   <p class="small">Your role comes from the inventory system and is refreshed each time you sign in. Holding only Purchase Rec (no Ticketing) does <b>not</b> give you ticket access. Someone who needs both needs both roles.</p>
 
-  <div class="callout warn"><b class="lbl">A word that means two things</b><p>Here a solar site is called a <b>Project</b> and a place within it is a <b>Location</b>. In the inventory system the same site is called a <b>Site</b>, and a "Project" there is the top layer (Regular O&amp;M, Repower). When you create a purchase request from a ticket, the ticket's Project becomes the PO's Site.</p></div>
+  <div class="callout"><b class="lbl">The same words as inventory</b><p>The ticket system uses the same words as the inventory system. An <b>Entity</b> is the legal owner, an LP such as SunE Alfred LP. A <b>Site</b> is a sub-location of an entity, which today means only Firelight Solar's rooftops. A ticket is logged against an entity or, where the entity has sites, against one of its sites. (<b>Project</b> in inventory is the top layer, Regular O&amp;M or Repower; tickets do not use it.) A <b>Location</b> here is something different: an area inside an entity or site where equipment sits, such as an inverter house. When you create a purchase request from a ticket, the ticket's Entity and Site carry over to the PO.</p></div>
 
   <h3>The shape of a ticket</h3>
   <p><span class="status-pill s-req">Open</span> → <span class="status-pill s-prog">In progress</span> → <span class="status-pill s-paid">Resolved</span> → <span class="status-pill s-draft">Closed</span> (and <span class="status-pill s-draft">On hold</span> when waiting). Any employee or admin can move a ticket from any status to any other. There are no required steps and no approval.</p>
@@ -161,11 +161,11 @@ details[open] summary { margin-bottom: 6px; }
 <section id="find">
   <h2><span class="num">2</span> Finding tickets</h2>
   <div class="stage-meta"><span><span class="role r-tick">Employee</span> <span class="role r-admin">Admin</span></span><span><span class="role r-vend">Vendor</span> sees "My tickets"</span></div>
-  <p>The top bar has <span class="btn">All tickets</span>, <span class="btn">Assigned to me</span>, <span class="btn">New ticket</span> and <span class="btn">Projects</span> (admins also get <span class="btn">Equipment catalog</span> and <span class="btn">Manage users</span>).</p>
+  <p>The top bar has <span class="btn">All tickets</span>, <span class="btn">Assigned to me</span>, <span class="btn">New ticket</span> and <span class="btn">Entities</span> (admins also get <span class="btn">Equipment catalog</span> and <span class="btn">Manage users</span>).</p>
   <ul>
-    <li><b>Search box</b> ("Ticket # or title"): type a ticket number as <code>TK-06-26-001</code>, <code>06-26-001</code>, <code>42</code> or <code>TK-00042</code>, or any word from the title. It does not search descriptions, vendors or project names.</li>
-    <li><b>Project</b> and <b>Status</b> dropdowns, then <span class="btn">Filter</span>; <span class="btn">Clear filters</span> resets.</li>
-    <li>Columns: #, Title, Project, Vendor, Status, Notes, Assigned to, Opened. Newest first. A purple <b>Planned</b> chip marks planned work. A <b>blue dot</b> means a ticket was assigned to you and you have not acknowledged it yet; on <span class="btn">Assigned to me</span> those float to the top.</li>
+    <li><b>Search box</b> ("Ticket # or title"): type a ticket number as <code>TK-06-26-001</code>, <code>06-26-001</code>, <code>42</code> or <code>TK-00042</code>, or any word from the title. It does not search descriptions, vendors or entity or site names.</li>
+    <li><b>Entity / Site</b> and <b>Status</b> dropdowns (the first says <i>All entities</i>), then <span class="btn">Filter</span>; <span class="btn">Clear filters</span> resets.</li>
+    <li>Columns: #, Title, Entity / Site (the entity, with its site underneath where there is one), Vendor, Status, Notes, Assigned to, Opened. Newest first. A purple <b>Planned</b> chip marks planned work. A <b>blue dot</b> means a ticket was assigned to you and you have not acknowledged it yet; on <span class="btn">Assigned to me</span> those float to the top.</li>
     <li>There is no export, sorting or paging.</li>
   </ul>
   <div class="rolebox r-tick"><div class="who"><span class="role r-tick">Employee</span><br><span class="role r-admin">Admin</span></div><div>
@@ -176,15 +176,16 @@ details[open] summary { margin-bottom: 6px; }
 <section id="create">
   <h2><span class="num">3</span> Creating a ticket</h2>
   <div class="stage-meta"><span><span class="role r-tick">Employee</span> <span class="role r-admin">Admin</span></span></div>
-  <p>Press <span class="btn">New ticket</span> (or <span class="btn">New ticket for this project →</span> on a project page, which does not pre-pick the project). Complete the form and press <span class="btn">Create ticket</span>.</p>
+  <p>Press <span class="btn">New ticket</span> (or <span class="btn">New ticket for this entity →</span> on an entity page, or <span class="btn">New ticket for this site →</span> on a site page, which does not pre-pick it). Complete the form and press <span class="btn">Create ticket</span>.</p>
   <div class="tablewrap"><table>
     <thead><tr><th>Field</th><th>Required?</th><th>Notes</th></tr></thead>
     <tbody>
       <tr><td class="field">Title</td><td><b>Yes</b></td><td>Short and specific. <b>It cannot be changed afterwards.</b></td></tr>
-      <tr><td class="field">Project</td><td><b>Yes</b></td><td>The solar site. <b>It cannot be changed afterwards.</b> A ticket cannot be created without one.</td></tr>
+      <tr><td class="field">Entity</td><td><b>Yes</b></td><td>The legal owner (an LP). <b>It cannot be changed afterwards.</b> A ticket cannot be created without one.</td></tr>
+      <tr><td class="field">Site</td><td>Only for an entity that has sites</td><td>Appears once you pick such an entity (today, Firelight Solar). Pick one of its sites (or, where offered, <i>No specific site</i>). <b>It cannot be changed afterwards.</b></td></tr>
       <tr><td class="field">Description</td><td>No</td><td>Also fixed once created. Put what is known now; add the rest as notes later.</td></tr>
       <tr><td class="field">Planned or unplanned?</td><td>Defaults to Unplanned</td><td><b>Planned</b> shows an optional <i>Start</i> and <i>End</i> (date and time). <b>Unplanned</b> shows an optional <i>Issue start date</i>. Only the matching set is saved.</td></tr>
-      <tr><td class="field">Affected equipment</td><td>No</td><td>Appears once a Project is chosen. Search, or drill down by <i>Location type</i> then <i>Location</i>, and tick the equipment. Chips with × show what is selected. "Other equipment" holds items with no typed location.</td></tr>
+      <tr><td class="field">Affected equipment</td><td>No</td><td>Appears once an Entity (and Site) is chosen. Search, or drill down by <i>Location type</i> then <i>Location</i>, and tick the equipment. Chips with × show what is selected. "Other equipment" holds items with no typed location.</td></tr>
       <tr><td class="field">Assign to</td><td>No</td><td>Active admins and employees (never vendors).</td></tr>
       <tr><td class="field">Vendor</td><td>No</td><td>Active vendors from the inventory system's approved vendor list.</td></tr>
       <tr><td class="field">Vendor quote #</td><td>No</td><td>Free text. It carries into the purchase request.</td></tr>
@@ -193,8 +194,8 @@ details[open] summary { margin-bottom: 6px; }
       <tr><td class="field">Purchase order (PDF) and Photo of the issue</td><td>No</td><td>One PDF and one picture can be attached right away. More can be added later.</td></tr>
     </tbody>
   </table></div>
-  <p><b>The ticket number.</b> A new ticket is numbered <code>TK-06-26-001</code>: <b>TK</b>, the project's two-digit <b>entity code</b>, the two-digit <b>year</b>, and a running number for that code and year (it restarts at 001 each year). The entity code matches the PO numbers of the same site, so <code>TK-06-26-001</code> and <code>PO-06-26-001</code> are obviously related. A project with no entity code, and older tickets, show as <code>TK-00042</code>.</p>
-  <p class="small">If a file cannot be saved, the ticket is still created and you land on it with a message "Ticket created, but: …". Errors seen here: <i>"Title and project are required"</i>.</p>
+  <p><b>The ticket number.</b> A new ticket is numbered <code>TK-06-26-001</code>: <b>TK</b>, the entity's two-digit <b>entity code</b>, the two-digit <b>year</b>, and a running number for that code and year (it restarts at 001 each year). The entity code matches the PO numbers of the same entity, so <code>TK-06-26-001</code> and <code>PO-06-26-001</code> are obviously related. An entity or site with no entity code, and older tickets, show as <code>TK-00042</code>.</p>
+  <p class="small">If a file cannot be saved, the ticket is still created and you land on it with a message "Ticket created, but: …". Errors seen here: <i>"Title and entity are required"</i>.</p>
 </section>
 
 <section id="work">
@@ -204,8 +205,8 @@ details[open] summary { margin-bottom: 6px; }
   <ul>
     <li><b>Header:</b> the ticket number, title and status pill; "Opened by … on …" and who it is assigned to; the vendor, quote #, PO #, invoice number and amount, and dates.</li>
     <li><b>Acknowledge banner</b> (if it is assigned to you and you have not yet): press <span class="btn">Acknowledge</span>. Re-assigning a ticket resets it.</li>
-    <li><b>Project</b> card with the site's address and notes, and the <b>Description</b>.</li>
-    <li><b>Equipment on site</b>: the whole project's equipment, with the affected items in red. Search it, filter by location, or tick <i>Affected only</i>.</li>
+    <li><b>Entity</b> card (<b>Entity / Site</b> when the ticket is on a site) with its address and notes, and the <b>Description</b>.</li>
+    <li><b>Equipment on site</b>: all the equipment at that entity or site, with the affected items in red. Search it, filter by location, or tick <i>Affected only</i>.</li>
     <li><b>Attachments</b>: linked purchase orders first, then files (see section 5).</li>
     <li><b>Activity</b> (collapsed): who did what and when.</li>
     <li><b>Update this ticket</b> (collapsed, employees and admins).</li>
@@ -215,7 +216,7 @@ details[open] summary { margin-bottom: 6px; }
     <ul>
       <li>One form holds: Status, Status note, Assigned to, Vendor, Vendor quote #, PO #, Invoice #, Invoice amount, Planned or unplanned (and dates), Affected equipment, and <b>Add a note</b> ("What changed, what you found, next steps…"). Press <span class="btn">Save update</span>.</li>
       <li>Only fields you actually changed are logged, each as a bullet. A note on its own still creates an entry.</li>
-      <li><b>Title, Description and Project cannot be edited.</b> If one is wrong, say so in a note, or delete the ticket and create a correct one.</li>
+      <li><b>Title, Description, Entity and Site cannot be edited.</b> If one is wrong, say so in a note, or delete the ticket and create a correct one.</li>
       <li>The Status dropdown next to the title (with its <i>Short current-status note</i>) saves with its own <span class="btn">Save</span> button.</li>
       <li><span class="btn">Delete ticket</span> (red link) removes the ticket after a confirmation. <b>Any employee can delete any ticket.</b> It cannot be undone, and a purchase order that was linked is left pointing at a ticket that no longer exists.</li>
     </ul>
@@ -248,16 +249,16 @@ details[open] summary { margin-bottom: 6px; }
   <h3>Start a purchase request from a ticket</h3>
   <ol class="steps">
     <li>On the ticket, press <span class="btn">Create Purchase Rec ↗</span>. The inventory system opens in a new tab. You have to be signed in there, which is a separate login; the link waits for you.</li>
-    <li>Inventory opens its Purchase Orders tab with a <b>New Purchase Request</b> already filled in: the <b>Site</b> (from the ticket's project; if the ticket's project is a location of a site, that site), the <b>Location</b>, the <b>Vendor</b> (matched by name, so it stays empty if there is no exact match), the <b>Vendor Quote #</b>, and a <b>Description</b> of <code>TK-06-26-001: title</code>.</li>
+    <li>Inventory opens its Purchase Orders tab with a <b>New Purchase Request</b> already filled in: the <b>Entity</b> and, where the ticket is on one, the <b>Site</b> (taken from the ticket), the <b>Vendor</b> (matched by name, so it stays empty if there is no exact match), the <b>Vendor Quote #</b>, and a <b>Description</b> of <code>TK-06-26-001: title</code>.</li>
     <li>Nothing else is filled in. The person with the <span class="role r-req">Purchase Rec</span> role chooses the Project and Budget Category, adds the lines and saves the draft, then carries on as in the Purchase Order guide.</li>
     <li>A request made this way from an <b>existing</b> ticket is <b>linked automatically</b>, and a link shows on the ticket.</li>
   </ol>
-  <div class="callout warn"><b class="lbl">If nothing opens</b><p>Without the Purchase Rec role in inventory you land on the Purchase Orders tab with no form. On the <b>New ticket</b> page the button is greyed until you pick a Project, and a request started from there is <b>not linked</b> (the ticket does not exist yet). Link it afterwards.</p></div>
+  <div class="callout warn"><b class="lbl">If nothing opens</b><p>Without the Purchase Rec role in inventory you land on the Purchase Orders tab with no form. On the <b>New ticket</b> page the button is greyed until you pick an Entity, and a request started from there is <b>not linked</b> (the ticket does not exist yet). Link it afterwards.</p></div>
   <h3>Link a purchase order that already exists</h3>
   <div class="rolebox r-tick"><div class="who"><span class="role r-tick">Employee</span><br><span class="role r-admin">Admin</span></div><div>
     <ol class="steps">
       <li>In the ticket's Attachments section press <span class="btn">Link existing PO</span>.</li>
-      <li>Type a PO number or words from its description and press <span class="btn">Search</span> (it shows the 15 newest if you type nothing, across all sites).</li>
+      <li>Type a PO number or words from its description and press <span class="btn">Search</span> (it shows the 15 newest if you type nothing, across all entities).</li>
       <li>Press <span class="btn">Link</span> on the right row. A line "Linked PO …" is added to the activity.</li>
       <li>To remove it, press <span class="btn">Unlink</span> beside the PO (the PO itself is not changed).</li>
     </ol>
@@ -281,11 +282,11 @@ details[open] summary { margin-bottom: 6px; }
 </section>
 
 <section id="projects">
-  <h2><span class="num">7</span> Projects, equipment and users</h2>
+  <h2><span class="num">7</span> Entities, sites, equipment and users</h2>
   <div class="stage-meta"><span><span class="role r-tick">Employee</span> view</span><span><span class="role r-admin">Admin</span> edit</span></div>
   <ul>
-    <li><b>Projects:</b> the table lists each project's Name and Address. A project page shows its notes, its <b>entity code</b> (read-only), its locations grouped by <i>Location type</i>, and the equipment at each (Name, Type, Manufacturer / model, Serial #, Installed, AC kW, DC kW). Equipment with no location is under "Unassigned equipment".</li>
-    <li><span class="role r-admin">Admin</span> only: add or edit or delete projects, locations and equipment on those pages. A new project asks for Name (required), Address and Notes; the entity code is set by whoever maintains the database, not on the screen.</li>
+    <li><b>Entities:</b> the table lists each entity and site with its Entity, Site and Address. An entity or site page shows its notes, its <b>entity code</b> (read-only), its locations (such as inverter houses) grouped by <i>Location type</i>, and the equipment at each (Name, Type, Manufacturer / model, Serial #, Installed, AC kW, DC kW). Equipment with no location is under "Unassigned equipment".</li>
+    <li><span class="role r-admin">Admin</span> only: add or edit or delete entities, sites, locations and equipment on those pages. <span class="btn">Add entity or site</span> asks for a Name (required), an Entity (only when you are adding a site of an entity), an Address and Notes; the entity code is set by whoever maintains the database, not on the screen.</li>
     <li><span class="role r-admin">Admin</span> <b>Equipment catalog</b>: the list of equipment types, manufacturers and models with AC and DC ratings, used when adding equipment. Type, manufacturer and model are required.</li>
     <li><span class="role r-admin">Admin</span> <b>Manage users</b>: <span class="btn">Sync now</span> pulls approved vendors and every Admin, Ticketing and Vendor logon from inventory, creates their ticket accounts, updates roles, and <b>deactivates</b> people who are no longer in inventory. It never reactivates, so use <span class="btn">Reactivate</span> on a person by hand. You can also edit a display name, deactivate, or remove an account (a person with history can only be deactivated). You cannot deactivate or remove your own account. A vendor with no email in inventory cannot be synced.</li>
   </ul>
@@ -297,7 +298,7 @@ details[open] summary { margin-bottom: 6px; }
     <thead><tr><th>You notice</th><th>Why, and what to do</th></tr></thead>
     <tbody>
       <tr><td>A status change in the list did not stick</td><td>Press the row's <b>Save</b>. The pill alone saves nothing.</td></tr>
-      <tr><td>I typed the wrong title or picked the wrong project</td><td>These cannot be edited. Add a note, or delete the ticket and recreate it.</td></tr>
+      <tr><td>I typed the wrong title or picked the wrong entity</td><td>These cannot be edited. Add a note, or delete the ticket and recreate it.</td></tr>
       <tr><td>I linked a PO but the "PO #" is empty</td><td>That field is just text; linking does not fill it. Type it in if you want it.</td></tr>
       <tr><td>The vendor is blank on the purchase request</td><td>The vendor is matched by display name. If a vendor's name differs between the two systems it will not match. Pick it by hand.</td></tr>
       <tr><td>The invoice amount has no commas or currency</td><td>The ticket system shows plain $x.xx. Dates and times here follow the browser, not inventory's yyyy/mm/dd.</td></tr>

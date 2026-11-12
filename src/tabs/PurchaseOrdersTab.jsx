@@ -590,9 +590,12 @@ function PurchaseOrdersTab({
         attachment: { filename: pdf.filename, mime: 'application/pdf', bytes: pdf.bytes },
       })
       downloadBlob(new Blob([eml], { type: 'message/rfc822' }), `${pdf.filename.replace(/\.pdf$/, '')} - email to vendor.eml`)
+      // Some email programs (the new Outlook, webmail, phones) open the draft but drop its attachment, so the PDF is
+      // also saved on its own, ready to attach by hand.
+      setTimeout(() => downloadBlob(new Blob([pdf.bytes], { type: 'application/pdf' }), pdf.filename), 400)
       setEmailNote({
         id: r.id,
-        text: `Open the downloaded file: it opens in your email program as a draft to ${r.vendors.email} with the PO PDF attached.`,
+        text: `Open the downloaded .eml file: it opens in your email program as a draft to ${r.vendors.email} with the PO PDF attached. If the PDF is missing from the draft, attach the separately downloaded ${pdf.filename}.`,
       })
       logPoDocumentEvent(r, 'po_email_drafted', `to ${r.vendors.email}`)
       // Pressing Email Vendor counts as contacting the vendor (the first time only; a manual mark is left as it is).
@@ -1241,26 +1244,10 @@ function PurchaseOrdersTab({
                             : formatDate(new Date())}
                         </td>
                       </tr>
-                      {programsReady && programName(r.program_id) && (
-                        <tr>
-                          <th>Project</th>
-                          <td>{programName(r.program_id)}</td>
-                        </tr>
-                      )}
                       <tr>
                         <th>PO #</th>
                         <td>{shownPoNumber(r) || `#${r.id}`}</td>
                       </tr>
-                      <tr>
-                        <th>Entity</th>
-                        <td>{r.projects?.name || '—'}</td>
-                      </tr>
-                      {locationVisible(r) && (
-                        <tr>
-                          <th>Site</th>
-                          <td>{r.sub_projects.name}</td>
-                        </tr>
-                      )}
                       <tr>
                         <th>Requisitioner</th>
                         <td>{requisitionerName(users, r) || '—'}</td>

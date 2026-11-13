@@ -495,26 +495,9 @@ function PurchaseOrdersTab({
     handleSetWorkStatus(r, kind, value)
   }
 
-  // An approved request has no PO number until it is issued, but its printed PO
-  // and PDF should already carry the number it will be issued with.
-  const [peekedPo, setPeekedPo] = useState(null)
-  const peekId = viewingRequest?.id
-  const peekNeeded = viewingRequest?.status === 'approved' && !viewingRequest?.po_number
-  useEffect(() => {
-    if (!peekNeeded) return
-    let cancelled = false
-    computeNextPoNumber(viewingRequest)
-      .then((number) => {
-        if (!cancelled) setPeekedPo({ id: peekId, number })
-      })
-      .catch((error) => console.error(error))
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [peekId, peekNeeded])
-  const shownPoNumber = (r) => r.po_number || (peekedPo?.id === r.id ? peekedPo.number : null)
-  // The request as it should be printed or emailed, with the number it will be issued with.
+  // A request has no PO number until the PO issuer issues it, and none is shown (or printed) before then.
+  const shownPoNumber = (r) => r.po_number || null
+  // The request as it should be printed or emailed.
   const withShownPoNumber = (r) => ({
     ...(shownPoNumber(r) && !r.po_number ? { ...r, po_number: shownPoNumber(r) } : r),
     requisitioner_name: requisitionerName(users, r),
@@ -1246,7 +1229,7 @@ function PurchaseOrdersTab({
                       </tr>
                       <tr>
                         <th>PO #</th>
-                        <td>{shownPoNumber(r) || `#${r.id}`}</td>
+                        <td>{shownPoNumber(r) || '—'}</td>
                       </tr>
                       <tr>
                         <th>Requisitioner</th>

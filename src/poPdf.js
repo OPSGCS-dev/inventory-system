@@ -84,7 +84,7 @@ export async function buildPoPdf(request, stamp = null) {
     columnStyles: { 0: { fontStyle: 'bold', fillColor: [242, 242, 242], cellWidth: 110 } },
     body: [
       ['PO Date', formatDate(request.issued_at || Date.now())],
-      ['PO #', clean(poLabel(request))],
+      ['PO #', request.po_number ? clean(request.po_number) : '—'],
       ['Requisitioner', clean(request.requisitioner_name || '-')],
       ['Budget Category', clean(budgetCategoryLabel(request))],
       ['Chargeable Expense', request.chargeable_expense ? 'Yes' : 'No'],

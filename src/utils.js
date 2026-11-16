@@ -1200,15 +1200,17 @@ export function parseTypedDate(text) {
   return `${y}-${pad2(mo)}-${pad2(d)}`
 }
 
-// The name an approval batch gets when the supervisor doesn't type one. Deliberately not "payment run":
-// the invoices are only approved for payment at that point, not paid.
+// The name an approval batch is created with. Once add_payment_batch_numbers.sql has been run the database replaces it
+// with the batch number (PB-26-001); this is only what shows before then. Deliberately not "payment run": the invoices
+// are only approved for payment at that point, not paid.
 export function defaultBatchName() {
   return `Approved invoice batch ${formatDate(new Date())}`
 }
 
-// How a payment batch is shown: its name and number, e.g. "Approved invoice batch 2026/10/15 (#7)".
+// How a payment batch is shown: its number, e.g. "PB-26-007" (assigned by the database, add_payment_batch_numbers.sql).
+// Before that SQL is run a batch has no number, so its name and id are shown instead.
 export function paymentBatchLabel(batch) {
-  return `${batch.name} (#${batch.id})`
+  return batch.batch_number || `${batch.name} (#${batch.id})`
 }
 
 // Every dollar amount on the site is shown with thousands separators and two decimals: 1,234.50.

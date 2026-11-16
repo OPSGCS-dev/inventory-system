@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
-import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText, formatDateTime, formatDate, defaultBatchName } from '../utils'
+import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText, formatDateTime, formatDate } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 
 // "My Invoices for Payment Approval": the supervisor's list. Every invoice the
@@ -40,7 +40,6 @@ function MyInvoicesForApprovalTable({
   // Ticked invoice ids. Kept apart from the list so a changed date range or a refreshed
   // list can't leave an invoice ticked that's no longer on screen (see `chosen` below).
   const [ticked, setTicked] = useState(() => new Set())
-  const [batchName, setBatchName] = useState('')
   const batchBusy = poActionBusyId === 'invoice-batch'
 
   // Held invoices can't be approved, so they can't be ticked either.
@@ -63,14 +62,10 @@ function MyInvoicesForApprovalTable({
   }
 
   async function approveChosen() {
-    const name = batchName.trim() || defaultBatchName()
     const what = `${chosen.length} invoice${chosen.length === 1 ? '' : 's'} (${totalsByCurrencyText(amountsOf(chosen))})`
-    if (!window.confirm(`Approve ${what} for payment${paymentBatchesReady ? ` as "${name}"` : ''}?`)) return
-    const ok = await handleApproveInvoicesForPayment(chosen, batchName)
-    if (ok) {
-      setTicked(new Set())
-      setBatchName('')
-    }
+    if (!window.confirm(`Approve ${what} for payment${paymentBatchesReady ? ' as a new payment batch (it is numbered automatically)' : ''}?`)) return
+    const ok = await handleApproveInvoicesForPayment(chosen)
+    if (ok) setTicked(new Set())
   }
 
   const recentBatches = (paymentBatchSummaries || []).slice(0, 5)
@@ -102,16 +97,6 @@ function MyInvoicesForApprovalTable({
       ) : (
         <>
           <div className="edit-toolbar" style={{ flexWrap: 'wrap' }}>
-            {paymentBatchesReady && (
-              <input
-                type="text"
-                aria-label="Batch name"
-                placeholder={`Batch name (optional) — ${defaultBatchName()}`}
-                value={batchName}
-                onChange={(e) => setBatchName(e.target.value)}
-                style={{ minWidth: 280 }}
-              />
-            )}
             <button className="btn-primary" onClick={approveChosen} disabled={chosen.length === 0 || batchBusy}>
               {batchBusy ? 'Approving…' : chosen.length > 0 ? `Approve ${chosen.length} Selected for Payment` : 'Approve Selected for Payment'}
             </button>

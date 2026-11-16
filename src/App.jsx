@@ -3625,11 +3625,11 @@ function App() {
   }
 
   // The supervisor's batch: approve several reviewed invoices for payment in one go, as one
-  // named payment batch (a record accounting can filter by). `pairs` are { request, invoice }.
+  // numbered payment batch (a record accounting can filter by). `pairs` are { request, invoice }.
   // All or none: the database refuses the lot if any one of them isn't ready. Returns true
   // when they were approved. Before add_payment_batches.sql has been run there's no batch
   // record, and they're simply approved.
-  async function handleApproveInvoicesForPayment(pairs, batchName = '') {
+  async function handleApproveInvoicesForPayment(pairs) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
       return false
@@ -3644,7 +3644,8 @@ function App() {
     let batch = null
     try {
       const now = new Date().toISOString()
-      const name = batchName.trim() || defaultBatchName()
+      // The database numbers the batch (PB-26-001) and uses that as its name; this name only shows before the SQL is run.
+      const name = defaultBatchName()
       if (paymentBatchesReady) {
         const { data, error } = await supabase
           .from('invoice_payment_batches')

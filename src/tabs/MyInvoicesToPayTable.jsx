@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import Papa from 'papaparse'
 import { downloadCsv } from '../stockUtils'
-import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText, formatDate } from '../utils'
+import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText, formatDate, formatDateTime } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
 import PaymentConfirm from './PaymentConfirm'
@@ -64,14 +64,15 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
   // The list as a spreadsheet, to work from while paying the batch.
   function exportList() {
     const rows = listed.map(({ request, invoice }) => ({
-      ...(showBatches ? { 'Payment batch': batchOf(invoice) ? paymentBatchLabel(batchOf(invoice)) : '' } : {}),
+      'Batch #': batchOf(invoice) ? paymentBatchLabel(batchOf(invoice)) : '',
       Vendor: request.vendors?.name || '',
       'PO #': request.po_number || `#${request.id}`,
       Entity: request.projects?.name || '',
       'Invoice #': invoice.invoice_number || '',
       Amount: Number(invoice.amount || 0).toFixed(2),
       Currency: request.currency || 'CAD',
-      'Approved for payment': invoice.approved_at ? formatDate(invoice.approved_at) : '',
+      'Approved by': invoice.approved_by ? findUserName(users, invoice.approved_by) : '',
+      'Approved on': invoice.approved_at ? formatDateTime(invoice.approved_at) : '',
       'On hold': isInvoiceHeld(invoice) ? invoice.hold_reason || 'Yes' : '',
       'Invoice file': invoice.file_url || '',
     }))

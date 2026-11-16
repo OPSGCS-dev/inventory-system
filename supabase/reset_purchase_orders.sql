@@ -5,7 +5,7 @@
 --   * every purchase order (purchase_requests), with its line items, invoices, receipts and the old per-PO activity feed
 --   * every payment batch (invoice_payment_batches)
 --   * the whole PO History (po_history), including the tamper-proof chain -- the log starts again from empty
---   * the PO number counters, so the next PO for each entity is -001 again, and the ids (the "ID" column) start at 1
+--   * the PO number counters (and the payment batch counter, so the next batch is PB-yy-001 again), so the next PO for each entity is -001 again, and the ids (the "ID" column) start at 1
 -- Stock transfers' POs are POs, so they go too.
 --
 -- Keeps (not touched): parts, stock counts and locations, the inventory History (stock movements stay, even those from
@@ -52,6 +52,7 @@ begin
   if to_regclass('public.invoice_payment_batches') is not null then delete from public.invoice_payment_batches; end if;
   if to_regclass('public.po_history') is not null then truncate table public.po_history restart identity; end if;
   if to_regclass('public.po_number_sequences') is not null then delete from public.po_number_sequences; end if;
+  if to_regclass('public.payment_batch_sequences') is not null then delete from public.payment_batch_sequences; end if;
 
   -- 3. Numbering starts again from 1.
   foreach t in array array['purchase_requests', 'purchase_request_lines', 'invoices', 'receipts',

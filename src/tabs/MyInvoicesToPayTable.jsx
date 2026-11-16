@@ -5,8 +5,7 @@
 // rows are invoices, not purchase requests. The list can be narrowed to one payment batch. An invoice
 // the supervisor has put on hold stays listed but can't be confirmed paid until it is released.
 import { useMemo, useState } from 'react'
-import Papa from 'papaparse'
-import { downloadCsv } from '../stockUtils'
+import * as XLSX from 'xlsx'
 import { findUserName, formatMoney, isInvoiceHeld, paymentBatchLabel, totalsByCurrencyText, formatDate, formatDateTime } from '../utils'
 import { DateRangeFilter, DateSortHeader, useDateRange } from './DateRange'
 import { ColumnFilterBar, FilterTh, byAmount, useColumnFilters } from './ColumnFilter'
@@ -69,14 +68,27 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
       'PO #': request.po_number || `#${request.id}`,
       Entity: request.projects?.name || '',
       'Invoice #': invoice.invoice_number || '',
-      Amount: Number(invoice.amount || 0).toFixed(2),
+      Amount: Number(invoice.amount || 0),
       Currency: request.currency || 'CAD',
       'Approved by': invoice.approved_by ? findUserName(users, invoice.approved_by) : '',
       'Approved on': invoice.approved_at ? formatDateTime(invoice.approved_at) : '',
-      'On hold': isInvoiceHeld(invoice) ? invoice.hold_reason || 'Yes' : '',
-      'Invoice file': invoice.file_url || '',
+      'Invoice file': invoice.file_url ? 'Open invoice' : '',
     }))
-    downloadCsv(`invoices-to-pay-${new Date().toISOString().slice(0, 10)}.csv`, Papa.unparse(rows))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const headers = Object.keys(rows[0] || {})
+    // Columns sized to their longest entry (not too wide), amounts as real numbers, and the invoice file as a short
+    // clickable link.
+    ws['!cols'] = headers.map((h) => ({ wch: Math.min(48, Math.max(h.length, ...rows.map((r) => String(r[h] ?? '').length)) + 2) }))
+    listed.forEach(({ invoice }, i) => {
+      const amountCell = ws[XLSX.utils.encode_cell({ r: i + 1, c: headers.indexOf('Amount') })]
+      if (amountCell) amountCell.z = '#,##0.00'
+      const fileCell = ws[XLSX.utils.encode_cell({ r: i + 1, c: headers.indexOf('Invoice file') })]
+      if (fileCell && invoice.file_url) fileCell.l = { Target: invoice.file_url, Tooltip: 'Open the invoice' }
+    })
+    ws['!autofilter'] = { ref: ws['!ref'] }
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Invoices to pay')
+    XLSX.writeFile(wb, `invoices-to-pay-${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
   return (
@@ -105,7 +117,7 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
           )}
           <DateRangeFilter range={range} what="approved" />
           <button className="btn-secondary" onClick={exportList} disabled={listed.length === 0}>
-            Download List (CSV)
+            Download List (Excel)
           </button>
         </div>
       </div>

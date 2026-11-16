@@ -2531,6 +2531,7 @@ function PurchaseOrdersTab({
           poActionBusyId={poActionBusyId}
           users={users}
           paymentBatchSummaries={paymentBatchSummaries}
+          programName={programsReady ? programName : null}
         />
       ) : poView === 'vendors' ? (
         <VendorsToApproveTable

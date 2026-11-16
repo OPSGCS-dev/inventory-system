@@ -25,7 +25,7 @@ const COLUMNS = [
 
 const amountsOf = (pairs) => pairs.map(({ request, invoice }) => ({ amount: invoice.amount, currency: request.currency }))
 
-function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoice, poActionBusyId, users, paymentBatchSummaries }) {
+function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoice, poActionBusyId, users, paymentBatchSummaries, programName }) {
   const [batchFilter, setBatchFilter] = useState('')
   const summaries = paymentBatchSummaries || []
   const byId = new Map(summaries.map((s) => [s.batch.id, s]))
@@ -66,7 +66,9 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
       'Batch #': batchOf(invoice) ? paymentBatchLabel(batchOf(invoice)) : '',
       Vendor: request.vendors?.name || '',
       'PO #': request.po_number || `#${request.id}`,
+      ...(programName ? { Project: programName(request.program_id) } : {}),
       Entity: request.projects?.name || '',
+      'Budget category': request.budget_categories?.name || '',
       'Invoice #': invoice.invoice_number || '',
       Amount: Number(invoice.amount || 0),
       Currency: request.currency || 'CAD',

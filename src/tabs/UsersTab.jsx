@@ -963,17 +963,19 @@ function UsersTab({
         <div className="sheet-wrap">
           <table className="sheet">
             <colgroup>
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '11%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '7%' }} />
+              <col style={{ width: '6%' }} />
               <col style={{ width: '16%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '17%' }} />
+              <col style={{ width: '6%' }} />
+              <col style={{ width: '15%' }} />
               <col />
               <col className="col-last" />
             </colgroup>
             <thead>
               <tr className="header-row">
+                <th>ID</th>
                 <th>Name</th>
                 <th>Contact</th>
                 <th>Phone</th>
@@ -987,16 +989,16 @@ function UsersTab({
             <tbody>
               {shownVendors.length === 0 ? (
                 <tr>
-                  <td className="empty" colSpan={8}>
+                  <td className="empty" colSpan={9}>
                     {vendors.length === 0 ? 'No vendors yet.' : 'No vendors match the search.'}
                   </td>
                 </tr>
               ) : (
                 shownVendors.map((v) => (
                   <tr key={v.id} style={v.active === false ? { opacity: 0.6 } : undefined}>
+                    <td>{v.vendor_code || '—'}</td>
                     <td>
                       {v.name}
-                      {v.vendor_code && <span className="sub"> #{v.vendor_code}</span>}
                       {v.legal_name && v.legal_name !== v.name && <div className="sub">Legal: {v.legal_name}</div>}
                       {v.active === false && (
                         <div className="sub" style={{ color: 'var(--danger)' }}>

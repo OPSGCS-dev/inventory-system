@@ -96,6 +96,7 @@ function UsersTab({
   draftBudgetCategories,
   addDraftBudgetCategoryRow,
   removeDraftBudgetCategoryRow,
+  handleDeleteBudgetCategory,
   updateDraftBudgetCategoryField,
   savingBudgetCategories,
   handleSaveBudgetCategories,
@@ -715,7 +716,11 @@ function UsersTab({
                       />
                     </td>
                     <td className="col-last">
-                      {!c._existing && (
+                      {c._existing ? (
+                        <button className="del-btn" onClick={() => handleDeleteBudgetCategory(c)}>
+                          Delete
+                        </button>
+                      ) : (
                         <button className="del-btn" onClick={() => removeDraftBudgetCategoryRow(i)}>
                           Delete
                         </button>

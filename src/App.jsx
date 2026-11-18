@@ -4556,6 +4556,50 @@ function App() {
     }
   }
 
+  // Deletes a saved budget category (admin only). A category any purchase order uses can't go -- the PO would lose
+  // its category -- so say so up front; the database refuses it too. Its sub-categories and any budget amounts typed
+  // in for it on the Budget tab go with it, which the confirmation says.
+  async function handleDeleteBudgetCategory(category) {
+    if (!isAdmin(loggedInUser)) {
+      flashUsersStatus('Only an admin can delete budget categories.', false)
+      return
+    }
+    try {
+      const { count: poCount, error: poError } = await supabase
+        .from('purchase_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('budget_category_id', category.id)
+      if (poError) throw poError
+      if (poCount > 0) {
+        flashUsersStatus(
+          `Can't delete "${category.name}" — ${poCount} purchase order${poCount === 1 ? ' uses' : 's use'} it, and deleting it would change ${poCount === 1 ? "that PO's" : "those POs'"} record. Rename it instead if the name is wrong.`,
+          false
+        )
+        return
+      }
+      const subCount = budgetSubcategories.filter((sc) => sc.category_id === category.id).length
+      const amountCount = budgetAmounts.filter((b) => b.category_id === category.id).length
+      const extras = [
+        subCount ? `${subCount} sub-categor${subCount === 1 ? 'y' : 'ies'}` : '',
+        amountCount ? `${amountCount} budget amount${amountCount === 1 ? '' : 's'}` : '',
+      ].filter(Boolean)
+      if (
+        !window.confirm(
+          `Delete the budget category "${category.name}"?${extras.length ? ` Its ${extras.join(' and ')} will be deleted too.` : ''} This cannot be undone.`
+        )
+      ) {
+        return
+      }
+      const { error } = await supabase.from('budget_categories').delete().eq('id', category.id)
+      if (error) throw error
+      flashUsersStatus(`Deleted ${category.name}.`, true)
+      await Promise.all([loadBudgetCategories(), loadBudgetSubcategories(), loadBudgetAmounts()])
+    } catch (error) {
+      console.error(error)
+      flashUsersStatus('Could not delete — a purchase order may still use it. Check the console for details.', false)
+    }
+  }
+
   function addDraftBudgetSubcategoryRow() {
     setDraftBudgetSubcategories((prev) => [
       ...prev,
@@ -5846,6 +5890,7 @@ function App() {
           draftBudgetCategories={draftBudgetCategories}
           addDraftBudgetCategoryRow={addDraftBudgetCategoryRow}
           removeDraftBudgetCategoryRow={removeDraftBudgetCategoryRow}
+          handleDeleteBudgetCategory={handleDeleteBudgetCategory}
           updateDraftBudgetCategoryField={updateDraftBudgetCategoryField}
           savingBudgetCategories={savingBudgetCategories}
           handleSaveBudgetCategories={handleSaveBudgetCategories}

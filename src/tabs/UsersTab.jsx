@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { PO_ROLE_OPTIONS, ENTITY_SCOPED_ROLES, userDisplayName } from '../utils'
+import { vendorAddressLines } from '../vendorFields'
 
 // Compact "add one at a time" control instead of a tall multi-select: a
 // one-line dropdown + Add button, with already-assigned entities shown as
@@ -112,18 +113,9 @@ function UsersTab({
   handleDeleteVendor,
   handleSetVendorActive,
   closeVendorForm,
-  vendorFormName,
-  setVendorFormName,
-  vendorFormContact,
-  setVendorFormContact,
-  vendorFormPhone,
-  setVendorFormPhone,
-  vendorFormEmail,
-  setVendorFormEmail,
-  vendorFormAddress,
-  setVendorFormAddress,
-  vendorFormNotes,
-  setVendorFormNotes,
+  vendorForm,
+  setVendorFormField,
+  vendorDetailsReady,
   savingVendor,
   handleSaveVendor,
   handleUpdateVendorLogon,
@@ -170,6 +162,7 @@ function UsersTab({
   const capChanged = capDraft.trim() !== String(consumableCap)
   const [passwordCopied, setPasswordCopied] = useState(false)
   const [vendorPasswordCopied, setVendorPasswordCopied] = useState(false)
+  const [vendorSearch, setVendorSearch] = useState('')
 
   async function copyVendorPassword() {
     try {
@@ -191,6 +184,19 @@ function UsersTab({
       // selectable/copyable by hand from the text box.
     }
   }
+
+  // The vendor list, narrowed by the search box: every word has to appear somewhere in the vendor's details.
+  const vendorWords = vendorSearch.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const shownVendors =
+    vendorWords.length === 0
+      ? vendors
+      : vendors.filter((v) => {
+          const haystack = [v.name, v.legal_name, v.vendor_code, v.contact_name, v.email, v.alt_email, v.phone, v.mobile, v.city, v.notes]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+          return vendorWords.every((w) => haystack.includes(w))
+        })
 
   return (
     <>
@@ -216,7 +222,7 @@ function UsersTab({
             <p className="sub" style={{ margin: '0 0 8px' }}>
               Excel file with one worksheet per category — Users, Vendors, Entities, Sites, Budget
               Categories, Budget Sub-Categories — matching the file from "Export All (Excel)". Rows
-              matching an existing name update it; anything else is added. New users aren't created
+              matching an existing name update it; anything else is added. On Vendors, a blank cell leaves what is stored as it is. New users aren't created
               this way — invite them from the Users section above instead, then re-import to set roles.
             </p>
             <input type="file" accept=".xlsx,.xls" onChange={handleAdminImportFileChange} />
@@ -235,6 +241,7 @@ function UsersTab({
                       <col className="col-rowhead" />
                       <col style={{ width: '20%' }} />
                       <col style={{ width: '16%' }} />
+                      <col style={{ width: '30%' }} />
                       <col />
                     </colgroup>
                     <thead>
@@ -243,6 +250,7 @@ function UsersTab({
                         <th>Section</th>
                         <th>Action</th>
                         <th>Name</th>
+                        <th>Note</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -252,6 +260,7 @@ function UsersTab({
                           <td>{r.section}</td>
                           <td>{r.action === 'insert' ? 'Add new' : 'Update'}</td>
                           <td>{r.name}</td>
+                          <td className="sub">{r.note || ''}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -847,54 +856,84 @@ function UsersTab({
 
         {showVendorForm && (
           <div className="add-form" style={{ marginBottom: 16 }}>
-            <label htmlFor="vendor_form_name">Vendor Name</label>
-            <input
-              id="vendor_form_name"
-              type="text"
-              value={vendorFormName}
-              onChange={(e) => setVendorFormName(e.target.value)}
-            />
+            {!vendorDetailsReady && (
+              <p className="sub" style={{ margin: '0 0 8px', color: 'var(--warn)' }}>
+                Vendor ID, legal name, mobile, alt email, website and the address parts need supabase/add_vendor_details.sql to be run first.
+                Until then only the older fields are saved (the address is kept as one block of text).
+              </p>
+            )}
+            <div className="field-row">
+              <div>
+                <label htmlFor="vendor_form_name">Vendor Name</label>
+                <input id="vendor_form_name" type="text" value={vendorForm.name} onChange={(e) => setVendorFormField('name', e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="vendor_form_code">Vendor ID</label>
+                <input id="vendor_form_code" type="text" value={vendorForm.code} onChange={(e) => setVendorFormField('code', e.target.value)} />
+              </div>
+            </div>
+            <label htmlFor="vendor_form_legal">Legal Name (as it should read on the PO)</label>
+            <input id="vendor_form_legal" type="text" value={vendorForm.legal} onChange={(e) => setVendorFormField('legal', e.target.value)} />
             <div className="field-row">
               <div>
                 <label htmlFor="vendor_form_contact">Contact Name</label>
-                <input
-                  id="vendor_form_contact"
-                  type="text"
-                  value={vendorFormContact}
-                  onChange={(e) => setVendorFormContact(e.target.value)}
-                />
+                <input id="vendor_form_contact" type="text" value={vendorForm.contact} onChange={(e) => setVendorFormField('contact', e.target.value)} />
               </div>
               <div>
-                <label htmlFor="vendor_form_phone">Phone</label>
-                <input
-                  id="vendor_form_phone"
-                  type="text"
-                  value={vendorFormPhone}
-                  onChange={(e) => setVendorFormPhone(e.target.value)}
-                />
+                <label htmlFor="vendor_form_website">Website</label>
+                <input id="vendor_form_website" type="text" value={vendorForm.website} onChange={(e) => setVendorFormField('website', e.target.value)} />
               </div>
             </div>
-            <label htmlFor="vendor_form_email">Email</label>
-            <input
-              id="vendor_form_email"
-              type="text"
-              value={vendorFormEmail}
-              onChange={(e) => setVendorFormEmail(e.target.value)}
-            />
-            <label htmlFor="vendor_form_address">Address</label>
-            <input
-              id="vendor_form_address"
-              type="text"
-              value={vendorFormAddress}
-              onChange={(e) => setVendorFormAddress(e.target.value)}
-            />
+            <div className="field-row">
+              <div>
+                <label htmlFor="vendor_form_phone">Phone</label>
+                <input id="vendor_form_phone" type="text" value={vendorForm.phone} onChange={(e) => setVendorFormField('phone', e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="vendor_form_mobile">Mobile</label>
+                <input id="vendor_form_mobile" type="text" value={vendorForm.mobile} onChange={(e) => setVendorFormField('mobile', e.target.value)} />
+              </div>
+            </div>
+            <div className="field-row">
+              <div>
+                <label htmlFor="vendor_form_email">Email (the PO is emailed here)</label>
+                <input id="vendor_form_email" type="text" value={vendorForm.email} onChange={(e) => setVendorFormField('email', e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="vendor_form_altEmail">Alt Email (separate several with ;)</label>
+                <input id="vendor_form_altEmail" type="text" value={vendorForm.altEmail} onChange={(e) => setVendorFormField('altEmail', e.target.value)} />
+              </div>
+            </div>
+            <div className="field-row">
+              <div>
+                <label htmlFor="vendor_form_address1">Address Line 1</label>
+                <input id="vendor_form_address1" type="text" value={vendorForm.address1} onChange={(e) => setVendorFormField('address1', e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="vendor_form_address2">Address Line 2</label>
+                <input id="vendor_form_address2" type="text" value={vendorForm.address2} onChange={(e) => setVendorFormField('address2', e.target.value)} />
+              </div>
+            </div>
+            <div className="field-row">
+              <div>
+                <label htmlFor="vendor_form_city">City</label>
+                <input id="vendor_form_city" type="text" value={vendorForm.city} onChange={(e) => setVendorFormField('city', e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="vendor_form_region">Province/State</label>
+                <input id="vendor_form_region" type="text" value={vendorForm.region} onChange={(e) => setVendorFormField('region', e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="vendor_form_postal">Postal/ZIP Code</label>
+                <input id="vendor_form_postal" type="text" value={vendorForm.postal} onChange={(e) => setVendorFormField('postal', e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="vendor_form_country">Country</label>
+                <input id="vendor_form_country" type="text" value={vendorForm.country} onChange={(e) => setVendorFormField('country', e.target.value)} />
+              </div>
+            </div>
             <label htmlFor="vendor_form_notes">Notes</label>
-            <input
-              id="vendor_form_notes"
-              type="text"
-              value={vendorFormNotes}
-              onChange={(e) => setVendorFormNotes(e.target.value)}
-            />
+            <input id="vendor_form_notes" type="text" value={vendorForm.notes} onChange={(e) => setVendorFormField('notes', e.target.value)} />
             <div className="form-actions">
               <button className="btn-primary" onClick={handleSaveVendor} disabled={savingVendor}>
                 {savingVendor ? 'Saving…' : editingVendorId ? 'Save Changes' : 'Add Vendor'}
@@ -906,14 +945,29 @@ function UsersTab({
           </div>
         )}
 
+        <div className="edit-toolbar" style={{ marginBottom: 8 }}>
+          <input
+            type="search"
+            placeholder="Search vendors: name, legal name, ID, contact, email, city"
+            aria-label="Search vendors"
+            value={vendorSearch}
+            onChange={(e) => setVendorSearch(e.target.value)}
+            style={{ minWidth: 320 }}
+          />
+          {vendorSearch.trim() && (
+            <span className="sub" style={{ margin: 0 }}>
+              {shownVendors.length} of {vendors.length}
+            </span>
+          )}
+        </div>
         <div className="sheet-wrap">
           <table className="sheet">
             <colgroup>
-              <col style={{ width: '16%' }} />
-              <col style={{ width: '13%' }} />
+              <col style={{ width: '18%' }} />
               <col style={{ width: '11%' }} />
-              <col style={{ width: '16%' }} />
-              <col style={{ width: '8%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '7%' }} />
               <col style={{ width: '16%' }} />
               <col />
               <col className="col-last" />
@@ -931,17 +985,19 @@ function UsersTab({
               </tr>
             </thead>
             <tbody>
-              {vendors.length === 0 ? (
+              {shownVendors.length === 0 ? (
                 <tr>
                   <td className="empty" colSpan={8}>
-                    No vendors yet.
+                    {vendors.length === 0 ? 'No vendors yet.' : 'No vendors match the search.'}
                   </td>
                 </tr>
               ) : (
-                vendors.map((v) => (
+                shownVendors.map((v) => (
                   <tr key={v.id} style={v.active === false ? { opacity: 0.6 } : undefined}>
                     <td>
                       {v.name}
+                      {v.vendor_code && <span className="sub"> #{v.vendor_code}</span>}
+                      {v.legal_name && v.legal_name !== v.name && <div className="sub">Legal: {v.legal_name}</div>}
                       {v.active === false && (
                         <div className="sub" style={{ color: 'var(--danger)' }}>
                           Deactivated{v.deactivation_reason ? ` — ${v.deactivation_reason}` : ''}
@@ -955,8 +1011,15 @@ function UsersTab({
                       )}
                     </td>
                     <td>{v.contact_name || '—'}</td>
-                    <td>{v.phone || '—'}</td>
-                    <td>{v.email || '—'}</td>
+                    <td>
+                      {v.phone || (v.mobile ? '' : '—')}
+                      {v.mobile && <div className="sub">Mobile: {v.mobile}</div>}
+                    </td>
+                    <td>
+                      {v.email || '—'}
+                      {v.alt_email && <div className="sub">{v.alt_email}</div>}
+                      {v.website && <div className="sub">{v.website}</div>}
+                    </td>
                     <td className="center-cell">
                       <input
                         type="checkbox"
@@ -975,7 +1038,11 @@ function UsersTab({
                         </button>
                       )}
                     </td>
-                    <td>{v.address || '—'}</td>
+                    <td>
+                      {vendorAddressLines(v).length === 0
+                        ? '—'
+                        : vendorAddressLines(v).map((line, i) => <div key={i}>{line}</div>)}
+                    </td>
                     <td>{v.notes || '—'}</td>
                     <td className="col-last">
                       <button className="btn-secondary" onClick={() => openEditVendorForm(v)}>

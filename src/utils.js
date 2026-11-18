@@ -1,3 +1,5 @@
+import { vendorAddressText } from './vendorFields.js'
+
 export const TICKETING_URL = 'https://ticket-system-gcs14.vercel.app'
 
 // Inventory journal History tab -- one label per distinct action that can
@@ -1300,7 +1302,7 @@ export function buildPoMailto(request) {
     ...(request.program_name ? [`Project: ${request.program_name}`] : []),
     `Entity: ${request.projects?.name || '—'}`,
     ...(request.sub_projects?.name ? [`Site: ${request.sub_projects.name}`] : []),
-    ...(request?.vendors?.address ? [`Ship to / Address: ${request.vendors.address}`] : []),
+    ...(vendorAddressText(request?.vendors) ? [`Ship to / Address: ${vendorAddressText(request.vendors)}`] : []),
     '',
     'Line Items:',
     ...(lineLines.length ? lineLines : ['  (none)']),

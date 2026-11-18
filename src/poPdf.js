@@ -18,6 +18,7 @@ import {
   formatDate,
   formatMoney,
 } from './utils.js'
+import { vendorAddressLines, vendorLegalName } from './vendorFields.js'
 
 // The standard PDF fonts only cover Latin-1: swap the usual offenders (dashes,
 // curly quotes) for plain ones and show anything else as "?" instead of
@@ -109,7 +110,7 @@ export async function buildPoPdf(request, stamp = null) {
     }
     return yy
   }
-  const vendorBottom = party(M, 'Vendor:', request.vendors?.name, (request.vendors?.address || '').split('\n').filter(Boolean))
+  const vendorBottom = party(M, 'Vendor:', vendorLegalName(request.vendors), vendorAddressLines(request.vendors))
   const billBottom = party(M + colW + 24, 'Bill To:', request.projects?.name, COMPANY_ADDRESS_BLOCK)
   y = Math.max(vendorBottom, billBottom) + 12
 

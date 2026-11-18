@@ -3,6 +3,7 @@
 // existing vendors with a similar name so a duplicate can be rejected.
 import { similarNames } from '../scrape/matchers'
 import { findUserName, vendorApprovalStatus, formatDate } from '../utils'
+import { vendorAddressText } from '../vendorFields'
 
 export default function VendorsToApproveTable({ vendors, users, onApprove, onReject }) {
   const pending = vendors.filter((v) => vendorApprovalStatus(v) === 'pending')
@@ -35,7 +36,8 @@ export default function VendorsToApproveTable({ vendors, users, onApprove, onRej
                   <tr key={v.id}>
                     <td>
                       <strong>{v.name}</strong>
-                      {v.address ? <div className="sub">{v.address}</div> : null}
+                      {v.legal_name && v.legal_name !== v.name ? <div className="sub">Legal: {v.legal_name}</div> : null}
+                      {vendorAddressText(v) ? <div className="sub">{vendorAddressText(v)}</div> : null}
                     </td>
                     <td>
                       {findUserName(users, v.requested_by)}

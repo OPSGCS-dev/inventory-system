@@ -80,6 +80,7 @@ import {
   formatDate,
   formatAmount,
 } from '../utils'
+import { vendorAddressLines, vendorLegalName } from '../vendorFields'
 import InvoicesPanel from './InvoicesPanel'
 import RelatedPos from './RelatedPos'
 import MyInvoicesForApprovalTable from './MyInvoicesForApprovalTable'
@@ -1251,10 +1252,10 @@ function PurchaseOrdersTab({
               <div className="po-print-parties">
                 <div>
                   <p className="po-print-label">Vendor:</p>
-                  <p className="po-print-strong">{r.vendors?.name || '—'}</p>
-                  {r.vendors?.address && (
+                  <p className="po-print-strong">{vendorLegalName(r.vendors) || '—'}</p>
+                  {vendorAddressLines(r.vendors).length > 0 && (
                     <div className="po-print-address">
-                      {r.vendors.address.split('\n').map((line, idx) => (
+                      {vendorAddressLines(r.vendors).map((line, idx) => (
                         <div key={idx}>{line}</div>
                       ))}
                     </div>

@@ -100,7 +100,8 @@ import PoHistoryTab from './tabs/PoHistoryTab'
 import UsersTab from './tabs/UsersTab'
 import SignatureCard from './tabs/SignatureCard'
 import GlobalSearch from './tabs/GlobalSearch'
-import { matchPart } from './scrape/matchers'
+import { matchPart, similarNames } from './scrape/matchers'
+import { EMPTY_VENDOR_FORM, vendorNameKey, vendorFormFromVendor, vendorPayloadFromForm } from './vendorFields'
 import { findRequestByNumber } from './poLinks'
 
 function App() {
@@ -305,12 +306,11 @@ function App() {
 
   const [showVendorForm, setShowVendorForm] = useState(false)
   const [editingVendorId, setEditingVendorId] = useState(null)
-  const [vendorFormName, setVendorFormName] = useState('')
-  const [vendorFormContact, setVendorFormContact] = useState('')
-  const [vendorFormPhone, setVendorFormPhone] = useState('')
-  const [vendorFormEmail, setVendorFormEmail] = useState('')
-  const [vendorFormAddress, setVendorFormAddress] = useState('')
-  const [vendorFormNotes, setVendorFormNotes] = useState('')
+  const [vendorForm, setVendorForm] = useState(EMPTY_VENDOR_FORM)
+  const setVendorFormField = (key, value) => setVendorForm((f) => ({ ...f, [key]: value }))
+  // add_vendor_details.sql has been run (legal name, vendor number, structured address ... exist). Found out when
+  // the vendors are loaded; until then the vendor form saves the old fields only.
+  const [vendorDetailsReady, setVendorDetailsReady] = useState(false)
   const [savingVendor, setSavingVendor] = useState(false)
 
   const [newProjectName, setNewProjectName] = useState('')
@@ -775,6 +775,11 @@ function App() {
       return
     }
     setVendors(data ?? [])
+    if ((data ?? []).length > 0) setVendorDetailsReady('legal_name' in data[0])
+    else {
+      const probe = await supabase.from('vendors').select('legal_name').limit(1)
+      setVendorDetailsReady(!probe.error)
+    }
   }
 
   async function loadBudgetCategories() {
@@ -1337,11 +1342,21 @@ function App() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(userRows), 'Users')
 
     const vendorRows = vendors.map((v) => ({
-      Name: v.name,
-      Contact: v.contact_name || '',
-      Phone: v.phone || '',
+      'Vendor ID': v.vendor_code || '',
+      'Vendor Name': v.name,
+      'Legal Name (as on PO / records)': v.legal_name || '',
+      'Contact Name': v.contact_name || '',
+      'Address Line 1': v.address || '',
+      'Address Line 2': v.address_line2 || '',
+      City: v.city || '',
+      'Province/State': v.region || '',
+      'Postal/ZIP Code': v.postal_code || '',
+      Country: v.country || '',
       Email: v.email || '',
-      Address: v.address || '',
+      'Alt Email': v.alt_email || '',
+      Phone: v.phone || '',
+      Mobile: v.mobile || '',
+      Website: v.website || '',
       Notes: v.notes || '',
     }))
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vendorRows), 'Vendors')
@@ -1452,25 +1467,98 @@ function App() {
       })
     })
 
-    sheetRows('Vendors').forEach((row) => {
-      const name = String(getCell(row, 'Name') || '').trim()
-      if (!name) return
-      const existing = vendors.find((v) => v.name.toLowerCase() === name.toLowerCase())
-      rows.push({
-        section: 'Vendor',
-        name,
-        action: existing ? 'update' : 'insert',
-        existingId: existing?.id ?? null,
-        data: {
-          name,
-          contact_name: String(getCell(row, 'Contact') || '').trim() || null,
-          phone: String(getCell(row, 'Phone') || '').trim() || null,
-          email: String(getCell(row, 'Email') || '').trim() || null,
-          address: String(getCell(row, 'Address') || '').trim() || null,
-          notes: String(getCell(row, 'Notes') || '').trim() || null,
-        },
-      })
-    })
+    // Vendors. The columns can be the GCS vendor contact list's (Vendor ID, Vendor Name, Legal Name, Contact Name,
+    // Address Line 1 ... Website) or the older Name / Contact / Phone / Email / Address / Notes. A vendor is found by
+    // its Vendor ID, else by its name or legal name (ignoring capitals, spaces and punctuation). A blank cell leaves
+    // what is stored as it is. A contact list that still has its Review? / Sources working columns is a clean-up
+    // copy, so its Notes (comments about the data, not about the vendor) are not imported.
+    {
+      const head = wb.Sheets['Vendors']
+        ? (XLSX.utils.sheet_to_json(wb.Sheets['Vendors'], { header: 1, defval: '' })[0] || []).map((h) => String(h).trim().toLowerCase())
+        : []
+      const cleanupCopy = head.includes('review?') || head.includes('sources')
+      const hasDetails = ['vendor id', 'legal name (as on po / records)', 'legal name', 'alt email', 'mobile', 'website', 'city'].some((h) => head.includes(h))
+      const claimed = new Map()
+      if (hasDetails && !vendorDetailsReady) {
+        errors.push('Vendors: this file has the newer vendor columns (Vendor ID, Legal Name, City ...). Run supabase/add_vendor_details.sql in the Inventory Supabase first, then import again. The Vendors sheet was skipped.')
+      } else {
+        sheetRows('Vendors').forEach((row, i) => {
+          const rowNum = i + 2
+          const cell = (...names) => {
+            for (const n of names) {
+              const v = getCell(row, n)
+              if (v !== undefined) return String(v).trim()
+            }
+            return ''
+          }
+          const name = cell('Vendor Name', 'Name')
+          if (!name) return
+          const code = cell('Vendor ID')
+          const legal = cell('Legal Name (as on PO / records)', 'Legal Name')
+          let how = ''
+          let existing = code ? vendors.find((v) => v.vendor_code && String(v.vendor_code) === code) : null
+          if (existing) how = 'matched by vendor ID'
+          if (!existing) {
+            existing = vendors.find((v) => vendorNameKey(v.name) === vendorNameKey(name))
+            if (existing) how = 'matched by name'
+          }
+          if (!existing && legal) {
+            existing = vendors.find((v) => vendorNameKey(v.name) === vendorNameKey(legal) || (v.legal_name && vendorNameKey(v.legal_name) === vendorNameKey(legal)))
+            if (existing) how = 'matched by legal name'
+          }
+          if (existing && claimed.has(existing.id)) {
+            errors.push(`Vendors row ${rowNum}: "${name}" matches the same existing vendor as row ${claimed.get(existing.id)} ("${existing.name}") — one of them needs a different name or ID.`)
+            return
+          }
+          if (existing) claimed.set(existing.id, rowNum)
+
+          const fields = {
+            contact_name: cell('Contact Name', 'Contact'),
+            phone: cell('Phone'),
+            email: cell('Email'),
+            address: cell('Address Line 1', 'Address'),
+            ...(cleanupCopy ? {} : { notes: cell('Notes') }),
+            ...(vendorDetailsReady
+              ? {
+                  vendor_code: code,
+                  legal_name: legal,
+                  address_line2: cell('Address Line 2'),
+                  city: cell('City'),
+                  region: cell('Province/State', 'Province', 'State'),
+                  postal_code: cell('Postal/ZIP Code', 'Postal Code', 'ZIP'),
+                  country: cell('Country'),
+                  mobile: cell('Mobile'),
+                  alt_email: cell('Alt Email'),
+                  website: cell('Website'),
+                }
+              : {}),
+          }
+          const data = { name }
+          for (const [column, value] of Object.entries(fields)) {
+            if (value !== '') data[column] = value
+            else if (!existing) data[column] = null
+          }
+
+          const notes = []
+          if (existing) {
+            notes.push(how)
+            if (existing.name !== name) notes.push(`renamed from "${existing.name}"`)
+          } else {
+            const similar = similarNames(name, vendors).slice(0, 3)
+            if (similar.length) notes.push(`⚠ similar to existing: ${similar.map((v) => v.name).join(', ')}`)
+          }
+          if (/latest po|\bpos:/i.test(legal)) notes.push('⚠ legal name has a working note in it')
+          rows.push({
+            section: 'Vendor',
+            name,
+            action: existing ? 'update' : 'insert',
+            existingId: existing?.id ?? null,
+            note: notes.join('; '),
+            data,
+          })
+        })
+      }
+    }
 
     // "Sites" meant the entities in the previous round's files and means the sub-locations now. The new one has an
     // Entity column (naming the entity each site belongs to); the old one never did.
@@ -4598,23 +4686,13 @@ function App() {
 
   function openNewVendorForm() {
     setEditingVendorId(null)
-    setVendorFormName('')
-    setVendorFormContact('')
-    setVendorFormPhone('')
-    setVendorFormEmail('')
-    setVendorFormAddress('')
-    setVendorFormNotes('')
+    setVendorForm(EMPTY_VENDOR_FORM)
     setShowVendorForm(true)
   }
 
   function openEditVendorForm(vendor) {
     setEditingVendorId(vendor.id)
-    setVendorFormName(vendor.name || '')
-    setVendorFormContact(vendor.contact_name || '')
-    setVendorFormPhone(vendor.phone || '')
-    setVendorFormEmail(vendor.email || '')
-    setVendorFormAddress(vendor.address || '')
-    setVendorFormNotes(vendor.notes || '')
+    setVendorForm(vendorFormFromVendor(vendor))
     setShowVendorForm(true)
   }
 
@@ -4624,20 +4702,13 @@ function App() {
   }
 
   async function handleSaveVendor() {
-    if (!vendorFormName.trim()) {
+    if (!vendorForm.name.trim()) {
       flashUsersStatus('Vendor name is required.', false)
       return
     }
     setSavingVendor(true)
     try {
-      const payload = {
-        name: vendorFormName.trim(),
-        contact_name: vendorFormContact.trim() || null,
-        phone: vendorFormPhone.trim() || null,
-        email: vendorFormEmail.trim() || null,
-        address: vendorFormAddress.trim() || null,
-        notes: vendorFormNotes.trim() || null,
-      }
+      const payload = vendorPayloadFromForm(vendorForm, vendorDetailsReady)
       if (editingVendorId) {
         const { error } = await supabase.from('vendors').update(payload).eq('id', editingVendorId)
         if (error) throw error
@@ -4651,7 +4722,12 @@ function App() {
       await loadVendors()
     } catch (error) {
       console.error(error)
-      flashUsersStatus('Could not save vendor — check the console for details.', false)
+      flashUsersStatus(
+        error?.code === '23505'
+          ? 'Could not save — another vendor already has that name or vendor ID.'
+          : 'Could not save vendor — check the console for details.',
+        false
+      )
     } finally {
       setSavingVendor(false)
     }
@@ -4725,12 +4801,7 @@ function App() {
     const { data, error } = await supabase
       .from('vendors')
       .insert({
-        name,
-        contact_name: (form.contact || '').trim() || null,
-        phone: (form.phone || '').trim() || null,
-        email: (form.email || '').trim() || null,
-        address: (form.address || '').trim() || null,
-        notes: (form.notes || '').trim() || null,
+        ...vendorPayloadFromForm(form, vendorDetailsReady),
         approval_status: approver ? 'approved' : 'pending',
         requested_by: loggedInUser.id,
         requested_at: now,
@@ -4739,7 +4810,7 @@ function App() {
       .select()
       .single()
     if (error) {
-      if (error.code === '23505') return { error: 'A vendor with that name already exists.' }
+      if (error.code === '23505') return { error: 'A vendor with that name (or vendor ID) already exists.' }
       console.error(error)
       return { error: 'Could not request the vendor — check the console for details.' }
     }
@@ -5802,18 +5873,9 @@ function App() {
           handleDeleteVendor={handleDeleteVendor}
           handleSetVendorActive={handleSetVendorActive}
           closeVendorForm={closeVendorForm}
-          vendorFormName={vendorFormName}
-          setVendorFormName={setVendorFormName}
-          vendorFormContact={vendorFormContact}
-          setVendorFormContact={setVendorFormContact}
-          vendorFormPhone={vendorFormPhone}
-          setVendorFormPhone={setVendorFormPhone}
-          vendorFormEmail={vendorFormEmail}
-          setVendorFormEmail={setVendorFormEmail}
-          vendorFormAddress={vendorFormAddress}
-          setVendorFormAddress={setVendorFormAddress}
-          vendorFormNotes={vendorFormNotes}
-          setVendorFormNotes={setVendorFormNotes}
+          vendorForm={vendorForm}
+          setVendorFormField={setVendorFormField}
+          vendorDetailsReady={vendorDetailsReady}
           savingVendor={savingVendor}
           handleSaveVendor={handleSaveVendor}
           handleUpdateVendorLogon={handleUpdateVendorLogon}

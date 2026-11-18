@@ -5,11 +5,12 @@
 import { useState } from 'react'
 import { similarNames } from '../scrape/matchers'
 import { isVendorActive, vendorApprovalStatus } from '../utils'
+import { EMPTY_VENDOR_FORM } from '../vendorFields'
 
 const STATUS_WORDS = { pending: 'pending approval', rejected: 'rejected', inactive: 'deactivated — ask an admin to reactivate it' }
 
 export default function VendorRequestPanel({ vendors, onSubmit, onClose, onUseExisting }) {
-  const [form, setForm] = useState({ name: '', contact: '', phone: '', email: '', address: '', notes: '' })
+  const [form, setForm] = useState(EMPTY_VENDOR_FORM)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
@@ -75,10 +76,32 @@ export default function VendorRequestPanel({ vendors, onSubmit, onClose, onUseEx
         Email
       </label>
       <input id="vendor_req_email" type="text" value={form.email} onChange={set('email')} />
+      <label htmlFor="vendor_req_legal" style={{ marginTop: 8 }}>
+        Legal name, if different (as it should read on the PO)
+      </label>
+      <input id="vendor_req_legal" type="text" value={form.legal} onChange={set('legal')} />
       <label htmlFor="vendor_req_address" style={{ marginTop: 8 }}>
         Address
       </label>
-      <input id="vendor_req_address" type="text" value={form.address} onChange={set('address')} />
+      <input id="vendor_req_address" type="text" value={form.address1} onChange={set('address1')} />
+      <div className="field-row" style={{ marginTop: 8 }}>
+        <div>
+          <label htmlFor="vendor_req_city">City</label>
+          <input id="vendor_req_city" type="text" value={form.city} onChange={set('city')} />
+        </div>
+        <div>
+          <label htmlFor="vendor_req_region">Province/State</label>
+          <input id="vendor_req_region" type="text" value={form.region} onChange={set('region')} />
+        </div>
+        <div>
+          <label htmlFor="vendor_req_postal">Postal/ZIP Code</label>
+          <input id="vendor_req_postal" type="text" value={form.postal} onChange={set('postal')} />
+        </div>
+        <div>
+          <label htmlFor="vendor_req_country">Country</label>
+          <input id="vendor_req_country" type="text" value={form.country} onChange={set('country')} />
+        </div>
+      </div>
       <label htmlFor="vendor_req_notes" style={{ marginTop: 8 }}>
         What do you need them for? (helps the approver)
       </label>

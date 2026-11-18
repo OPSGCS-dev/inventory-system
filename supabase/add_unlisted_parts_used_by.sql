@@ -6,18 +6,15 @@
 --   * the 34 "GM Parts" (ground mount)  -> all nine SunE sites (Alfred, Hwy 2S, Norfolk, Odessa, Ray, Rutley, Sandhurst,
 --                                           South Stormont, Unity)
 --   * the 14 "RT Parts" (rooftop)       -> Firelight Solar LP
---   * ALL 48 parts also -> Firelight Operations LP (FLOPS). This is only so FLOPS can hold the stock for now: the stock
---     screens list a part under an entity only if the entity has the part on its Required Inventory sheet. When the
---     real owners are known, move the units with Ownership > Update Count > Individual Adjustment, then untick
---     these parts for Firelight Operations LP on Required Inventory.
+--   * Firelight Operations LP (FLOPS) is NOT given any of them: it will own the stock but does not use the parts.
 --
 -- Parts are found by manufacturer + Mfr Part # (or manufacturer + description for the five with no part number), and
 -- only among parts numbered above 379 so an older part with the same number is never picked up.
 --
 -- This is ONE statement (the SQL editor does not keep temporary tables between statements). It prints one row per
 -- part: "GCS P/N" is empty if the part was not found in the Master List (import it first), "Added now" is how many
--- Used By entries this run created, and "Entities found" should read 11 on every row (9 SunE + Firelight Solar +
--- Firelight Operations); anything less means an entity name was not found.
+-- Used By entries this run created, and "Entities found" should read 10 on every row (9 SunE + Firelight Solar);
+-- anything less means an entity name was not found.
 
 with wanted (pn, mfr, descr, grp) as (
   values
@@ -74,12 +71,10 @@ ents as (
   select id, name,
          (name in ('SunE Alfred LP','SunE Hwy 2S LP','SunE Norfolk LP','SunE Odessa LP','SunE Ray LP','SunE Rutley LP',
                    'SunE Sandhurst LP','SunE South Stormont LP','SunE Unity LP')) as is_gm,
-         (name = 'Firelight Solar LP') as is_rt,
-         (name in ('Firelight Operations LP', 'FLOPS')) as is_parking
+         (name = 'Firelight Solar LP') as is_rt
   from public.projects
   where name in ('SunE Alfred LP','SunE Hwy 2S LP','SunE Norfolk LP','SunE Odessa LP','SunE Ray LP','SunE Rutley LP',
-                 'SunE Sandhurst LP','SunE South Stormont LP','SunE Unity LP','Firelight Solar LP',
-                 'Firelight Operations LP', 'FLOPS')
+                 'SunE Sandhurst LP','SunE South Stormont LP','SunE Unity LP','Firelight Solar LP')
 ),
 matched as (
   select w.pn, w.mfr, w.grp, p.gcs_id
@@ -94,7 +89,7 @@ ins as (
   insert into public.project_parts (project_id, part_gcs_id)
   select e.id, m.gcs_id
   from matched m
-  join ents e on e.is_parking or (m.grp = 'GM' and e.is_gm) or (m.grp = 'RT' and e.is_rt)
+  join ents e on (m.grp = 'GM' and e.is_gm) or (m.grp = 'RT' and e.is_rt)
   where m.gcs_id is not null
   on conflict (project_id, part_gcs_id) do nothing
   returning part_gcs_id

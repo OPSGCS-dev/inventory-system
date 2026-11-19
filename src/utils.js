@@ -598,6 +598,18 @@ export function canEditInventory(user) {
 // `projectId` is optional -- omit it to just ask whether the user holds the
 // role at all (showing the New Request button), pass it to also check the
 // entity against their assignments.
+// Why this user can't submit this draft for approval ('' when they can). A draft belongs to the person who
+// created it (purchase_requests.requested_by is set when the draft is first saved) and only that person submits
+// it, so the PO can't end up "from" someone else. A draft from before owners were recorded (no requested_by)
+// can be submitted by anyone who can create requests, who then becomes its requester. Admin is not an exception.
+export function draftSubmitBlockReason(user, request, users) {
+  if (!canCreatePurchaseRequests(user, request?.project_id)) return "You don't have permission to submit requests."
+  if (request?.requested_by && request.requested_by !== user?.id) {
+    return `Only ${findUserName(users || [], request.requested_by)} can submit this draft.`
+  }
+  return ''
+}
+
 export function canCreatePurchaseRequests(user, projectId) {
   if (!userHasRole(user, 'purchase_req')) return false
   if (projectId === undefined || projectId === null) return true

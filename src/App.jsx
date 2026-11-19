@@ -34,6 +34,7 @@ import {
   canEditInventory,
   canAccessTicketing,
   canCreatePurchaseRequests,
+  draftSubmitBlockReason,
   canApproveRequests,
   canApproveVendors,
   canManagePayment,
@@ -2780,6 +2781,7 @@ function App() {
             spending_cap: spendingCapToSave,
             currency: poDraftCurrency.trim() || 'CAD',
             status: 'draft',
+            requested_by: loggedInUser.id,
             ticket_system_ticket_id: poDraftTicketSystemTicketId,
             ticket_system_ticket_number: poDraftTicketSystemTicketNumber,
           })
@@ -2942,6 +2944,11 @@ function App() {
   async function handleSubmitPurchaseRequest(request) {
     if (!loggedInUser) {
       flashPoStatus('You must be logged in.', false)
+      return
+    }
+    const submitBlock = draftSubmitBlockReason(loggedInUser, request, users)
+    if (submitBlock) {
+      flashPoStatus(submitBlock, false)
       return
     }
     setPoActionBusyId(request.id)

@@ -11,6 +11,7 @@ import {
   userDisplayName,
   canSendReminders,
   canCreatePurchaseRequests,
+  draftSubmitBlockReason,
   entitiesAllowedFor,
   isEntityAllowed,
   canMatchInvoices,
@@ -1569,13 +1570,13 @@ function PurchaseOrdersTab({
                 <button
                   className="btn-primary"
                   onClick={() => handleSubmitPurchaseRequest(r)}
-                  disabled={busy || !canCreatePurchaseRequests(loggedInUser, r.project_id)}
+                  disabled={busy || Boolean(draftSubmitBlockReason(loggedInUser, r, users))}
                 >
                   {busy ? 'Submitting…' : 'Submit'}
                 </button>
-                {!canCreatePurchaseRequests(loggedInUser, r.project_id) && (
+                {draftSubmitBlockReason(loggedInUser, r, users) && (
                   <span className="sub" style={{ margin: 0 }}>
-                    You don't have permission to submit requests.
+                    {draftSubmitBlockReason(loggedInUser, r, users)}
                   </span>
                 )}
               </>
@@ -2857,7 +2858,7 @@ function PurchaseOrdersTab({
                       <td className="nowrap-cell">{next.who || '—'}</td>
                       <td className="nowrap-cell">{r.po_number || '—'}</td>
                       <td>
-                        {r.status === 'draft' && canCreatePurchaseRequests(loggedInUser, r.project_id) && (
+                        {r.status === 'draft' && !draftSubmitBlockReason(loggedInUser, r, users) && (
                           <button
                             className="btn-primary po-action-btn"
                             onClick={() => handleSubmitPurchaseRequest(r)}

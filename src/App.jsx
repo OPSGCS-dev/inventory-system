@@ -264,6 +264,8 @@ function App() {
   const [poDraftBudgetCategoryId, setPoDraftBudgetCategoryId] = useState(null)
   const [poDraftBudgetSubcategoryId, setPoDraftBudgetSubcategoryId] = useState(null)
   const [poDraftSubProjectId, setPoDraftSubProjectId] = useState(null)
+  // null = one site; an array (ids) = the "Multiple sites" box is ticked (purchase_requests.multi_sites)
+  const [poDraftMultiSiteIds, setPoDraftMultiSiteIds] = useState(null)
   // Set only when this request was created via a ticket's "Create Purchase
   // Rec" button (or when re-opening a draft that already has one) -- no UI
   // ever sets these directly, they just ride along to the insert.
@@ -2201,6 +2203,7 @@ function App() {
       setPoDraftBudgetCategoryId(existing.budget_category_id ?? null)
       setPoDraftBudgetSubcategoryId(existing.budget_subcategory_id ?? null)
       setPoDraftSubProjectId(existing.sub_project_id ?? null)
+      setPoDraftMultiSiteIds(Array.isArray(existing.multi_sites) ? existing.multi_sites.map((s) => s.id) : null)
       setPoDraftTicketSystemTicketId(existing.ticket_system_ticket_id ?? null)
       setPoDraftTicketSystemTicketNumber(existing.ticket_system_ticket_number ?? null)
       setPoDraftChargeableExpense(Boolean(existing.chargeable_expense))
@@ -2268,6 +2271,7 @@ function App() {
       setPoDraftBudgetCategoryId(null)
       setPoDraftBudgetSubcategoryId(null)
       setPoDraftSubProjectId(prefill?.subProjectId ?? null)
+      setPoDraftMultiSiteIds(null)
       setPoDraftTicketSystemTicketId(prefill?.ticketSystemTicketId ?? null)
       setPoDraftTicketSystemTicketNumber(prefill?.ticketSystemTicketNumber ?? null)
       setPoDraftChargeableExpense(false)
@@ -2297,6 +2301,7 @@ function App() {
     if (poDraftProjectId && !siteInProgram(programId, poDraftProjectId)) {
       setPoDraftProjectId(null)
       setPoDraftSubProjectId(null)
+      setPoDraftMultiSiteIds(null)
     }
     const category = budgetCategories.find((c) => c.id === poDraftBudgetCategoryId)
     if (category && category.program_id !== programId) {
@@ -2479,6 +2484,7 @@ function App() {
         }
       }
       setPoDraftSubProjectId(sel.site ?? null)
+      setPoDraftMultiSiteIds(null)
     } else if (sel.site !== undefined) {
       setPoDraftSubProjectId(sel.site)
     }
@@ -2569,8 +2575,13 @@ function App() {
     // (ground-mount) uses that one without asking.
     const draftSite = projects.find((p) => p.id === poDraftProjectId)
     const needsLocation = siteNeedsLocation(draftSite, subProjects)
-    if (needsLocation && !poDraftSubProjectId) errors.subProject = true
-    const subProjectToSave = needsLocation ? poDraftSubProjectId : (entitySubProjects[0]?.id ?? null)
+    // "Multiple sites": two or more of the entity's sites, saved as [{ id, name }] with sub_project_id left empty.
+    const multiOn = needsLocation && Array.isArray(poDraftMultiSiteIds)
+    if (multiOn ? poDraftMultiSiteIds.length < 2 : needsLocation && !poDraftSubProjectId) errors.subProject = true
+    const multiSitesToSave = multiOn
+      ? subProjects.filter((sp) => poDraftMultiSiteIds.includes(sp.id)).map((sp) => ({ id: sp.id, name: sp.name }))
+      : null
+    const subProjectToSave = multiOn ? null : needsLocation ? poDraftSubProjectId : (entitySubProjects[0]?.id ?? null)
 
     if (Object.keys(errors).length > 0) {
       setPoDraftFieldErrors(errors)
@@ -2674,6 +2685,8 @@ function App() {
             ...newValues,
             ...(programsReady ? { program_id: poDraftProgramId } : {}),
             sub_project_id: subProjectToSave,
+            // only sent when needed, so saving still works before add_multi_site_pos.sql has been run
+            ...(multiSitesToSave || purchaseRequests.find((r) => r.id === requestId)?.multi_sites ? { multi_sites: multiSitesToSave } : {}),
             notes: poDraftNotes.trim() || null,
             budget_category_id: poDraftBudgetCategoryId,
             budget_subcategory_id: poDraftBudgetSubcategoryId,
@@ -2762,6 +2775,7 @@ function App() {
             project_id: poDraftProjectId,
             ...(programsReady ? { program_id: poDraftProgramId } : {}),
             sub_project_id: subProjectToSave,
+            ...(multiSitesToSave ? { multi_sites: multiSitesToSave } : {}),
             vendor_id: poDraftVendorId,
             notes: poDraftNotes.trim() || null,
             description: poDraftDescription.trim() || null,
@@ -2850,7 +2864,8 @@ function App() {
       }
     } catch (error) {
       console.error(error)
-      flashPoStatus(`Could not save draft — ${error?.message || 'check the console for details.'}`, false)
+      const needsSql = /multi_sites/.test(error?.message || '')
+      flashPoStatus(`Could not save draft — ${needsSql ? 'the Multiple sites option needs add_multi_site_pos.sql run in Supabase first.' : error?.message || 'check the console for details.'}`, false)
       // Part of the save may already have gone through (the request's own
       // fields are written first), so re-read it rather than leave the view
       // showing what was there before.
@@ -3941,7 +3956,7 @@ function App() {
     try {
       // 1. the copy, as a draft
       const copied = [
-        'project_id', 'program_id', 'sub_project_id', 'vendor_id', 'notes', 'description', 'budget_category_id',
+        'project_id', 'program_id', 'sub_project_id', 'multi_sites', 'vendor_id', 'notes', 'description', 'budget_category_id',
         'budget_subcategory_id', 'chargeable_expense', 'invoice_email', 'vendor_quote_number', 'quote_file_url',
         'quote_file_name', 'markup_rate', 'tax_rate', 'shipping_handling', 'credit', 'not_to_exceed', 'spending_cap',
         'currency', 'po_category', 'ticket_system_ticket_id', 'ticket_system_ticket_number', 'ticket_system_ticket_code',
@@ -5737,6 +5752,8 @@ function App() {
           changePoDraftProgram={changePoDraftProgram}
           poDraftSubProjectId={poDraftSubProjectId}
           setPoDraftSubProjectId={setPoDraftSubProjectId}
+          poDraftMultiSiteIds={poDraftMultiSiteIds}
+          setPoDraftMultiSiteIds={setPoDraftMultiSiteIds}
           subProjects={subProjects}
           poDraftVendorId={poDraftVendorId}
           setPoDraftVendorId={setPoDraftVendorId}

@@ -1182,7 +1182,22 @@ export function canLinkPos(user) {
 // Solar's rooftops). A site that is only the entity again (a ground-mount entity) isn't asked for and isn't shown
 // there; it is still stored on the PO, and the PO document (print view, PDF) carries a Site row only when it is shown.
 export function locationVisible(request) {
-  return Boolean(request?.sub_projects?.name) && !locationIsSiteItself(request.sub_projects, request.projects)
+  return isMultiSite(request) || (Boolean(request?.sub_projects?.name) && !locationIsSiteItself(request.sub_projects, request.projects))
+}
+
+// A PO for several of an entity's sites at once (Firelight Solar rooftops): purchase_requests.multi_sites holds
+// [{ id, name }, ...] (names saved with it, so the PO reads the same even if a site is later renamed) and
+// sub_project_id is left empty. add_multi_site_pos.sql adds the column; before it is run nothing has one.
+export function isMultiSite(request) {
+  return Array.isArray(request?.multi_sites) && request.multi_sites.length > 0
+}
+
+// The Site text for a PO: its one site's name, or "Multiple sites" (with the names after it when `detail`).
+export function poSiteName(request, detail = false) {
+  if (isMultiSite(request)) {
+    return detail ? `Multiple sites: ${request.multi_sites.map((s) => s.name).join(', ')}` : 'Multiple sites'
+  }
+  return request?.sub_projects?.name || ''
 }
 
 // A site that is just the entity again (a ground-mount entity's one site, "Alfred" under "SunE Alfred LP"):
@@ -1318,7 +1333,7 @@ export function buildPoMailto(request) {
     `Purchase Order ${poLabel}`,
     ...(request.program_name ? [`Project: ${request.program_name}`] : []),
     `Entity: ${request.projects?.name || '—'}`,
-    ...(request.sub_projects?.name ? [`Site: ${request.sub_projects.name}`] : []),
+    ...(poSiteName(request) ? [`Site: ${poSiteName(request)}`] : []),
     ...(vendorAddressText(request?.vendors) ? [`Ship to / Address: ${vendorAddressText(request.vendors)}`] : []),
     '',
     'Line Items:',

@@ -15,6 +15,7 @@ import {
   formatDateTime,
   formatMoney,
   descriptionOneLine,
+  poSiteName,
 } from '../utils'
 import DateInput from './DateInput'
 
@@ -178,7 +179,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users, programs = []
         Status: poStatusLabel(r.status),
         ...(r.program_id && programNameFor(r.program_id) ? { Project: programNameFor(r.program_id) } : {}),
         Entity: r.projects?.name || '',
-        Site: r.sub_projects?.name || '',
+        Site: poSiteName(r, true),
         Vendor: r.vendors?.name || '',
         Issued: fmtDate(row.issuedAt),
         'Received / Completed': fmtDate(row.workDoneAt),

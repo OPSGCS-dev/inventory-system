@@ -8,6 +8,7 @@
 import {
   COMPANY_ADDRESS_BLOCK,
   locationVisible,
+  poSiteName,
   poInstructions,
   computeInvoicedTotal,
   computePoTotals,
@@ -88,7 +89,7 @@ export async function buildPoPdf(request, stamp = null) {
       ['PO Date', formatDate(request.issued_at || Date.now())],
       ['PO #', request.po_number ? clean(request.po_number) : '—'],
       // The Site (e.g. one of Firelight Solar's rooftops), only when the PO has one that isn't just the entity again.
-      ...(locationVisible(request) ? [['Site', clean(request.sub_projects.name)]] : []),
+      ...(locationVisible(request) ? [['Site', clean(poSiteName(request))]] : []),
       ['Requisitioner', clean(request.requisitioner_name || '-')],
       ['Budget Category', clean(budgetCategoryLabel(request))],
       ['Chargeable Expense', request.chargeable_expense ? 'Yes' : 'No'],

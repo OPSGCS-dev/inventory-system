@@ -83,6 +83,7 @@ const FIELD_LABELS = {
   program_id: 'Project',
   vendor_id: 'Vendor',
   sub_project_id: 'Site',
+  multi_sites: 'Multiple sites',
   notes: 'Notes',
   vendor_quote_number: 'Vendor quote #',
   quote_file_url: 'Quote file',
@@ -182,6 +183,7 @@ const WORK_FIELDS = new Set(['parts_status', 'service_status', 'work_status'])
 export function formatValue(key, value, ctx = {}) {
   if (value === null || value === undefined || value === '') return '(blank)'
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (key === 'multi_sites' && Array.isArray(value)) return value.map((s) => s.name).join(', ') || '(blank)'
   if (key === 'project_id') return ctx.projects?.find((p) => p.id === value)?.name || `entity #${value}`
   if (key === 'program_id') return ctx.programs?.find((g) => g.id === value)?.name || `project #${value}`
   if (key === 'budget_category_id') return ctx.budgetCategories?.find((c) => c.id === value)?.name || `category #${value}`

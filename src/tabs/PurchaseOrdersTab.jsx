@@ -43,6 +43,7 @@ import {
   locationVisible,
   canLinkPos,
   siteNeedsLocation,
+  poSiteName,
   requisitionerName,
   lineTotal,
   filterPartsForSearch,
@@ -400,6 +401,8 @@ function PurchaseOrdersTab({
   changePoDraftProgram,
   poDraftSubProjectId,
   setPoDraftSubProjectId,
+  poDraftMultiSiteIds,
+  setPoDraftMultiSiteIds,
   subProjects,
   poDraftVendorId,
   setPoDraftVendorId,
@@ -1014,7 +1017,7 @@ function PurchaseOrdersTab({
             {locationVisible(r) && (
               <div className="po-detail-meta-item">
                 <span className="po-detail-label">Site</span>
-                <span className="po-detail-value">{r.sub_projects.name}</span>
+                <span className="po-detail-value">{poSiteName(r, true)}</span>
               </div>
             )}
             {isNotToExceed(r) && (
@@ -1328,7 +1331,7 @@ function PurchaseOrdersTab({
                       {locationVisible(r) && (
                         <tr>
                           <th>Site</th>
-                          <td>{r.sub_projects.name}</td>
+                          <td>{poSiteName(r)}</td>
                         </tr>
                       )}
                       <tr>
@@ -1936,6 +1939,7 @@ function PurchaseOrdersTab({
                 onChange={(e) => {
                   setPoDraftProjectId(e.target.value ? Number(e.target.value) : null)
                   setPoDraftSubProjectId(null)
+                  setPoDraftMultiSiteIds(null)
                 }}
               >
                 <option value="">Select an entity…</option>
@@ -2004,19 +2008,65 @@ function PurchaseOrdersTab({
             <div className="field-row" style={{ marginTop: 12 }}>
               <div>
                 <label htmlFor="po_draft_sub_project">Site</label>
-                <select
-                  id="po_draft_sub_project"
-                  className={poDraftFieldErrors?.subProject ? 'field-invalid' : ''}
-                  value={poDraftSubProjectId ?? ''}
-                  onChange={(e) => setPoDraftSubProjectId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">Select a site…</option>
-                  {availableSubProjects.map((sp) => (
-                    <option value={sp.id} key={sp.id}>
-                      {sp.name}
-                    </option>
-                  ))}
-                </select>
+                {poDraftMultiSiteIds ? (
+                  // Several sites on one PO: tick each one. The PO itself just says "Multiple sites".
+                  <div
+                    id="po_draft_sub_project"
+                    className={poDraftFieldErrors?.subProject ? 'field-invalid' : ''}
+                    style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--card)' }}
+                  >
+                    {availableSubProjects.map((sp) => (
+                      <label key={sp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0, fontWeight: 'normal' }}>
+                        <input
+                          type="checkbox"
+                          checked={poDraftMultiSiteIds.includes(sp.id)}
+                          onChange={(e) =>
+                            setPoDraftMultiSiteIds((prev) =>
+                              e.target.checked ? [...(prev || []), sp.id] : (prev || []).filter((id) => id !== sp.id)
+                            )
+                          }
+                        />
+                        {sp.name}
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <select
+                    id="po_draft_sub_project"
+                    className={poDraftFieldErrors?.subProject ? 'field-invalid' : ''}
+                    value={poDraftSubProjectId ?? ''}
+                    onChange={(e) => setPoDraftSubProjectId(e.target.value ? Number(e.target.value) : null)}
+                  >
+                    <option value="">Select a site…</option>
+                    {availableSubProjects.map((sp) => (
+                      <option value={sp.id} key={sp.id}>
+                        {sp.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {availableSubProjects.length > 1 && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0 0', fontWeight: 'normal' }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(poDraftMultiSiteIds)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setPoDraftMultiSiteIds(poDraftSubProjectId ? [poDraftSubProjectId] : [])
+                          setPoDraftSubProjectId(null)
+                        } else {
+                          setPoDraftMultiSiteIds(null)
+                        }
+                      }}
+                    />
+                    Multiple sites
+                  </label>
+                )}
+                {poDraftMultiSiteIds && (
+                  <p className="sub" style={{ margin: '4px 0 0' }}>
+                    Tick two or more. The PO shows "Multiple sites" (the page lists which).
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -2841,7 +2891,7 @@ function PurchaseOrdersTab({
                         {r.projects?.name || '—'}
                         {locationVisible(r) && (
                           <div className="sub" style={{ margin: 0 }}>
-                            {r.sub_projects.name}
+                            {poSiteName(r)}
                           </div>
                         )}
                       </td>

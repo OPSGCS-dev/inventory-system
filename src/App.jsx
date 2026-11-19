@@ -74,6 +74,7 @@ import {
   canViewBudget,
   canEditBudget,
   TICKETING_URL,
+  canSendReminders,
   formatMoney,
 } from './utils'
 import MasterListTab from './tabs/MasterListTab'
@@ -103,6 +104,7 @@ import GlobalSearch from './tabs/GlobalSearch'
 import { matchPart, similarNames } from './scrape/matchers'
 import { EMPTY_VENDOR_FORM, vendorNameKey, vendorFormFromVendor, vendorPayloadFromForm } from './vendorFields'
 import { findRequestByNumber } from './poLinks'
+import { pendingWorkFor } from './reminders'
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true)
@@ -2151,6 +2153,25 @@ function App() {
       total: approvals + toIssue + invoicesToApprove + invoicesToPayCount + invoicesToReviewCount + vendorsToApprove,
     }
   }, [purchaseRequests, loggedInUserWithScopes, invoicesPendingApproval, invoicesToPay, invoicesToReview, vendors])
+
+  // Everyone with something waiting on them (for the Purchaser's "Email a Reminder"): the same rules as the badges,
+  // worked out for each active person with a real email address, using their own entity assignments.
+  const reminderPeople = useMemo(() => {
+    if (!canSendReminders(loggedInUser)) return []
+    return users
+      .filter((u) => u.active && !isVendorUser(u) && String(u.name || '').includes('@'))
+      .map((u) => {
+        const scopes = {}
+        for (const row of userRoleEntities) {
+          if (row.user_id !== u.id) continue
+          if (!scopes[row.role]) scopes[row.role] = []
+          scopes[row.role].push(row.project_id)
+        }
+        return { user: u, name: userDisplayName(u), ...pendingWorkFor({ ...u, entity_scopes: scopes }, purchaseRequests, vendors) }
+      })
+      .filter((p) => p.total > 0)
+      .sort((x, y) => y.total - x.total || x.name.localeCompare(y.name))
+  }, [loggedInUser, users, userRoleEntities, purchaseRequests, vendors])
 
   function toggleExpandedPo(id) {
     setExpandedPoId((prev) => {
@@ -5683,6 +5704,7 @@ function App() {
           invoicesPendingApproval={invoicesPendingApproval}
           invoicesToPay={invoicesToPay}
           poAttentionCounts={poAttentionCounts}
+          reminderPeople={reminderPeople}
           expandedPoId={expandedPoId}
           toggleExpandedPo={toggleExpandedPo}
           poActivity={poActivity}

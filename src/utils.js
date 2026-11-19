@@ -745,6 +745,11 @@ export function canIssuePurchaseOrder(user, request) {
   return isEntityAllowed(user, 'po_issue', request.project_id)
 }
 
+// The "Email a Reminder" button (reminders.js): the Purchaser chases people for their approvals; admin can too.
+export function canSendReminders(user) {
+  return userHasRole(user, 'po_issue') || userHasRole(user, 'admin')
+}
+
 // "Vendor contacted" marker on an issued PO (add_vendor_contacted.sql): set when Email Vendor is pressed
 // ('email') or by hand for a vendor reached outside the site ('manual'). The columns only exist once the SQL
 // has been run, so the marker is hidden until then.

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import PdfReadPanel from './PdfReadPanel.jsx'
+import { buildReminderBody, buildReminderSubject } from '../reminders.js'
 import {
   poStatusLabel,
   workStatusLabel,
@@ -7,6 +8,8 @@ import {
   findUserName,
   approvalStamp,
   userHasRole,
+  userDisplayName,
+  canSendReminders,
   canCreatePurchaseRequests,
   entitiesAllowedFor,
   isEntityAllowed,
@@ -266,6 +269,93 @@ function VoidedAttachments({ request, users }) {
   )
 }
 
+// "Email a Reminder" (the Purchaser, or an admin): pick who to remind and see what the email will say. It lists
+// everything waiting on that one person -- recs to approve, invoices to approve for payment, invoices to pay, ... --
+// so someone holding several roles gets a single email. The email is downloaded as a draft (.eml) that opens in the
+// email program to review and send, like Email Vendor. Only people who have something waiting are offered.
+function ReminderPanel({ people, senderName, downloadBlob, onClose }) {
+  const [personId, setPersonId] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState(null)
+  const chosen = people.find((p) => p.user.id === personId) || people[0] || null
+  const subject = chosen ? buildReminderSubject(chosen) : ''
+  const body = chosen
+    ? buildReminderBody({ person: chosen.user, work: chosen, senderName, url: window.location.origin })
+    : ''
+
+  async function createDraft() {
+    if (!chosen) return
+    setBusy(true)
+    setNote(null)
+    try {
+      const { buildPlainEml } = await import('../poEmail.js')
+      const eml = buildPlainEml({ to: chosen.user.name, subject, body })
+      const fileName = 'Reminder for ' + chosen.name.replace(/[^A-Za-z0-9 ._-]+/g, '').trim() + '.eml'
+      downloadBlob(new Blob([eml], { type: 'message/rfc822' }), fileName)
+      setNote('Open the downloaded .eml file: it opens in your email program as a draft to ' + chosen.user.name + ', ready to review and send.')
+    } catch (error) {
+      console.error(error)
+      setNote("Couldn't build the email draft — check the console for details.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <h2>Email a Reminder</h2>
+        <p className="sub" style={{ margin: 0 }}>
+          Pick who to remind. The email lists everything waiting on that person (recs, POs to issue, invoices to review, approve or pay, vendors),
+          with counts and totals, so someone who does several jobs gets one email. Only people with something waiting are listed.
+        </p>
+      </div>
+      {people.length === 0 ? (
+        <div className="empty">Nobody has anything waiting on them right now.</div>
+      ) : (
+        <>
+          <div className="edit-toolbar">
+            <label htmlFor="reminder_person">Send to</label>
+            <select id="reminder_person" value={chosen.user.id} onChange={(e) => setPersonId(e.target.value)} style={{ maxWidth: 420 }}>
+              {people.map((p) => (
+                <option value={p.user.id} key={p.user.id}>
+                  {p.name} ({p.user.name}) — {p.total} waiting
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="sub" style={{ margin: '8px 0 4px' }}>
+            <strong>Subject:</strong> {subject}
+          </p>
+          <pre
+            style={{
+              whiteSpace: 'pre-wrap',
+              background: 'var(--bg)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: 12,
+              margin: '0 0 12px',
+              fontFamily: 'inherit',
+              fontSize: 13,
+            }}
+          >
+            {body}
+          </pre>
+          <div className="form-actions">
+            <button className="btn-primary" onClick={createDraft} disabled={busy}>
+              {busy ? 'Preparing…' : 'Create Email Draft'}
+            </button>
+            <button className="btn-secondary" onClick={onClose}>
+              Close
+            </button>
+          </div>
+          {note && <p className="sub" style={{ margin: '8px 0 0' }}>{note}</p>}
+        </>
+      )}
+    </div>
+  )
+}
+
 function PurchaseOrdersTab({
   loggedInUser,
   users,
@@ -283,6 +373,7 @@ function PurchaseOrdersTab({
   invoicesPendingApproval,
   invoicesToPay,
   poAttentionCounts,
+  reminderPeople,
   expandedPoId,
   toggleExpandedPo,
   poActivity,
@@ -524,6 +615,7 @@ function PurchaseOrdersTab({
   // If the PDF can't be built it falls back to the old plain-text email.
   const [emailBusy, setEmailBusy] = useState(false)
   const [emailNote, setEmailNote] = useState(null)
+  const [showReminder, setShowReminder] = useState(false)
 
   function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob)
@@ -2527,8 +2619,27 @@ function PurchaseOrdersTab({
               {poAttentionCounts.invoicesToPay > 0 && <span className="nav-badge">{poAttentionCounts.invoicesToPay}</span>}
             </button>
           )}
+          {canSendReminders(loggedInUser) && (
+            <button
+              className={showReminder ? 'btn-primary' : 'btn-secondary'}
+              style={{ marginLeft: 'auto' }}
+              onClick={() => setShowReminder((v) => !v)}
+              title="Email someone a reminder of everything waiting on them"
+            >
+              Email a Reminder
+            </button>
+          )}
         </div>
       </div>
+
+      {showReminder && canSendReminders(loggedInUser) && (
+        <ReminderPanel
+          people={reminderPeople || []}
+          senderName={userDisplayName(loggedInUser)}
+          downloadBlob={downloadBlob}
+          onClose={() => setShowReminder(false)}
+        />
+      )}
 
       {poView === 'my-pay' ? (
         <MyInvoicesToPayTable

@@ -62,6 +62,22 @@ export function buildEml({ to, subject, body, attachment }) {
   return parts.join(CRLF)
 }
 
+// A draft with no attachment (the reminder email): same X-Unsent header, so it opens as a new message to send.
+export function buildPlainEml({ to, subject, body }) {
+  const encoder = new TextEncoder()
+  return [
+    'X-Unsent: 1',
+    `To: ${oneLine(to)}`,
+    `Subject: ${encodeHeader(oneLine(subject))}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset="utf-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    fold(toBase64(encoder.encode(String(body).replace(/\r?\n/g, CRLF)))),
+    '',
+  ].join(CRLF)
+}
+
 // The message that goes with a PO. Short on purpose: the PDF is the PO.
 export function buildPoEmailBody(request, totals, label) {
   const lines = [

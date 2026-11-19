@@ -708,11 +708,13 @@ function PurchaseOrdersTab({
         subject: poEmailSubject(r),
         body: buildPoEmailBody(r, computePoTotals(r), label),
         attachment: { filename: pdf.filename, mime: 'application/pdf', bytes: pdf.bytes },
+        // The sender's saved rich-text signature (My Email Signature), added under the message.
+        signatureHtml: loggedInUser?.email_signature || '',
       })
       downloadBlob(new Blob([eml], { type: 'message/rfc822' }), `${pdf.filename.replace(/\.pdf$/, '')} - email to vendor.eml`)
       setEmailNote({
         id: r.id,
-        text: `Open the downloaded .eml file: it opens in your email program as a draft to ${r.vendors.email}${ccEmail ? `, copied to ${ccEmail},` : ''} with the PO PDF attached. If your email program leaves the PDF off, use Download PDF and attach it by hand.`,
+        text: `Open the downloaded .eml file: it opens in your email program as a draft to ${r.vendors.email}${ccEmail ? `, copied to ${ccEmail},` : ''} with the PO PDF attached. If your email program leaves the PDF off, use Download PDF and attach it by hand.${loggedInUser?.email_signature ? '' : ' No email signature is saved for you yet: add one with My Email Signature at the top of the page.'}`,
       })
       logPoDocumentEvent(r, 'po_email_drafted', `to ${r.vendors.email}`)
       // Pressing Email Vendor counts as contacting the vendor (the first time only; a manual mark is left as it is).

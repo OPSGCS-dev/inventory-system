@@ -102,6 +102,7 @@ import SuggestionsTab from './tabs/SuggestionsTab'
 import PoHistoryTab from './tabs/PoHistoryTab'
 import UsersTab from './tabs/UsersTab'
 import SignatureCard from './tabs/SignatureCard'
+import EmailSignatureCard from './tabs/EmailSignatureCard'
 import GlobalSearch from './tabs/GlobalSearch'
 import { matchPart, similarNames } from './scrape/matchers'
 import { EMPTY_VENDOR_FORM, vendorNameKey, vendorFormFromVendor, vendorPayloadFromForm } from './vendorFields'
@@ -134,6 +135,9 @@ function App() {
   const [showSignature, setShowSignature] = useState(false)
   const [savingSignature, setSavingSignature] = useState(false)
   const [signatureMessage, setSignatureMessage] = useState(null)
+  const [showEmailSignature, setShowEmailSignature] = useState(false)
+  const [savingEmailSignature, setSavingEmailSignature] = useState(false)
+  const [emailSignatureMessage, setEmailSignatureMessage] = useState(null)
   const [changePasswordValue, setChangePasswordValue] = useState('')
   const [changePasswordConfirm, setChangePasswordConfirm] = useState('')
   const [changePasswordError, setChangePasswordError] = useState(null)
@@ -4491,6 +4495,32 @@ function App() {
     }
   }
 
+  // Saves (or, with null, removes) the logged-in user's rich-text email signature (HTML), added to the bottom of the
+  // email to a vendor (add_user_email_signature.sql).
+  async function handleSaveEmailSignature(html) {
+    setSavingEmailSignature(true)
+    setEmailSignatureMessage(null)
+    try {
+      const { error } = await supabase.from('users').update({ email_signature: html }).eq('id', loggedInUser.id)
+      if (error) throw error
+      setLoggedInUser((prev) => (prev ? { ...prev, email_signature: html } : prev))
+      await loadUsers()
+      setShowEmailSignature(false)
+    } catch (error) {
+      console.error(error)
+      const msg = error?.message || ''
+      setEmailSignatureMessage(
+        /email_signature/.test(msg) && /column|schema cache/i.test(msg)
+          ? "The database is missing the email signature column. Run supabase/add_user_email_signature.sql in the Inventory project's SQL editor, then try again."
+          : /only an admin/i.test(msg)
+          ? "The database wouldn't let you save it. Run supabase/add_user_email_signature.sql in the Inventory project's SQL editor, then try again."
+          : `Could not save the signature: ${msg || 'check the console for details.'}`
+      )
+    } finally {
+      setSavingEmailSignature(false)
+    }
+  }
+
   // Saves (or, with null, removes) the logged-in user's own signature, which
   // the printed/emailed PO shows on the "Authorized by" line once they approve.
   async function handleSaveSignature(dataUrl) {
@@ -5526,6 +5556,17 @@ function App() {
             My Signature
           </button>
         )}
+        {userHasRole(loggedInUser, 'po_issue') && (
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              setEmailSignatureMessage(null)
+              setShowEmailSignature((v) => !v)
+            }}
+          >
+            My Email Signature
+          </button>
+        )}
         <button className="btn-secondary" onClick={() => setShowChangePassword((v) => !v)}>
           Change Password
         </button>
@@ -5541,6 +5582,16 @@ function App() {
           message={signatureMessage}
           onSave={handleSaveSignature}
           onClose={() => setShowSignature(false)}
+        />
+      )}
+
+      {showEmailSignature && (
+        <EmailSignatureCard
+          current={loggedInUser.email_signature}
+          busy={savingEmailSignature}
+          message={emailSignatureMessage}
+          onSave={handleSaveEmailSignature}
+          onClose={() => setShowEmailSignature(false)}
         />
       )}
 

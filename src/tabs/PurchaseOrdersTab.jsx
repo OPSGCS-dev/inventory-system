@@ -1232,6 +1232,12 @@ function PurchaseOrdersTab({
                         <th>PO #</th>
                         <td>{shownPoNumber(r) || '—'}</td>
                       </tr>
+                      {locationVisible(r) && (
+                        <tr>
+                          <th>Site</th>
+                          <td>{r.sub_projects.name}</td>
+                        </tr>
+                      )}
                       <tr>
                         <th>Requisitioner</th>
                         <td>{requisitionerName(users, r) || '—'}</td>

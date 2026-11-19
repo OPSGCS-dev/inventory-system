@@ -1201,16 +1201,26 @@ export function poSiteName(request, detail = false) {
 }
 
 // A site that is just the entity again (a ground-mount entity's one site, "Alfred" under "SunE Alfred LP"):
-// the names match once "SunE", "LP", "Solar", punctuation and spacing are ignored and "Highway" is read as "Hwy".
-const siteNameCore = (name) =>
+// every word of the site's name is also in the entity's name once company words (SunE / SunEd / LP / Solar ...) are
+// dropped and spellings are unified ("Highway" = "Hwy", "South" = "S", "2S" = "2 S"). So "Hwy 2", "Hwy 2S" and
+// "Highway 2 South" are all the same as "SunE Hwy 2S LP", and "Norfolk" is the same as "SunEd Norfolk LP". The other
+// way round doesn't count: a rooftop called "Firelight Roof A" is not Firelight Solar LP itself.
+const NAME_FILLER = new Set(['sune', 'suned', 'sunedison', 'lp', 'llc', 'inc', 'ltd', 'solar', 'farm', 'the', 'and'])
+const NAME_SPELLING = { highway: 'hwy', south: 's', north: 'n', east: 'e', west: 'w' }
+const siteNameWords = (name) =>
   String(name || '')
     .toLowerCase()
-    .replace(/highway/g, 'hwy')
-    .replace(/\b(sune|lp|llc|inc|ltd|solar|farm|the)\b/g, '')
-    .replace(/[^a-z0-9]/g, '')
+    .replace(/([a-z])(?=[0-9])|([0-9])(?=[a-z])/g, (_m, a, b) => `${a ?? b} `)
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((w) => NAME_SPELLING[w] ?? w)
+    .filter((w) => !NAME_FILLER.has(w))
 export function locationIsSiteItself(location, site) {
-  const a = siteNameCore(location?.name)
-  return a !== '' && a === siteNameCore(site?.name)
+  const a = siteNameWords(location?.name)
+  if (a.length === 0) return false
+  const b = new Set(siteNameWords(site?.name))
+  return a.every((w) => b.has(w))
 }
 
 // Does an entity ask which site a PO is for? Only when it has one that isn't the entity itself (Firelight Solar's

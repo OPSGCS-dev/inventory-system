@@ -61,6 +61,7 @@ import {
   vendorBlockReason,
   userDisplayName,
   canIssuePurchaseOrder,
+  vendorContactPending,
   ENTITY_SCOPED_ROLES,
   canMarkPaymentPaid,
   userHasRole,
@@ -2053,7 +2054,10 @@ function App() {
       list = list.filter((r) => r.status === 'submitted' && canApproveRequests(loggedInUserWithScopes, r))
     }
     if (poView === 'my-issue') {
-      list = list.filter((r) => r.status === 'approved' && canIssuePurchaseOrder(loggedInUserWithScopes, r))
+      // Approved POs waiting to be issued, and issued ones the vendor hasn't been told about yet.
+      list = list.filter(
+        (r) => (r.status === 'approved' || vendorContactPending(r)) && canIssuePurchaseOrder(loggedInUserWithScopes, r)
+      )
     }
     // 'open' = anything that isn't closed (drafts through issued; voided and rejected too, which the Status column filter can untick)
     if (poStatusFilter === 'open') list = list.filter((r) => r.status !== 'closed')
@@ -2133,7 +2137,7 @@ function App() {
       (r) => r.status === 'submitted' && canApproveRequests(loggedInUserWithScopes, r)
     ).length
     const toIssue = purchaseRequests.filter(
-      (r) => r.status === 'approved' && canIssuePurchaseOrder(loggedInUserWithScopes, r)
+      (r) => (r.status === 'approved' || vendorContactPending(r)) && canIssuePurchaseOrder(loggedInUserWithScopes, r)
     ).length
     // Held invoices are waiting on a decision already made, so they don't count as work to do.
     const invoicesToApprove = userHasRole(loggedInUserWithScopes, 'invoice_approval')

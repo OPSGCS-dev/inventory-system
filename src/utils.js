@@ -773,6 +773,18 @@ export function isVendorContacted(request) {
   return !!request?.vendor_contacted_at
 }
 
+// An issued PO the vendor has not been told about yet: it stays in the Purchaser's "My POs to Issue" and the
+// Purchaser is the one responsible for its next action. A PO that already has an invoice or receipt obviously
+// reached the vendor, so it isn't held here (nor is one on a database without the vendor-contacted column).
+export function vendorContactPending(request) {
+  return (
+    request?.status === 'issued' &&
+    vendorContactReady(request) &&
+    !isVendorContacted(request) &&
+    !(request.invoices?.length || request.receipts?.length)
+  )
+}
+
 // Same people who can issue it can say the vendor has been told, once it has its PO number.
 export function canMarkVendorContacted(user, request) {
   return (
@@ -1047,10 +1059,8 @@ export function nextStepInfo(request, users) {
         return { step: 'Close PO', who: findUserName(users, request.requested_by) }
       }
       // Until the vendor has been told about the PO (Email Vendor, or marked contacted by hand) the Purchaser has
-      // the next move: the requisitioner can't receive anything and accounting can't expect an invoice yet. A PO that
-      // already has an invoice or receipt obviously reached the vendor, so it isn't held here (nor is an old one
-      // whose vendor-contacted column hasn't been set up).
-      if (vendorContactReady(request) && !isVendorContacted(request) && !(request.invoices?.length || request.receipts?.length)) {
+      // the next move: the requisitioner can't receive anything and accounting can't expect an invoice yet.
+      if (vendorContactPending(request)) {
         return { step: 'Email Vendor', who: usersWithRole(users, 'po_issue').join(', ') || '—' }
       }
       if (!workDone) {

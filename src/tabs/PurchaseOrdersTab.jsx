@@ -533,13 +533,49 @@ function PurchaseOrdersTab({
   const [poDateFrom, setPoDateFrom] = useState('')
   const [poDateTo, setPoDateTo] = useState('')
   const [poDateSort, setPoDateSort] = useState('desc') // newest first, as loaded
+  // Search box: every word typed has to appear somewhere in the request (see poSearchText).
+  const [poSearch, setPoSearch] = useState('')
+  const poSearchText = (r) => {
+    const lines = r.purchase_request_lines || []
+    return [
+      r.id,
+      r.po_number,
+      r.description,
+      r.vendor_quote_number,
+      r.vendors?.name,
+      r.vendors?.legal_name,
+      r.projects?.name,
+      programName(r.program_id),
+      poSiteName(r, true),
+      r.budget_categories?.name,
+      r.budget_subcategories?.name,
+      findUserName(users, r.requested_by),
+      poStatusText(r),
+      r.status,
+      ticketRefLabel(r),
+      formatMoney(computePoTotals(r).grandTotal),
+      ...(r.invoices || []).map((inv) => inv.invoice_number),
+      ...lines.flatMap((l) => [l.description, l.vendor_part_number, l.parts?.gcs_part_id, l.parts?.manufacturer_part_number, l.parts?.description]),
+    ]
+      .filter((v) => v !== null && v !== undefined && v !== '')
+      .join(' ')
+      .toLowerCase()
+  }
   const listedPurchaseRequests = useMemo(() => {
     let list = visiblePurchaseRequests
     if (poDateFrom) list = list.filter((r) => localDay(r.created_at) >= poDateFrom)
     if (poDateTo) list = list.filter((r) => localDay(r.created_at) <= poDateTo)
+    const words = poSearch.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    if (words.length) {
+      list = list.filter((r) => {
+        const hay = poSearchText(r)
+        return words.every((w) => hay.includes(w))
+      })
+    }
     const dir = poDateSort === 'asc' ? 1 : -1
     return [...list].sort((a, b) => (new Date(a.created_at) - new Date(b.created_at)) * dir)
-  }, [visiblePurchaseRequests, poDateFrom, poDateTo, poDateSort])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visiblePurchaseRequests, poDateFrom, poDateTo, poDateSort, poSearch, users, programs])
   // Excel-style filters on the list's columns (the ▾ on each heading): they narrow what the dates and the
   // header dropdowns already let through, and start clean on each view (My Recs for Approval, ...).
   const poColumns = useMemo(
@@ -2747,6 +2783,14 @@ function PurchaseOrdersTab({
             {poLoading ? '' : `(${shownPurchaseRequests.length})`}
           </h2>
           <div className="header-actions">
+            <input
+              type="search"
+              value={poSearch}
+              onChange={(e) => setPoSearch(e.target.value)}
+              placeholder="Search POs: number, vendor, description, invoice #…"
+              aria-label="Search purchase orders"
+              style={{ width: 300, maxWidth: '100%' }}
+            />
             <label className="po-date-filter" title="Show POs created on or after this date">
               From
               <DateInput value={poDateFrom} max={poDateTo || undefined} onChange={setPoDateFrom} />
@@ -2805,6 +2849,8 @@ function PurchaseOrdersTab({
           <div className="empty">
             {visiblePurchaseRequests.length === 0
               ? 'No purchase requests yet.'
+              : poSearch.trim()
+              ? 'No purchase requests match your search.'
               : poFilters.activeKeys.length > 0
               ? 'No purchase requests match the column filters.'
               : 'No purchase requests match the date range.'}

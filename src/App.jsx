@@ -5209,6 +5209,17 @@ function App() {
     }
   }
 
+  // The "No site question on POs" tick box on an entity (add_entity_no_site_question.sql).
+  async function handleUpdateProjectNoSite(projectId, noSite) {
+    setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, po_no_site: noSite } : p)))
+    const { error } = await supabase.from('projects').update({ po_no_site: noSite }).eq('id', projectId)
+    if (error) {
+      console.error(error)
+      flashUsersStatus('Could not save that. Run supabase/add_entity_no_site_question.sql in the Supabase SQL editor first.', false)
+      await loadProjects()
+    }
+  }
+
   // How many suggestions are still New, for the badge on the admin's Suggestions tab. Quietly shows nothing until
   // add_suggestions.sql has been run.
   async function refreshSuggestionCount() {
@@ -5985,6 +5996,7 @@ function App() {
           addingProject={addingProject}
           handleAddProject={handleAddProject}
           handleUpdateProjectCode={handleUpdateProjectCode}
+          handleUpdateProjectNoSite={handleUpdateProjectNoSite}
           draftSubProjects={draftSubProjects}
           addDraftSubProjectRow={addDraftSubProjectRow}
           removeDraftSubProjectRow={removeDraftSubProjectRow}

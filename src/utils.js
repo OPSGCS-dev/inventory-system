@@ -1182,7 +1182,7 @@ export function canLinkPos(user) {
 // Solar's rooftops). A site that is only the entity again (a ground-mount entity) isn't asked for and isn't shown
 // there; it is still stored on the PO, and the PO document (print view, PDF) carries a Site row only when it is shown.
 export function locationVisible(request) {
-  return isMultiSite(request) || (Boolean(request?.sub_projects?.name) && !locationIsSiteItself(request.sub_projects, request.projects))
+  return isMultiSite(request) || (!request?.projects?.po_no_site && Boolean(request?.sub_projects?.name) && !locationIsSiteItself(request.sub_projects, request.projects))
 }
 
 // A PO for several of an entity's sites at once (Firelight Solar rooftops): purchase_requests.multi_sites holds
@@ -1227,9 +1227,10 @@ export function locationIsSiteItself(location, site) {
 }
 
 // Does an entity ask which site a PO is for? Only when it has one that isn't the entity itself (Firelight Solar's
-// rooftops do; a ground-mount entity doesn't).
+// rooftops do; a ground-mount entity doesn't). An entity with projects.po_no_site ticked (Admin > Entities) never asks,
+// whatever its site rows are called.
 export function siteNeedsLocation(site, subProjects) {
-  return (subProjects || []).some((sp) => sp.project_id === site?.id && !locationIsSiteItself(sp, site))
+  return !site?.po_no_site && (subProjects || []).some((sp) => sp.project_id === site?.id && !locationIsSiteItself(sp, site))
 }
 
 // A yyyy-mm-dd date column for display.

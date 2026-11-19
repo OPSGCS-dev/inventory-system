@@ -135,6 +135,7 @@ function UsersTab({
   addingProject,
   handleAddProject,
   handleUpdateProjectCode,
+  handleUpdateProjectNoSite,
   draftSubProjects,
   addDraftSubProjectRow,
   removeDraftSubProjectRow,
@@ -1134,12 +1135,16 @@ function UsersTab({
               <col />
               {programs.length > 0 && <col style={{ width: '35%' }} />}
               <col style={{ width: '20%' }} />
+              {projects.some((p) => 'po_no_site' in p) && <col style={{ width: '18%' }} />}
             </colgroup>
             <thead>
               <tr className="header-row">
                 <th>Name</th>
                 {programs.length > 0 && <th>Projects</th>}
                 <th>PO Code</th>
+                {projects.some((p) => 'po_no_site' in p) && (
+                  <th title="Tick for a ground-mount entity: the PO form won't ask which site a PO is for.">No site question on POs</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -1173,6 +1178,15 @@ function UsersTab({
                         style={{ width: 60, textAlign: 'center' }}
                       />
                     </td>
+                    {'po_no_site' in p && (
+                      <td className="center-cell">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(p.po_no_site)}
+                          onChange={(e) => handleUpdateProjectNoSite(p.id, e.target.checked)}
+                        />
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -1183,7 +1197,7 @@ function UsersTab({
 
       <div className="card">
         <div className="card-header">
-          <h2>Sites {draftSubProjects.length ? `(${draftSubProjects.length})` : ''}</h2>
+          <h2>Sites{draftSubProjects.length ? `(${draftSubProjects.length})` : ''}</h2>
           <p className="sub" style={{ margin: 0 }}>
             Individual sites within an Entity (e.g. Firelight Solar LP's rooftops) — only used
             when creating Purchase Requests. Spares inventory stays tracked at the Entity level.

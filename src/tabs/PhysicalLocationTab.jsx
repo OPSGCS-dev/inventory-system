@@ -62,7 +62,7 @@ function PhysicalLocationTab({
     if (placeFilter) list = list.filter((i) => qtyAt(i, placeFilter) > 0)
     if (gcsFilter) list = list.filter((i) => String(i.gcs_id) === gcsFilter)
     // Search: every word typed has to appear somewhere in the part's number, part ID, description, maker or maker's part number.
-    const words = search.trim().toLowerCase().split(/s+/).filter(Boolean)
+    const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
     if (words.length) {
       list = list.filter((i) => {
         const hay = [i.gcs_id, i.part?.gcs_part_id, i.part?.description, i.part?.manufacturer, i.part?.manufacturer_part_number]

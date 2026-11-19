@@ -36,6 +36,7 @@ function OwnershipTab({
   const [draft, setDraft] = useState([])
   const [editNote, setEditNote] = useState('')
   const [editSearch, setEditSearch] = useState('')
+  const [search, setSearch] = useState('') // search box above the Ownership / Stock Transfer list
   const [saving, setSaving] = useState(false)
   const [locPrompt, setLocPrompt] = useState(null) // the changed counts waiting for a physical location each
 
@@ -69,18 +70,28 @@ function OwnershipTab({
     () => (singleEntity ? stockItems.filter((i) => Boolean(i.perProject[Number(entityFilter)])) : stockItems),
     [stockItems, singleEntity, entityFilter]
   )
-  const visibleItems = useMemo(
-    () => (gcsFilter ? baseItems.filter((i) => String(i.gcs_id) === gcsFilter) : baseItems),
-    [baseItems, gcsFilter]
-  )
+  // Search: every word typed has to appear somewhere in the part's number, part ID, description, maker or maker's part number.
+  const matchesSearch = (gcsId, part, text) => {
+    const words = text.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    if (!words.length) return true
+    const hay = [gcsId, part?.gcs_part_id, part?.description, part?.manufacturer, part?.manufacturer_part_number]
+      .filter((v) => v !== null && v !== undefined)
+      .join(' ')
+      .toLowerCase()
+    return words.every((w) => hay.includes(w))
+  }
+  const visibleItems = useMemo(() => {
+    let list = gcsFilter ? baseItems.filter((i) => String(i.gcs_id) === gcsFilter) : baseItems
+    if (search.trim()) list = list.filter((i) => matchesSearch(i.gcs_id, i.part, search))
+    return list
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseItems, gcsFilter, search])
   const gcsOptions = useMemo(() => [...new Set(baseItems.map((i) => i.gcs_id))].sort((a, b) => a - b), [baseItems])
 
   const visibleDraft = useMemo(() => {
-    const q = editSearch.trim().toLowerCase()
-    if (!q) return draft
-    return draft.filter((r) =>
-      [r.part?.gcs_part_id, r.part?.description].filter(Boolean).some((f) => String(f).toLowerCase().includes(q))
-    )
+    if (!editSearch.trim()) return draft
+    return draft.filter((r) => matchesSearch(r.gcs_id, r.part, editSearch))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, editSearch])
 
   // Units on issued POs that haven't been received yet: counted, shown in yellow.
@@ -536,6 +547,10 @@ function OwnershipTab({
                   </button>
                 </>
               )}
+              {!editMode && (
+                <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 280 }}
+                  placeholder="Search part number, description, maker…" aria-label="Search parts" />
+              )}
             </div>
             {!modeActive && (
               <p className="sub" style={{ margin: 0 }}>
@@ -630,7 +645,7 @@ function OwnershipTab({
                   ) : visibleItems.length === 0 ? (
                     <tr>
                       <td className="empty" colSpan={headCols + 4 + (transferMode ? 3 : 0)}>
-                        {gcsFilter ? 'No parts match your filter.' : singleEntity ? 'No parts required for this entity.' : 'No parts yet — required parts must be added on the Required Inventory tab first.'}
+                        {gcsFilter || search.trim() ? 'No parts match your filter.' : singleEntity ? 'No parts required for this entity.' : 'No parts yet — required parts must be added on the Required Inventory tab first.'}
                       </td>
                     </tr>
                   ) : (

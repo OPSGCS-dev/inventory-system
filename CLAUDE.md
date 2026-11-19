@@ -72,6 +72,8 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
 
 Most recent first, all on `main`:
 
+- **PR vs PO wording, Amount on the PO list:** a request is not a PO until it is approved, so the approver's view is now **My PRs for Approval** (view id `my-approvals` unchanged; "My POs to Issue" stays, those are approved POs). The Amount column (PO total, with the currency when not CAD, and an Excel-style filter) is now on every PO list view, not only the approvals one. The user guides in `docs/user-guides` still say "My POs for Approval".
+
 - **Site row back on the printed PO:** the header table of the printed PO and the PDF (`po-print-meta`, `buildPoPdf`) has a **Site** row again, only when `locationVisible(request)` (the PO has a site that is not just the entity, i.e. Firelight Solar rooftops). Since commit 499c329 (Nov 12) the header had no Project / Entity / Site rows at all (the entity is the name at the top left and Bill To), which made the Entity/Site line in the "Wording" entry below out of date. Both are drawn from saved data on demand, so existing POs pick it up without being voided; PDFs already emailed or saved are not changed. No SQL.
 
 - **Search on Ownership:** the Ownership list and Stock Transfer have a search box in the card header (every word must appear in the GCS P/N, Part ID, description, manufacturer or Mfr P/N; works with the Entity and P/N filters); Update Count keeps its own box, now using the same word matching (`matchesSearch` in OwnershipTab.jsx). Also fixed the Physical Location search, whose word split was `/s+/` (split on the letter s) instead of `/\s+/`. No SQL.

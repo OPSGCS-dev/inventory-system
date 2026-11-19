@@ -446,7 +446,7 @@ function PurchaseOrdersTab({
     return [...list].sort((a, b) => (new Date(a.created_at) - new Date(b.created_at)) * dir)
   }, [visiblePurchaseRequests, poDateFrom, poDateTo, poDateSort])
   // Excel-style filters on the list's columns (the ▾ on each heading): they narrow what the dates and the
-  // header dropdowns already let through, and start clean on each view (My POs for Approval, ...).
+  // header dropdowns already let through, and start clean on each view (My PRs for Approval, ...).
   const poColumns = useMemo(
     () => [
       { key: 'id', label: 'ID', values: (r) => r.id },
@@ -2472,7 +2472,7 @@ function PurchaseOrdersTab({
               className={poView === 'my-approvals' ? 'btn-primary' : 'btn-secondary'}
               onClick={() => setPoView('my-approvals')}
             >
-              My POs for Approval
+              My PRs for Approval
               {poAttentionCounts.approvals > 0 && <span className="nav-badge">{poAttentionCounts.approvals}</span>}
             </button>
           )}
@@ -2578,7 +2578,7 @@ function PurchaseOrdersTab({
         <div className="card-header">
           <h2>
             {poView === 'my-approvals'
-              ? 'My POs for Approval'
+              ? 'My PRs for Approval'
               : poView === 'my-issue'
               ? 'My POs to Issue'
               : 'Purchase Requests'}{' '}
@@ -2657,7 +2657,7 @@ function PurchaseOrdersTab({
                 {programsReady && <col style={{ width: '130px' }} />}
                 <col style={{ width: '130px' }} />
                 <col style={{ width: '130px' }} />
-                {poView === 'my-approvals' && <col style={{ width: '120px' }} />}
+                <col style={{ width: '120px' }} />
                 <col style={{ width: '120px' }} />
                 <col style={{ width: '110px' }} />
                 <col style={{ width: '140px' }} />
@@ -2694,11 +2694,9 @@ function PurchaseOrdersTab({
                   <FilterTh filters={poFilters} col="vendor">
                     Vendor
                   </FilterTh>
-                  {poView === 'my-approvals' && (
-                    <FilterTh filters={poFilters} col="amount" className="center-cell">
-                      Amount
-                    </FilterTh>
-                  )}
+                  <FilterTh filters={poFilters} col="amount" className="center-cell">
+                    Amount
+                  </FilterTh>
                   <FilterTh filters={poFilters} col="status" className="center-cell">
                     Status
                   </FilterTh>
@@ -2736,12 +2734,10 @@ function PurchaseOrdersTab({
                         )}
                       </td>
                       <td className="nowrap-cell">{r.vendors?.name || '—'}</td>
-                      {poView === 'my-approvals' && (
-                        <td className="center-cell nowrap-cell">
-                          {formatMoney(computePoTotals(r).grandTotal)}
-                          {r.currency && r.currency.toUpperCase() !== 'CAD' ? ` ${r.currency.toUpperCase()}` : ''}
-                        </td>
-                      )}
+                      <td className="center-cell nowrap-cell">
+                        {formatMoney(computePoTotals(r).grandTotal)}
+                        {r.currency && r.currency.toUpperCase() !== 'CAD' ? ` ${r.currency.toUpperCase()}` : ''}
+                      </td>
                       <td className="center-cell">
                         <PoStatusBadge request={r} />
                         <VendorContactedBadge request={r} users={users} />

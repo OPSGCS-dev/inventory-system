@@ -2041,7 +2041,7 @@ function App() {
           r.vendor_id === loggedInUserWithScopes.vendor_id && (r.status === 'issued' || r.status === 'closed')
       )
     }
-    // "My POs for Approval" / "My POs to Issue" are role-based presets
+    // "My PRs for Approval" / "My POs to Issue" are role-based presets
     // (entity-scoped per user), not per-request assignment -- anyone
     // holding the role, for that request's entity, sees it.
     if (poView === 'my-approvals') {

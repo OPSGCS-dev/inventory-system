@@ -277,7 +277,7 @@ function ReminderPanel({ people, senderName, downloadBlob, onClose }) {
   const [personId, setPersonId] = useState('')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState(null)
-  const chosen = people.find((p) => p.user.id === personId) || people[0] || null
+  const chosen = people.find((p) => String(p.user.id) === personId) || people[0] || null
   const subject = chosen ? buildReminderSubject(chosen) : ''
   const body = chosen
     ? buildReminderBody({ person: chosen.user, work: chosen, senderName, url: window.location.origin })
@@ -316,7 +316,7 @@ function ReminderPanel({ people, senderName, downloadBlob, onClose }) {
         <>
           <div className="edit-toolbar">
             <label htmlFor="reminder_person">Send to</label>
-            <select id="reminder_person" value={chosen.user.id} onChange={(e) => setPersonId(e.target.value)} style={{ maxWidth: 420 }}>
+            <select id="reminder_person" value={String(chosen.user.id)} onChange={(e) => setPersonId(e.target.value)} style={{ maxWidth: 420 }}>
               {people.map((p) => (
                 <option value={p.user.id} key={p.user.id}>
                   {p.name} ({p.user.name}) — {p.total} waiting

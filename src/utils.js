@@ -412,7 +412,7 @@ export const PO_ROLE_OPTIONS = [
   { value: 'ticketing', label: 'Ticketing' },
   { value: 'purchase_req', label: 'Purchase Rec' },
   { value: 'purchase_rec_approval', label: 'Purchase Rec Approval' },
-  { value: 'po_issue', label: 'PO Issue' },
+  { value: 'po_issue', label: 'Purchaser' },
   { value: 'invoice_matching', label: 'Invoice Matching' },
   { value: 'invoice_approval', label: 'Payment Approval' },
   { value: 'payment', label: 'Payment' },

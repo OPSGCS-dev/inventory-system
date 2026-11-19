@@ -1332,7 +1332,7 @@ function App() {
       Ticketing: u.roles?.includes('ticketing') ? 'Yes' : '',
       'Purchase Rec': u.roles?.includes('purchase_req') ? 'Yes' : '',
       'Purchase Rec Approval': u.roles?.includes('purchase_rec_approval') ? 'Yes' : '',
-      'PO Issue': u.roles?.includes('po_issue') ? 'Yes' : '',
+      Purchaser: u.roles?.includes('po_issue') ? 'Yes' : '',
       'Invoice Matching': u.roles?.includes('invoice_matching') ? 'Yes' : '',
       'Invoice Approval': u.roles?.includes('invoice_approval') ? 'Yes' : '',
       Payment: u.roles?.includes('payment') ? 'Yes' : '',
@@ -1451,7 +1451,7 @@ function App() {
       if (truthyCsvFlag(getCell(row, 'Ticketing'))) roles.push('ticketing')
       if (truthyCsvFlag(getCell(row, 'Purchase Rec'))) roles.push('purchase_req')
       if (truthyCsvFlag(getCell(row, 'Purchase Rec Approval'))) roles.push('purchase_rec_approval')
-      if (truthyCsvFlag(getCell(row, 'PO Issue'))) roles.push('po_issue')
+      if (truthyCsvFlag(getCell(row, 'Purchaser')) || truthyCsvFlag(getCell(row, 'PO Issue'))) roles.push('po_issue')
       if (truthyCsvFlag(getCell(row, 'Invoice Matching'))) roles.push('invoice_matching')
       if (truthyCsvFlag(getCell(row, 'Invoice Approval'))) roles.push('invoice_approval')
       if (truthyCsvFlag(getCell(row, 'Payment'))) roles.push('payment')
@@ -2041,7 +2041,7 @@ function App() {
           r.vendor_id === loggedInUserWithScopes.vendor_id && (r.status === 'issued' || r.status === 'closed')
       )
     }
-    // "My PRs for Approval" / "My POs to Issue" are role-based presets
+    // "My Recs for Approval" / "My POs to Issue" are role-based presets
     // (entity-scoped per user), not per-request assignment -- anyone
     // holding the role, for that request's entity, sees it.
     if (poView === 'my-approvals') {

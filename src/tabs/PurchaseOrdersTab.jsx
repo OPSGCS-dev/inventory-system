@@ -446,7 +446,7 @@ function PurchaseOrdersTab({
     return [...list].sort((a, b) => (new Date(a.created_at) - new Date(b.created_at)) * dir)
   }, [visiblePurchaseRequests, poDateFrom, poDateTo, poDateSort])
   // Excel-style filters on the list's columns (the ▾ on each heading): they narrow what the dates and the
-  // header dropdowns already let through, and start clean on each view (My PRs for Approval, ...).
+  // header dropdowns already let through, and start clean on each view (My Recs for Approval, ...).
   const poColumns = useMemo(
     () => [
       { key: 'id', label: 'ID', values: (r) => r.id },
@@ -2472,7 +2472,7 @@ function PurchaseOrdersTab({
               className={poView === 'my-approvals' ? 'btn-primary' : 'btn-secondary'}
               onClick={() => setPoView('my-approvals')}
             >
-              My PRs for Approval
+              My Recs for Approval
               {poAttentionCounts.approvals > 0 && <span className="nav-badge">{poAttentionCounts.approvals}</span>}
             </button>
           )}
@@ -2578,7 +2578,7 @@ function PurchaseOrdersTab({
         <div className="card-header">
           <h2>
             {poView === 'my-approvals'
-              ? 'My PRs for Approval'
+              ? 'My Recs for Approval'
               : poView === 'my-issue'
               ? 'My POs to Issue'
               : 'Purchase Requests'}{' '}

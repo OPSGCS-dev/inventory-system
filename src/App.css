@@ -720,6 +720,23 @@ table.po-summary-table {
 .po-detail-value {
   font-size: 14px;
 }
+/* A grid cell won't shrink below its content, so a long file name with no spaces
+   ran over the next column. Let the cell shrink and cut the quote's file name
+   short with "..." (the full name is the link's tooltip). */
+.po-detail-meta-item {
+  min-width: 0;
+}
+.po-quote-link {
+  display: flex;
+  gap: 4px;
+  max-width: 100%;
+}
+.po-quote-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* The request's audit trail (who/when for each workflow step), as a compact
    table instead of a stack of plain <p> tags. */

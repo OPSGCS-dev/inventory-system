@@ -1073,8 +1073,8 @@ function PurchaseOrdersTab({
               <div className="po-detail-meta-item">
                 <span className="po-detail-label">Quote</span>
                 <span className="po-detail-value">
-                  <a href={r.quote_file_url} target="_blank" rel="noreferrer">
-                    {r.quote_file_name || 'View quote'} ↗
+                  <a href={r.quote_file_url} target="_blank" rel="noreferrer" className="po-quote-link" title={r.quote_file_name || undefined}>
+                    <span className="po-quote-name">{r.quote_file_name || 'View quote'}</span> ↗
                   </a>
                 </span>
               </div>

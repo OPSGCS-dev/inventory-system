@@ -888,7 +888,7 @@ function PurchaseOrdersTab({
     } catch (error) {
       console.error(error)
       if (token === pdfScanToken.current) {
-        setPdfScan({ source, note: "Couldn't read this PDF — enter the details by hand." })
+        setPdfScan({ source, note: "Couldn't read this PDF. Try refreshing the page (Ctrl+Shift+R) and uploading it again; if it still fails, enter the details by hand." })
       }
     }
   }

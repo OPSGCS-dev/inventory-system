@@ -1046,6 +1046,13 @@ export function nextStepInfo(request, users) {
       if (workDone && paymentStatus === 'paid') {
         return { step: 'Close PO', who: findUserName(users, request.requested_by) }
       }
+      // Until the vendor has been told about the PO (Email Vendor, or marked contacted by hand) the Purchaser has
+      // the next move: the requisitioner can't receive anything and accounting can't expect an invoice yet. A PO that
+      // already has an invoice or receipt obviously reached the vendor, so it isn't held here (nor is an old one
+      // whose vendor-contacted column hasn't been set up).
+      if (vendorContactReady(request) && !isVendorContacted(request) && !(request.invoices?.length || request.receipts?.length)) {
+        return { step: 'Email Vendor', who: usersWithRole(users, 'po_issue').join(', ') || '—' }
+      }
       if (!workDone) {
         return { step: 'Receive/Complete', who: findUserName(users, request.requested_by) }
       }

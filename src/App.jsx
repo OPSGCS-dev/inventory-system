@@ -2866,13 +2866,13 @@ function App() {
   // Storage -- those just become unreferenced files there.
   async function handleDeletePurchaseRequest(request) {
     if (!isAdmin(loggedInUser)) return
-    if (request.status !== 'draft') {
-      flashPoStatus('Only a draft can be deleted — void the PO instead, which keeps it on file.', false)
+    if (!['draft', 'voided'].includes(request.status)) {
+      flashPoStatus('Only a draft or a voided PO can be deleted — void the PO first.', false)
       return
     }
     if (
       !window.confirm(
-        `Delete ${request.po_number || `purchase request #${request.id}`}? This cannot be undone.`
+        `Delete ${request.po_number || `purchase request #${request.id}`}? This cannot be undone.${request.status === 'voided' ? ' Its lines, invoices and receipts are removed too; PO History keeps the record that it existed and was deleted.' : ''}`
       )
     ) {
       return

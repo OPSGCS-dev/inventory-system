@@ -957,8 +957,8 @@ function PurchaseOrdersTab({
                   History
                 </button>
               )}
-              {/* Drafts only: anything later has to be voided, which keeps it on file for the audit trail. */}
-              {isAdminUser && r.status === 'draft' && (
+              {/* Drafts, and voided POs (the database needs allow_delete_voided_pos.sql run first); anything else has to be voided first. */}
+              {isAdminUser && (r.status === 'draft' || r.status === 'voided') && (
                 <button
                   className="btn-secondary"
                   style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}

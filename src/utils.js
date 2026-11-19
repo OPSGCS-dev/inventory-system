@@ -1204,7 +1204,8 @@ export function poSiteName(request, detail = false) {
 // every word of the site's name is also in the entity's name once company words (SunE / SunEd / LP / Solar ...) are
 // dropped and spellings are unified ("Highway" = "Hwy", "South" = "S", "2S" = "2 S"). So "Hwy 2", "Hwy 2S" and
 // "Highway 2 South" are all the same as "SunE Hwy 2S LP", and "Norfolk" is the same as "SunEd Norfolk LP". The other
-// way round doesn't count: a rooftop called "Firelight Roof A" is not Firelight Solar LP itself.
+// way round doesn't count: a rooftop called "Firelight Roof A" is not Firelight Solar LP itself. A name with the
+// entity's name in brackets ("Newboro 1 (Ray)" under "SunE Ray LP") is also that entity's own site.
 const NAME_FILLER = new Set(['sune', 'suned', 'sunedison', 'lp', 'llc', 'inc', 'ltd', 'solar', 'farm', 'the', 'and'])
 const NAME_SPELLING = { highway: 'hwy', south: 's', north: 'n', east: 'e', west: 'w' }
 const siteNameWords = (name) =>
@@ -1217,10 +1218,12 @@ const siteNameWords = (name) =>
     .map((w) => NAME_SPELLING[w] ?? w)
     .filter((w) => !NAME_FILLER.has(w))
 export function locationIsSiteItself(location, site) {
-  const a = siteNameWords(location?.name)
-  if (a.length === 0) return false
   const b = new Set(siteNameWords(site?.name))
-  return a.every((w) => b.has(w))
+  const inEntity = (words) => words.length > 0 && words.every((w) => b.has(w))
+  // "Newboro 1 (Ray)": a name with the entity's own name in brackets is that entity's one site.
+  const bracketed = /\(([^)]*)\)/.exec(String(location?.name || ''))
+  if (bracketed && inEntity(siteNameWords(bracketed[1]))) return true
+  return inEntity(siteNameWords(location?.name))
 }
 
 // Does an entity ask which site a PO is for? Only when it has one that isn't the entity itself (Firelight Solar's

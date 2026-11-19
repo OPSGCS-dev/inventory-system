@@ -2168,11 +2168,11 @@ function App() {
           if (!scopes[row.role]) scopes[row.role] = []
           scopes[row.role].push(row.project_id)
         }
-        return { user: u, name: userDisplayName(u), ...pendingWorkFor({ ...u, entity_scopes: scopes }, purchaseRequests, vendors) }
+        return { user: u, name: userDisplayName(u), ...pendingWorkFor({ ...u, entity_scopes: scopes }, purchaseRequests) }
       })
       .filter((p) => p.total > 0)
       .sort((x, y) => y.total - x.total || x.name.localeCompare(y.name))
-  }, [loggedInUser, users, userRoleEntities, purchaseRequests, vendors])
+  }, [loggedInUser, users, userRoleEntities, purchaseRequests])
 
   function toggleExpandedPo(id) {
     setExpandedPoId((prev) => {

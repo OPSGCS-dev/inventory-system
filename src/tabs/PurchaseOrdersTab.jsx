@@ -271,7 +271,7 @@ function VoidedAttachments({ request, users }) {
 }
 
 // "Email a Reminder" (the Purchaser, or an admin): pick who to remind and see what the email will say. It lists
-// everything waiting on that one person -- recs to approve, invoices to approve for payment, invoices to pay, ... --
+// everything waiting on that one person -- recs to approve and invoices to approve for payment --
 // so someone holding several roles gets a single email. The email is downloaded as a draft (.eml) that opens in the
 // email program to review and send, like Email Vendor. Only people who have something waiting are offered.
 function ReminderPanel({ people, senderName, downloadBlob, onClose }) {
@@ -307,8 +307,8 @@ function ReminderPanel({ people, senderName, downloadBlob, onClose }) {
       <div className="card-header">
         <h2>Email a Reminder</h2>
         <p className="sub" style={{ margin: 0 }}>
-          Pick who to remind. The email lists everything waiting on that person (recs, POs to issue, invoices to review, approve or pay, vendors),
-          with counts and totals, so someone who does several jobs gets one email. Only people with something waiting are listed.
+          Pick who to remind. The email lists everything waiting on that person (recs to approve and invoices to approve for payment),
+          with counts and totals, so someone who does several jobs gets one email. Only people who have a rec or an invoice waiting for their approval are listed.
         </p>
       </div>
       {people.length === 0 ? (

@@ -699,19 +699,20 @@ function PurchaseOrdersTab({
       r = withShownPoNumber(r)
       const pdf = await buildPoPdf(r, approvalStamp(users, r))
       const label = poLabel(r)
+      // The requisitioner is copied on the email (their login name is their email address).
+      const requester = (users || []).find((u) => u.id === r.requested_by)
+      const ccEmail = String(requester?.name || '').includes('@') ? requester.name.trim() : ''
       const eml = buildEml({
         to: r.vendors.email,
+        cc: ccEmail.toLowerCase() === String(r.vendors.email || '').trim().toLowerCase() ? '' : ccEmail,
         subject: poEmailSubject(r),
         body: buildPoEmailBody(r, computePoTotals(r), label),
         attachment: { filename: pdf.filename, mime: 'application/pdf', bytes: pdf.bytes },
       })
       downloadBlob(new Blob([eml], { type: 'message/rfc822' }), `${pdf.filename.replace(/\.pdf$/, '')} - email to vendor.eml`)
-      // Some email programs (the new Outlook, webmail, phones) open the draft but drop its attachment, so the PDF is
-      // also saved on its own, ready to attach by hand.
-      setTimeout(() => downloadBlob(new Blob([pdf.bytes], { type: 'application/pdf' }), pdf.filename), 400)
       setEmailNote({
         id: r.id,
-        text: `Open the downloaded .eml file: it opens in your email program as a draft to ${r.vendors.email} with the PO PDF attached. If the PDF is missing from the draft, attach the separately downloaded ${pdf.filename}.`,
+        text: `Open the downloaded .eml file: it opens in your email program as a draft to ${r.vendors.email}${ccEmail ? `, copied to ${ccEmail},` : ''} with the PO PDF attached. If your email program leaves the PDF off, use Download PDF and attach it by hand.`,
       })
       logPoDocumentEvent(r, 'po_email_drafted', `to ${r.vendors.email}`)
       // Pressing Email Vendor counts as contacting the vendor (the first time only; a manual mark is left as it is).

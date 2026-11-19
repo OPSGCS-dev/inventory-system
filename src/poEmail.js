@@ -31,7 +31,7 @@ const fold = (b64) => b64.match(/.{1,76}/g)?.join(CRLF) ?? ''
 // paste must not be able to inject another header.
 const oneLine = (value) => String(value ?? '').replace(/[\r\n]+/g, ' ').trim()
 
-export function buildEml({ to, subject, body, attachment }) {
+export function buildEml({ to, cc, subject, body, attachment }) {
   const boundary = `----=_po_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
   const encoder = new TextEncoder()
   const bodyLines = String(body).replace(/\r?\n/g, CRLF)
@@ -39,6 +39,7 @@ export function buildEml({ to, subject, body, attachment }) {
   const parts = [
     'X-Unsent: 1',
     `To: ${oneLine(to)}`,
+    ...(oneLine(cc) ? [`Cc: ${oneLine(cc)}`] : []),
     `Subject: ${encodeHeader(oneLine(subject))}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,

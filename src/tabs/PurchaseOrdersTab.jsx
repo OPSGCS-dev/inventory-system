@@ -2034,7 +2034,8 @@ function PurchaseOrdersTab({
                   <div
                     id="po_draft_sub_project"
                     className={poDraftFieldErrors?.subProject ? 'field-invalid' : ''}
-                    style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--card)' }}
+                    // A long list (Firelight Operations LP offers every site) scrolls inside a short box.
+                    style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--card)', maxHeight: 180, overflowY: 'auto' }}
                   >
                     {availableSubProjects.map((sp) => (
                       <label key={sp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0, fontWeight: 'normal' }}>
@@ -2085,7 +2086,7 @@ function PurchaseOrdersTab({
                 )}
                 {poDraftMultiSiteIds && (
                   <p className="sub" style={{ margin: '4px 0 0' }}>
-                    Tick two or more. The PO shows "Multiple sites" (the page lists which).
+                    Tick two or more ({poDraftMultiSiteIds.length} selected). The PO shows "Multiple sites" (the page lists which).
                   </p>
                 )}
               </div>

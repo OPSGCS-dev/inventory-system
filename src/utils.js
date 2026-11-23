@@ -1248,7 +1248,18 @@ export function locationIsSiteItself(location, site) {
 // rooftops do; a ground-mount entity doesn't). An entity with projects.po_no_site ticked (Admin > Entities) never asks,
 // whatever its site rows are called.
 export function siteNeedsLocation(site, subProjects) {
-  return !site?.po_no_site && (subProjects || []).some((sp) => sp.project_id === site?.id && !locationIsSiteItself(sp, site))
+  return !site?.po_no_site && entitySites(subProjects, site?.id).some((sp) => !locationIsSiteItself(sp, site))
+}
+
+// The sites (sub_projects rows) a PO for this entity can pick: the ones that belong to it plus any other entity's
+// site that Admin > Sites has made "also available" to it (sub_projects.also_project_ids, add_site_extra_entities.sql;
+// this is how Firelight Operations LP offers every rooftop and ground-mount site). Before that SQL is run the column
+// is missing and only an entity's own sites come back. Sorted by name so a long list is easy to scan.
+export function entitySites(subProjects, entityId) {
+  if (!entityId) return []
+  return (subProjects || [])
+    .filter((sp) => sp.project_id === entityId || (Array.isArray(sp.also_project_ids) && sp.also_project_ids.includes(entityId)))
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' }))
 }
 
 // A yyyy-mm-dd date column for display.

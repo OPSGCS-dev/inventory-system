@@ -64,7 +64,10 @@ palette with blue accents. Reuse the existing classes before adding new ones: `c
   `Projects/ticket-system/.claude/scratch/harness`, which can also render the real tabs with a fake Supabase client).
 - Some files use CRLF line endings (`OwnershipTab`, `PhysicalLocationTab`, `utils.js`, ...). Edit in a way that
   preserves each file's endings; the git "LF will be replaced by CRLF" warnings are normal.
-- The user has said to commit and push to `main` once a change is verified, without asking. End commit messages with the
+- **Since the site went live (Nov 2026) there is a sandbox:** commit and push verified changes to the **`sandbox`** branch
+  (without asking; it deploys the separate sandbox site on its own Supabase copy, `VITE_SANDBOX=true`). **Merge `sandbox`
+  into `main` only when the user says so** -- `main` is the live system. New `supabase/*.sql` files are run in the sandbox
+  project first; tell the user which ones are new when they ask to go live. End commit messages with the
   `Co-Authored-By` line the harness gives you.
 - Don't hardcode what an admin might change, and don't put credentials in files or chat.
 

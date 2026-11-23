@@ -92,7 +92,7 @@ export async function buildPoPdf(request, stamp = null) {
       ...(locationVisible(request) ? [['Site', clean(poSiteName(request))]] : []),
       ['Requisitioner', clean(request.requisitioner_name || '-')],
       ['Budget Category', clean(budgetCategoryLabel(request))],
-      ['Chargeable Expense', request.chargeable_expense ? 'Yes' : 'No'],
+      ['Chargeable Expense', request.chargeable_expense ? (request.rebill_name ? clean(`Yes - re-billed to ${request.rebill_name}`) : 'Yes') : 'No'],
     ],
   })
   y = Math.max(addressBottom, finalY()) + 20

@@ -1262,6 +1262,28 @@ export function entitySites(subProjects, entityId) {
     .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' }))
 }
 
+// Re-billing ("Chargeable Expense"): a PO from an entity that can re-bill (projects.can_rebill: Firelight Operations LP,
+// maybe Firelight Solar LP; Admin > Entities) can be marked chargeable and say which entity it is re-billed to
+// (purchase_requests.rebill_project_id, add_po_rebill_entity.sql). Such a PO counts against the budget of the entity it
+// is re-billed to, not the one that issued it (budgetEntityId, used by the Budget tab). Before the SQL is run no entity
+// has a can_rebill field, the Chargeable box shows for every entity as it always did, and nothing is re-billed.
+export function rebillReady(projects) {
+  return (projects || []).some((p) => 'can_rebill' in p)
+}
+export function rebillEntityId(request) {
+  return request?.chargeable_expense && request?.rebill_project_id ? request.rebill_project_id : null
+}
+// The entity whose budget a PO is spent against.
+export function budgetEntityId(request) {
+  return rebillEntityId(request) ?? request?.project_id
+}
+// "No", "Yes", or "Yes - re-billed to <entity>" for the PO page and ledger.
+export function chargeableText(request, projects) {
+  if (!request?.chargeable_expense) return 'No'
+  const to = rebillEntityId(request) ? (projects || []).find((p) => p.id === request.rebill_project_id)?.name : ''
+  return to ? `Yes - re-billed to ${to}` : 'Yes'
+}
+
 // A yyyy-mm-dd date column for display.
 export const formatDateOnly = formatDate
 

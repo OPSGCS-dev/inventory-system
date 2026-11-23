@@ -44,6 +44,9 @@ import {
   canLinkPos,
   siteNeedsLocation,
   entitySites,
+  rebillReady,
+  rebillEntityId,
+  chargeableText,
   poSiteName,
   requisitionerName,
   lineTotal,
@@ -420,6 +423,8 @@ function PurchaseOrdersTab({
   budgetSubcategories,
   poDraftChargeableExpense,
   setPoDraftChargeableExpense,
+  poDraftRebillProjectId,
+  setPoDraftRebillProjectId,
   poDraftInvoiceEmail,
   setPoDraftInvoiceEmail,
   poDraftVendorQuoteNumber,
@@ -635,6 +640,7 @@ function PurchaseOrdersTab({
     ...(shownPoNumber(r) && !r.po_number ? { ...r, po_number: shownPoNumber(r) } : r),
     requisitioner_name: requisitionerName(users, r),
     program_name: programName(r.program_id),
+    rebill_name: rebillEntityId(r) ? projects.find((p) => p.id === r.rebill_project_id)?.name || '' : '',
   })
 
   // Collapsed by default -- the activity log is a secondary, rarely-needed
@@ -1384,7 +1390,7 @@ function PurchaseOrdersTab({
                       </tr>
                       <tr>
                         <th>Chargeable Expense</th>
-                        <td>{r.chargeable_expense ? 'Yes' : 'No'}</td>
+                        <td>{chargeableText(r, projects)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1980,6 +1986,14 @@ function PurchaseOrdersTab({
                   setPoDraftProjectId(e.target.value ? Number(e.target.value) : null)
                   setPoDraftSubProjectId(null)
                   setPoDraftMultiSiteIds(null)
+                  // Only entities that can re-bill keep the Chargeable Expense box; a re-bill target can't be the entity itself.
+                  const picked = projects.find((p) => p.id === Number(e.target.value))
+                  if (rebillReady(projects) && !picked?.can_rebill) {
+                    setPoDraftChargeableExpense(false)
+                    setPoDraftRebillProjectId(null)
+                  } else if (picked && picked.id === poDraftRebillProjectId) {
+                    setPoDraftRebillProjectId(null)
+                  }
                 }}
               >
                 <option value="">Select an entity…</option>
@@ -2183,15 +2197,50 @@ function PurchaseOrdersTab({
             </div>
             <div>
               <label htmlFor="po_draft_chargeable">Chargeable Expense</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 42 }}>
-                <input
-                  id="po_draft_chargeable"
-                  type="checkbox"
-                  checked={poDraftChargeableExpense}
-                  onChange={(e) => setPoDraftChargeableExpense(e.target.checked)}
-                />
-                <span>{poDraftChargeableExpense ? 'Yes' : 'No'}</span>
-              </div>
+              {rebillReady(projects) && !poDraftChargeableExpense && !projects.find((p) => p.id === poDraftProjectId)?.can_rebill ? (
+                // Only some entities re-bill their expenses (Admin > Entities > Can re-bill expenses).
+                <div className="sub" style={{ minHeight: 42, display: 'flex', alignItems: 'center' }}>
+                  Not for this entity
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 42 }}>
+                    <input
+                      id="po_draft_chargeable"
+                      type="checkbox"
+                      checked={poDraftChargeableExpense}
+                      onChange={(e) => {
+                        setPoDraftChargeableExpense(e.target.checked)
+                        if (!e.target.checked) setPoDraftRebillProjectId(null)
+                      }}
+                    />
+                    <span>{poDraftChargeableExpense ? 'Yes' : 'No'}</span>
+                  </div>
+                  {rebillReady(projects) && poDraftChargeableExpense && (
+                    <div style={{ marginTop: 6 }}>
+                      <label htmlFor="po_draft_rebill">Re-bill to *</label>
+                      <select
+                        id="po_draft_rebill"
+                        className={poDraftFieldErrors?.rebill ? 'field-invalid' : ''}
+                        value={poDraftRebillProjectId ?? ''}
+                        onChange={(e) => setPoDraftRebillProjectId(e.target.value ? Number(e.target.value) : null)}
+                      >
+                        <option value="">Select an entity…</option>
+                        {siteChoices(projects)
+                          .filter((p) => p.id !== poDraftProjectId)
+                          .map((p) => (
+                            <option value={p.id} key={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                      </select>
+                      <p className="sub" style={{ margin: '4px 0 0' }}>
+                        This PO counts against that entity's budget, not this one's.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
             <div>
               <label htmlFor="po_draft_invoice_email">Send Invoices To</label>

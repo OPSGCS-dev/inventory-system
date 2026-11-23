@@ -1,4 +1,4 @@
-import { computePoTotals, isNotToExceed } from './utils'
+import { budgetEntityId, computePoTotals, isNotToExceed } from './utils'
 
 // The Budget tab's sums. Budgets come from `budget_amounts` (year + site + budget category, optionally a
 // sub-category); spending is worked out here from the POs, so nothing about it is ever stored twice.
@@ -9,6 +9,7 @@ import { computePoTotals, isNotToExceed } from './utils'
 //                   (nothing for a closed PO -- it is finished, so whatever it never billed is not coming)
 //   Remaining       budget - actual invoiced - to be invoiced
 //
+// A chargeable PO that is re-billed to another entity counts against that entity's budget instead of the issuer's.
 // A PO counts in the year it was issued. Voided, draft, requested and rejected POs count for nothing.
 
 export const BUDGET_PO_STATUSES = ['issued', 'closed']
@@ -118,22 +119,23 @@ export function buildBudgetReport({
     if (!r.budget_category_id && programId && !r.program_id) continue
     const s = poSpend(r)
     if (r.currency && r.currency.toUpperCase() !== 'CAD') nonCadCount += 1
-    if (!siteIds.has(r.project_id)) {
-      const cur = unbudgeted.get(r.project_id) || { pos: 0, invoiced: 0, toBe: 0, count: 0 }
+    const entityId = budgetEntityId(r)
+    if (!siteIds.has(entityId)) {
+      const cur = unbudgeted.get(entityId) || { pos: 0, invoiced: 0, toBe: 0, count: 0 }
       cur.pos += s.committed
       cur.invoiced += s.invoiced
       cur.toBe += s.toBe
       cur.count += 1
-      unbudgeted.set(r.project_id, cur)
+      unbudgeted.set(entityId, cur)
       continue
     }
     const cat = r.budget_category_id || 0
-    bump(key(r.project_id, cat, 0), s)
+    bump(key(entityId, cat, 0), s)
     const listAdd = (k) => poList.set(k, [...(poList.get(k) || []), r])
-    listAdd(key(r.project_id, cat, 0))
+    listAdd(key(entityId, cat, 0))
     if (r.budget_subcategory_id) {
-      bump(key(r.project_id, cat, r.budget_subcategory_id), s)
-      listAdd(key(r.project_id, cat, r.budget_subcategory_id))
+      bump(key(entityId, cat, r.budget_subcategory_id), s)
+      listAdd(key(entityId, cat, r.budget_subcategory_id))
     }
   }
 

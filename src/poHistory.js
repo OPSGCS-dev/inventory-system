@@ -98,6 +98,7 @@ const FIELD_LABELS = {
   budget_category_id: 'Budget category',
   budget_subcategory_id: 'Budget sub-category',
   chargeable_expense: 'Chargeable expense',
+  rebill_project_id: 'Re-billed to (entity)',
   invoice_email: 'Invoice email',
   prepaid: 'Pre-paid',
   on_hold: 'On hold',

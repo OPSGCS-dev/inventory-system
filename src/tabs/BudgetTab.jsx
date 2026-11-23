@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from 'react'
 import Papa from 'papaparse'
 import { buildBudgetReport, budgetYears, emptyAmounts, poSpend, remainingOf } from '../budget'
 import { downloadCsv } from '../stockUtils'
-import { formatAmountWhole, formatDate, formatMoney, poStatusLabel } from '../utils'
+import { formatAmountWhole, formatDate, formatMoney, poStatusLabel, rebillEntityId } from '../utils'
 
 // Budget against spending, per entity: what each budget category was given for the year, what the issued POs
 // commit, what has been invoiced (invoices approved for payment) and what is left. The sums are in
@@ -470,7 +470,14 @@ function BudgetTab({
                 const s = poSpend(r)
                 return (
                   <tr key={r.id}>
-                    <td>{r.po_number || `#${r.id}`}</td>
+                    <td>
+                      {r.po_number || `#${r.id}`}
+                      {rebillEntityId(r) && (
+                        <span className="sub" title="A chargeable PO, counted against the entity it is re-billed to">
+                          {' '}(re-billed from {r.projects?.name || 'another entity'})
+                        </span>
+                      )}
+                    </td>
                     <td>{r.vendors?.name || ''}</td>
                     <td>{poStatusLabel(r.status)}</td>
                     <td>{r.issued_at ? formatDate(r.issued_at) : ''}</td>

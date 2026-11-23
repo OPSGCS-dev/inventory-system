@@ -43,6 +43,7 @@ import {
   defaultBatchName,
   siteNeedsLocation,
   entitySites,
+  rebillReady,
   paymentBatchLabel,
   computePoTotals,
   canReviewInvoice,
@@ -244,6 +245,7 @@ function App() {
   const [poDraftNotes, setPoDraftNotes] = useState('')
   const [poDraftDescription, setPoDraftDescription] = useState('')
   const [poDraftChargeableExpense, setPoDraftChargeableExpense] = useState(false)
+  const [poDraftRebillProjectId, setPoDraftRebillProjectId] = useState(null) // entity a chargeable PO is re-billed to
   const [poDraftInvoiceEmail, setPoDraftInvoiceEmail] = useState(PO_INVOICE_EMAIL)
   const [poDraftVendorQuoteNumber, setPoDraftVendorQuoteNumber] = useState('')
   const [poDraftQuoteFileUrl, setPoDraftQuoteFileUrl] = useState(null)
@@ -2216,6 +2218,7 @@ function App() {
       setPoDraftTicketSystemTicketId(existing.ticket_system_ticket_id ?? null)
       setPoDraftTicketSystemTicketNumber(existing.ticket_system_ticket_number ?? null)
       setPoDraftChargeableExpense(Boolean(existing.chargeable_expense))
+      setPoDraftRebillProjectId(existing.rebill_project_id ?? null)
       setPoDraftInvoiceEmail(existing.invoice_email || PO_INVOICE_EMAIL)
       setPoDraftVendorQuoteNumber(existing.vendor_quote_number || '')
       setPoDraftQuoteFileUrl(existing.quote_file_url || null)
@@ -2284,6 +2287,7 @@ function App() {
       setPoDraftTicketSystemTicketId(prefill?.ticketSystemTicketId ?? null)
       setPoDraftTicketSystemTicketNumber(prefill?.ticketSystemTicketNumber ?? null)
       setPoDraftChargeableExpense(false)
+      setPoDraftRebillProjectId(null)
       setPoDraftInvoiceEmail(PO_INVOICE_EMAIL)
       setPoDraftVendorQuoteNumber(prefill?.vendorQuoteNumber ?? '')
       setPoDraftQuoteFileUrl(null)
@@ -2589,6 +2593,8 @@ function App() {
     // "Multiple sites": two or more of the entity's sites, saved as [{ id, name }] with sub_project_id left empty.
     const multiOn = needsLocation && Array.isArray(poDraftMultiSiteIds)
     if (multiOn ? poDraftMultiSiteIds.length < 2 : needsLocation && !poDraftSubProjectId) errors.subProject = true
+    // A chargeable PO says which entity it is re-billed to (once add_po_rebill_entity.sql has been run).
+    if (rebillReady(projects) && poDraftChargeableExpense && !poDraftRebillProjectId) errors.rebill = true
     const multiSitesToSave = multiOn
       ? subProjects.filter((sp) => poDraftMultiSiteIds.includes(sp.id)).map((sp) => ({ id: sp.id, name: sp.name }))
       : null
@@ -2603,6 +2609,8 @@ function App() {
           ? 'Select which site this request is for.'
           : errors.budgetCategory
           ? 'Choose a budget category before saving.'
+          : errors.rebill
+          ? 'Choose the entity this chargeable expense is re-billed to.'
           : 'Fill in the highlighted fields before saving.',
         false
       )
@@ -2702,6 +2710,7 @@ function App() {
             budget_category_id: poDraftBudgetCategoryId,
             budget_subcategory_id: poDraftBudgetSubcategoryId,
             chargeable_expense: poDraftChargeableExpense,
+            ...(rebillReady(projects) ? { rebill_project_id: poDraftChargeableExpense ? poDraftRebillProjectId : null } : {}),
             ...invoiceEmailFields,
             ...prepaidFields,
             quote_file_url: quoteFileUrl,
@@ -2793,6 +2802,7 @@ function App() {
             budget_category_id: poDraftBudgetCategoryId,
             budget_subcategory_id: poDraftBudgetSubcategoryId,
             chargeable_expense: poDraftChargeableExpense,
+            ...(rebillReady(projects) ? { rebill_project_id: poDraftChargeableExpense ? poDraftRebillProjectId : null } : {}),
             ...invoiceEmailFields,
             ...prepaidFields,
             vendor_quote_number: poDraftVendorQuoteNumber.trim() || null,
@@ -3968,7 +3978,7 @@ function App() {
       // 1. the copy, as a draft
       const copied = [
         'project_id', 'program_id', 'sub_project_id', 'multi_sites', 'vendor_id', 'notes', 'description', 'budget_category_id',
-        'budget_subcategory_id', 'chargeable_expense', 'invoice_email', 'vendor_quote_number', 'quote_file_url',
+        'budget_subcategory_id', 'chargeable_expense', ...(rebillReady(projects) ? ['rebill_project_id'] : []), 'invoice_email', 'vendor_quote_number', 'quote_file_url',
         'quote_file_name', 'markup_rate', 'tax_rate', 'shipping_handling', 'credit', 'not_to_exceed', 'spending_cap',
         'currency', 'po_category', 'ticket_system_ticket_id', 'ticket_system_ticket_number', 'ticket_system_ticket_code',
         'requested_by',
@@ -5283,6 +5293,18 @@ function App() {
     }
   }
 
+  // The "Can re-bill expenses" tick box on an entity (add_po_rebill_entity.sql): only these entities' POs can be
+  // marked Chargeable Expense and re-billed to another entity.
+  async function handleUpdateProjectCanRebill(projectId, canRebill) {
+    setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, can_rebill: canRebill } : p)))
+    const { error } = await supabase.from('projects').update({ can_rebill: canRebill }).eq('id', projectId)
+    if (error) {
+      console.error(error)
+      flashUsersStatus('Could not save that. Run supabase/add_po_rebill_entity.sql in the Supabase SQL editor first.', false)
+      await loadProjects()
+    }
+  }
+
   // How many suggestions are still New, for the badge on the admin's Suggestions tab. Quietly shows nothing until
   // add_suggestions.sql has been run.
   async function refreshSuggestionCount() {
@@ -5867,6 +5889,8 @@ function App() {
           poDraftInvoiceEmail={poDraftInvoiceEmail}
           setPoDraftInvoiceEmail={setPoDraftInvoiceEmail}
           setPoDraftChargeableExpense={setPoDraftChargeableExpense}
+          poDraftRebillProjectId={poDraftRebillProjectId}
+          setPoDraftRebillProjectId={setPoDraftRebillProjectId}
           poDraftVendorQuoteNumber={poDraftVendorQuoteNumber}
           setPoDraftVendorQuoteNumber={setPoDraftVendorQuoteNumber}
           poDraftQuoteFileUrl={poDraftQuoteFileUrl}
@@ -6081,6 +6105,7 @@ function App() {
           handleAddProject={handleAddProject}
           handleUpdateProjectCode={handleUpdateProjectCode}
           handleUpdateProjectNoSite={handleUpdateProjectNoSite}
+          handleUpdateProjectCanRebill={handleUpdateProjectCanRebill}
           draftSubProjects={draftSubProjects}
           addDraftSubProjectRow={addDraftSubProjectRow}
           removeDraftSubProjectRow={removeDraftSubProjectRow}

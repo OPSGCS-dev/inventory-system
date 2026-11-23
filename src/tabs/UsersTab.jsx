@@ -163,6 +163,7 @@ function UsersTab({
   handleAddProject,
   handleUpdateProjectCode,
   handleUpdateProjectNoSite,
+  handleUpdateProjectCanRebill,
   draftSubProjects,
   addDraftSubProjectRow,
   removeDraftSubProjectRow,
@@ -1166,6 +1167,7 @@ function UsersTab({
               {programs.length > 0 && <col style={{ width: '35%' }} />}
               <col style={{ width: '20%' }} />
               {projects.some((p) => 'po_no_site' in p) && <col style={{ width: '18%' }} />}
+              {projects.some((p) => 'can_rebill' in p) && <col style={{ width: '18%' }} />}
             </colgroup>
             <thead>
               <tr className="header-row">
@@ -1174,6 +1176,9 @@ function UsersTab({
                 <th>PO Code</th>
                 {projects.some((p) => 'po_no_site' in p) && (
                   <th title="Tick for a ground-mount entity: the PO form won't ask which site a PO is for.">No site question on POs</th>
+                )}
+                {projects.some((p) => 'can_rebill' in p) && (
+                  <th title="Tick for an entity that re-bills expenses to other entities (Firelight Operations LP): its POs can be marked Chargeable Expense and re-billed to an entity, and then count against that entity's budget.">Can re-bill expenses</th>
                 )}
               </tr>
             </thead>
@@ -1214,6 +1219,15 @@ function UsersTab({
                           type="checkbox"
                           checked={Boolean(p.po_no_site)}
                           onChange={(e) => handleUpdateProjectNoSite(p.id, e.target.checked)}
+                        />
+                      </td>
+                    )}
+                    {'can_rebill' in p && (
+                      <td className="center-cell">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(p.can_rebill)}
+                          onChange={(e) => handleUpdateProjectCanRebill(p.id, e.target.checked)}
                         />
                       </td>
                     )}

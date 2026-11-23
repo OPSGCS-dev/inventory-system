@@ -2025,26 +2025,7 @@ function PurchaseOrdersTab({
                 </button>
               )}
             </div>
-          </div>
-
-          {vendorPanel === 'form' && (
-            <VendorRequestPanel
-              vendors={vendors}
-              onSubmit={handleRequestVendor}
-              onUseExisting={(v) => {
-                setPoDraftVendorId(v.id)
-                setVendorPanel(null)
-              }}
-              onClose={(vendor) => {
-                // A vendor just requested is picked on this request straight away.
-                if (vendor) setPoDraftVendorId(vendor.id)
-                setVendorPanel(null)
-              }}
-            />
-          )}
-
-          {siteNeedsLocation(projects.find((p) => p.id === poDraftProjectId), subProjects) && (
-            <div className="field-row" style={{ marginTop: 12 }}>
+            {siteNeedsLocation(projects.find((p) => p.id === poDraftProjectId), subProjects) && (
               <div>
                 <label htmlFor="po_draft_sub_project">Site</label>
                 {poDraftMultiSiteIds ? (
@@ -2107,7 +2088,23 @@ function PurchaseOrdersTab({
                   </p>
                 )}
               </div>
-            </div>
+            )}
+          </div>
+
+          {vendorPanel === 'form' && (
+            <VendorRequestPanel
+              vendors={vendors}
+              onSubmit={handleRequestVendor}
+              onUseExisting={(v) => {
+                setPoDraftVendorId(v.id)
+                setVendorPanel(null)
+              }}
+              onClose={(vendor) => {
+                // A vendor just requested is picked on this request straight away.
+                if (vendor) setPoDraftVendorId(vendor.id)
+                setVendorPanel(null)
+              }}
+            />
           )}
 
           <label htmlFor="po_draft_description" style={{ marginTop: 12 }}>

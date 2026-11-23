@@ -1,6 +1,7 @@
 import { vendorAddressText } from './vendorFields.js'
 
-export const TICKETING_URL = 'https://ticket-system-gcs14.vercel.app'
+// The sandbox deployment sets VITE_TICKETING_URL so its links don't open the live ticket system.
+export const TICKETING_URL = (import.meta.env.VITE_TICKETING_URL || 'https://ticket-system-gcs14.vercel.app').replace(/\/+$/, '')
 
 // Inventory journal History tab -- one label per distinct action that can
 // write a journal entry, so the Type column actually reflects what happened

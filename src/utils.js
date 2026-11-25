@@ -1005,10 +1005,13 @@ export function canResubmitInvoice(user, invoice, request) {
   return invoiceStage(invoice, request) === 'returned' && (isAdmin(user) || canMatchInvoices(user, request))
 }
 
-// Admins can delete any invoice; accounting can delete one that was sent back, to upload a
-// corrected one in its place.
+// Admins can delete any invoice. Invoice Matching can delete one at any stage before it is approved for
+// payment (matching, review, payment approval, or sent back), e.g. to upload a corrected one in its place;
+// once it is approved for payment or paid only an admin can.
 export function canDeleteInvoice(user, invoice, request) {
-  return isAdmin(user) || (invoiceStage(invoice, request) === 'returned' && canMatchInvoices(user, request))
+  if (isAdmin(user)) return true
+  const stage = invoiceStage(invoice, request)
+  return stage !== 'to_pay' && stage !== 'paid' && canMatchInvoices(user, request)
 }
 
 // Marking an invoice paid and setting the manual Payment Status dropdown.

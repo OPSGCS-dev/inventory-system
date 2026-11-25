@@ -61,8 +61,9 @@ const add = (a, b) => {
 
 const key = (siteId, categoryId, subId) => `${siteId}:${categoryId}:${subId || 0}`
 
-// Builds everything the tab shows for one project (`programId`, or every category when there are no
-// projects yet) and year.
+// Builds everything the tab shows for one budget type (`programId`, or every category when there are no
+// budget types yet) and year. A category with no amount of its own has the amounts of its sub-categories added up
+// as its budget (the new O&M categories are budgeted line by line); one that has an amount keeps it.
 //   sites      the sites with a budget that year, in name order
 //   rows       one per budget category (+ one per sub-category that has a budget or spending, and a
 //              "No budget category" row when a PO has none); each has `cells[siteId]` and `total`
@@ -139,12 +140,25 @@ export function buildBudgetReport({
     }
   }
 
+  const subsByCategory = new Map()
+  for (const sc of budgetSubcategories) subsByCategory.set(sc.category_id, [...(subsByCategory.get(sc.category_id) || []), sc])
   const cellFor = (siteId, categoryId, subId) => {
     const k = key(siteId, categoryId, subId)
     const s = spend.get(k)
+    let budget = budgets.get(k) || 0
+    let hasBudget = budgets.has(k)
+    if (!subId && categoryId && !hasBudget) {
+      for (const sc of subsByCategory.get(categoryId) || []) {
+        const sk = key(siteId, categoryId, sc.id)
+        if (budgets.has(sk)) {
+          budget += budgets.get(sk)
+          hasBudget = true
+        }
+      }
+    }
     return {
-      budget: budgets.get(k) || 0,
-      hasBudget: budgets.has(k),
+      budget,
+      hasBudget,
       pos: money(s?.pos || 0),
       invoiced: money(s?.invoiced || 0),
       toBe: money(s?.toBe || 0),
@@ -164,7 +178,10 @@ export function buildBudgetReport({
 
   const rows = []
   for (const c of categories) {
-    rows.push(makeRow(`c${c.id}`, c.name, c.id, 0, 'category'))
+    const catRow = makeRow(`c${c.id}`, c.name, c.id, 0, 'category')
+    // A retired category (hidden on new POs) only shows while it has a budget or spending.
+    if (c.active === false && !catRow.total.hasBudget && catRow.total.count === 0) continue
+    rows.push(catRow)
     for (const sc of budgetSubcategories.filter((x) => x.category_id === c.id)) {
       const row = makeRow(`s${sc.id}`, sc.name, c.id, sc.id, 'sub')
       const any = row.total.hasBudget || row.total.count > 0

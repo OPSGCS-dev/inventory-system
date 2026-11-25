@@ -1284,6 +1284,25 @@ export function chargeableText(request, projects) {
   return to ? `Yes - re-billed to ${to}` : 'Yes'
 }
 
+// Re-billing is automatic now (add_budget_types.sql): a PO from an entity that can re-bill (Admin > Entities > Can re-bill
+// expenses: FLOPS) under a budget category that re-bills (budget_categories.rebills: the O&M Overage categories) is a
+// chargeable expense, and has to say which other entity it is re-billed to. There is no tick box any more.
+// Before the SQL is run no category has the field and nothing is decided automatically.
+export function categoryRebillReady(categories) {
+  return (categories || []).some((c) => 'rebills' in c)
+}
+export function poRebillRequired(projects, categories, projectId, categoryId) {
+  if (!rebillReady(projects) || !categoryRebillReady(categories)) return false
+  const entity = (projects || []).find((p) => p.id === projectId)
+  const category = (categories || []).find((c) => c.id === categoryId)
+  return Boolean(entity?.can_rebill && category?.rebills)
+}
+// A budget type's name, with "(retired)" after one that is no longer offered on new POs.
+export function programLabel(program) {
+  if (!program) return ''
+  return program.active === false ? `${program.name} (retired)` : program.name
+}
+
 // A yyyy-mm-dd date column for display.
 export const formatDateOnly = formatDate
 

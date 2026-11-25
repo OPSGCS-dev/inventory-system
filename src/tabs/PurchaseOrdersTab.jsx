@@ -44,8 +44,9 @@ import {
   canLinkPos,
   siteNeedsLocation,
   entitySites,
-  rebillReady,
+  poRebillRequired,
   rebillEntityId,
+  programLabel,
   chargeableText,
   poSiteName,
   requisitionerName,
@@ -422,7 +423,6 @@ function PurchaseOrdersTab({
   budgetCategories,
   budgetSubcategories,
   poDraftChargeableExpense,
-  setPoDraftChargeableExpense,
   poDraftRebillProjectId,
   setPoDraftRebillProjectId,
   poDraftInvoiceEmail,
@@ -521,8 +521,10 @@ function PurchaseOrdersTab({
   // Whoever raises POs reviews their invoices; the tab also shows for anyone with one waiting.
   const canSeeReviewView =
     userHasRole(loggedInUser, 'purchase_req') || userHasRole(loggedInUser, 'admin') || poAttentionCounts.invoicesToReview > 0
+  // Retired sub-categories / categories / budget types are hidden on the form (add_budget_types.sql), unless the PO
+  // already has one.
   const availableSubcategories = budgetSubcategories.filter(
-    (sc) => sc.category_id === poDraftBudgetCategoryId
+    (sc) => sc.category_id === poDraftBudgetCategoryId && (sc.active !== false || sc.id === poDraftBudgetSubcategoryId)
   )
   const availableSubProjects = entitySites(subProjects, poDraftProjectId)
   // Projects (the top layer): the sites and budget categories offered follow the project chosen. Without
@@ -530,7 +532,13 @@ function PurchaseOrdersTab({
   const programName = (id) => (programs || []).find((g) => g.id === id)?.name || ''
   const draftProgram = (programs || []).find((g) => g.id === poDraftProgramId) || null
   const siteChoices = (list) => (programsReady ? list.filter((p) => programSiteIds?.get(poDraftProgramId)?.has(p.id)) : list)
-  const categoryChoices = programsReady ? budgetCategories.filter((c) => c.program_id === poDraftProgramId) : budgetCategories
+  const categoryChoices = (programsReady ? budgetCategories.filter((c) => c.program_id === poDraftProgramId) : budgetCategories).filter(
+    (c) => c.active !== false || c.id === poDraftBudgetCategoryId
+  )
+  const programChoices = (programs || []).filter((g) => g.active !== false || g.id === poDraftProgramId)
+  // Re-billing is automatic: an entity that can re-bill (FLOPS) under a category that re-bills (O&M Overage) says which
+  // other entity of the budget type it is re-billed to.
+  const draftRebills = poRebillRequired(projects, budgetCategories, poDraftProjectId, poDraftBudgetCategoryId)
   const viewingRequest = expandedPoId ? visiblePurchaseRequests.find((r) => r.id === expandedPoId) : null
 
   // Date column: filter by a range of dates (both ends inclusive; the same day in both boxes
@@ -594,7 +602,7 @@ function PurchaseOrdersTab({
         sort: (a, b) => (Date.parse(b) || 0) - (Date.parse(a) || 0),
       },
       { key: 'description', label: 'Description', values: (r) => r.description },
-      ...(programsReady ? [{ key: 'program', label: 'Project', values: (r) => programName(r.program_id) }] : []),
+      ...(programsReady ? [{ key: 'program', label: 'Budget Type', values: (r) => programName(r.program_id) }] : []),
       { key: 'entity', label: 'Entity', values: (r) => r.projects?.name },
       { key: 'vendor', label: 'Vendor', values: (r) => r.vendors?.name },
       {
@@ -1056,7 +1064,7 @@ function PurchaseOrdersTab({
             })()}
             {programsReady && programName(r.program_id) && (
               <div className="po-detail-meta-item">
-                <span className="po-detail-label">Project</span>
+                <span className="po-detail-label">Budget Type</span>
                 <span className="po-detail-value">{programName(r.program_id)}</span>
               </div>
             )}
@@ -1960,17 +1968,17 @@ function PurchaseOrdersTab({
           <div className="field-row">
             {programsReady && (
               <div>
-                <label htmlFor="po_draft_program">Project *</label>
+                <label htmlFor="po_draft_program">Budget Type *</label>
                 <select
                   id="po_draft_program"
                   className={poDraftFieldErrors?.program ? 'field-invalid' : ''}
                   value={poDraftProgramId ?? ''}
                   onChange={(e) => changePoDraftProgram(e.target.value ? Number(e.target.value) : null)}
                 >
-                  <option value="">Select a project…</option>
-                  {programs.map((g) => (
+                  <option value="">Select a budget type…</option>
+                  {programChoices.map((g) => (
                     <option value={g.id} key={g.id}>
-                      {g.name}
+                      {programLabel(g)}
                     </option>
                   ))}
                 </select>
@@ -1986,14 +1994,8 @@ function PurchaseOrdersTab({
                   setPoDraftProjectId(e.target.value ? Number(e.target.value) : null)
                   setPoDraftSubProjectId(null)
                   setPoDraftMultiSiteIds(null)
-                  // Only entities that can re-bill keep the Chargeable Expense box; a re-bill target can't be the entity itself.
-                  const picked = projects.find((p) => p.id === Number(e.target.value))
-                  if (rebillReady(projects) && !picked?.can_rebill) {
-                    setPoDraftChargeableExpense(false)
-                    setPoDraftRebillProjectId(null)
-                  } else if (picked && picked.id === poDraftRebillProjectId) {
-                    setPoDraftRebillProjectId(null)
-                  }
+                  // A re-bill target can't be the entity itself.
+                  if (Number(e.target.value) === poDraftRebillProjectId) setPoDraftRebillProjectId(null)
                 }}
               >
                 <option value="">Select an entity…</option>
@@ -2166,9 +2168,10 @@ function PurchaseOrdersTab({
             </div>
             {availableSubcategories.length > 0 && (
               <div>
-                <label htmlFor="po_draft_budget_subcategory">Sub-Category</label>
+                <label htmlFor="po_draft_budget_subcategory">Sub-Category{draftProgram?.active === false ? '' : ' *'}</label>
                 <select
                   id="po_draft_budget_subcategory"
+                  className={poDraftFieldErrors?.budgetSubcategory ? 'field-invalid' : ''}
                   value={poDraftBudgetSubcategoryId ?? ''}
                   onChange={(e) =>
                     setPoDraftBudgetSubcategoryId(e.target.value ? Number(e.target.value) : null)
@@ -2195,53 +2198,30 @@ function PurchaseOrdersTab({
                 onChange={(e) => setPoDraftVendorQuoteNumber(e.target.value)}
               />
             </div>
-            <div>
-              <label htmlFor="po_draft_chargeable">Chargeable Expense</label>
-              {rebillReady(projects) && !poDraftChargeableExpense && !projects.find((p) => p.id === poDraftProjectId)?.can_rebill ? (
-                // Only some entities re-bill their expenses (Admin > Entities > Can re-bill expenses).
-                <div className="sub" style={{ minHeight: 42, display: 'flex', alignItems: 'center' }}>
-                  Not for this entity
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 42 }}>
-                    <input
-                      id="po_draft_chargeable"
-                      type="checkbox"
-                      checked={poDraftChargeableExpense}
-                      onChange={(e) => {
-                        setPoDraftChargeableExpense(e.target.checked)
-                        if (!e.target.checked) setPoDraftRebillProjectId(null)
-                      }}
-                    />
-                    <span>{poDraftChargeableExpense ? 'Yes' : 'No'}</span>
-                  </div>
-                  {rebillReady(projects) && poDraftChargeableExpense && (
-                    <div style={{ marginTop: 6 }}>
-                      <label htmlFor="po_draft_rebill">Re-bill to *</label>
-                      <select
-                        id="po_draft_rebill"
-                        className={poDraftFieldErrors?.rebill ? 'field-invalid' : ''}
-                        value={poDraftRebillProjectId ?? ''}
-                        onChange={(e) => setPoDraftRebillProjectId(e.target.value ? Number(e.target.value) : null)}
-                      >
-                        <option value="">Select an entity…</option>
-                        {siteChoices(projects)
-                          .filter((p) => p.id !== poDraftProjectId)
-                          .map((p) => (
-                            <option value={p.id} key={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                      </select>
-                      <p className="sub" style={{ margin: '4px 0 0' }}>
-                        This PO counts against that entity's budget, not this one's.
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            {(draftRebills || (poDraftChargeableExpense && draftProgram?.active === false)) && (
+              // Automatic: this entity re-bills its expenses under this category (no tick box); say who it goes to.
+              <div>
+                <label htmlFor="po_draft_rebill">Re-billed to *</label>
+                <select
+                  id="po_draft_rebill"
+                  className={poDraftFieldErrors?.rebill ? 'field-invalid' : ''}
+                  value={poDraftRebillProjectId ?? ''}
+                  onChange={(e) => setPoDraftRebillProjectId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Select an entity…</option>
+                  {siteChoices(projects)
+                    .filter((p) => p.id !== poDraftProjectId)
+                    .map((p) => (
+                      <option value={p.id} key={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                </select>
+                <p className="sub" style={{ margin: '4px 0 0' }}>
+                  A chargeable expense: this PO counts against that entity's budget, not this one's.
+                </p>
+              </div>
+            )}
             <div>
               <label htmlFor="po_draft_invoice_email">Send Invoices To</label>
               {programsReady && draftProgram?.invoice_email ? (
@@ -2944,7 +2924,7 @@ function PurchaseOrdersTab({
                   </FilterTh>
                   {programsReady && (
                     <FilterTh filters={poFilters} col="program">
-                      Project
+                      Budget Type
                     </FilterTh>
                   )}
                   <FilterTh filters={poFilters} col="entity">

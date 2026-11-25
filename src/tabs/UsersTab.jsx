@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { PO_ROLE_OPTIONS, ENTITY_SCOPED_ROLES, userDisplayName } from '../utils'
+import { PO_ROLE_OPTIONS, ENTITY_SCOPED_ROLES, userDisplayName, programLabel } from '../utils'
 import { vendorAddressLines } from '../vendorFields'
 
 // Admin > Sites: the other entities a site is also available to on a PO (a closed list of checkboxes under a summary).
@@ -581,11 +581,13 @@ function UsersTab({
       {programs.length > 0 && (
         <div className="card">
           <div className="card-header">
-            <h2>Projects ({programs.length})</h2>
+            <h2>Budget Types ({programs.length})</h2>
             <p className="sub" style={{ margin: 0 }}>
-              The top layer: every PO belongs to a project. Each project has its own entities, its own budget
-              categories (below) and the email address vendors send invoices to. Spare-parts inventory is only
-              kept for the entities of a project marked "Keeps inventory". Changes here save as you make them.
+              The top layer: every PO belongs to a budget type. Each budget type has its own entities, its own budget
+              categories and sub-categories (below) and the email address vendors send invoices to; a PO can only use
+              the entities and categories of its budget type. Spare-parts inventory is only kept for the entities of a
+              budget type marked "Keeps inventory". A retired budget type is not offered on new POs but keeps the POs and
+              budget already on it. Changes here save as you make them.
             </p>
           </div>
           {programs.map((g) => {
@@ -596,7 +598,7 @@ function UsersTab({
               <div key={g.id} style={{ borderTop: '1px solid var(--border)', padding: '12px 0' }}>
                 <div className="field-row">
                   <div>
-                    <label htmlFor={`program_name_${g.id}`}>Project name</label>
+                    <label htmlFor={`program_name_${g.id}`}>Budget type name</label>
                     <input
                       id={`program_name_${g.id}`}
                       type="text"
@@ -634,6 +636,22 @@ function UsersTab({
                       </span>
                     </div>
                   </div>
+                  {'active' in g && (
+                    <div>
+                      <label>Active</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 42 }}>
+                        <input
+                          type="checkbox"
+                          checked={g.active !== false}
+                          onChange={(e) => handleUpdateProgram(g.id, { active: e.target.checked })}
+                          aria-label={`${g.name} is active`}
+                        />
+                        <span className="sub" style={{ margin: 0 }}>
+                          Untick to retire it (hidden on new POs)
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div style={{ marginTop: 8 }}>
                   <span className="sub" style={{ margin: 0 }}>
@@ -686,7 +704,10 @@ function UsersTab({
           <h2>Budget Categories {draftBudgetCategories.length ? `(${draftBudgetCategories.length})` : ''}</h2>
           {programs.length > 0 && (
             <p className="sub" style={{ margin: 0 }}>
-              Each project has its own list; a PO can only use the categories of its project.
+              Each budget type has its own list; a PO can only use the categories of its budget type. A retired category
+              is hidden on new POs but stays on the POs that have it. "Re-bills" marks a category (the O&M Overage ones)
+              whose POs, when issued by an entity that can re-bill (FLOPS), are re-billed to another entity. Save after
+              changing either.
             </p>
           )}
         </div>
@@ -696,19 +717,23 @@ function UsersTab({
             <colgroup>
               {programs.length > 0 && <col style={{ width: '30%' }} />}
               <col />
+              {draftBudgetCategories.some((c) => 'rebills' in c) && <col style={{ width: '90px' }} />}
+              {draftBudgetCategories.some((c) => 'active' in c) && <col style={{ width: '90px' }} />}
               <col className="col-last" />
             </colgroup>
             <thead>
               <tr className="header-row">
-                {programs.length > 0 && <th>Project</th>}
+                {programs.length > 0 && <th>Budget Type</th>}
                 <th>Name</th>
+                {draftBudgetCategories.some((c) => 'rebills' in c) && <th title="POs from an entity that can re-bill are re-billed to another entity">Re-bills</th>}
+                {draftBudgetCategories.some((c) => 'active' in c) && <th title="Untick to retire: hidden on new POs">Active</th>}
                 <th className="col-last"></th>
               </tr>
             </thead>
             <tbody>
               {draftBudgetCategories.length === 0 ? (
                 <tr>
-                  <td className="empty" colSpan={programs.length > 0 ? 3 : 2}>
+                  <td className="empty" colSpan={programs.length > 0 ? 5 : 4}>
                     No budget categories yet.
                   </td>
                 </tr>
@@ -725,13 +750,13 @@ function UsersTab({
                     {programs.length > 0 && (
                       <td>
                         {c._existing ? (
-                          programs.find((g) => g.id === c.program_id)?.name || '—'
+                          programLabel(programs.find((g) => g.id === c.program_id)) || '—'
                         ) : (
                           <select
                             value={c.program_id ?? ''}
                             onChange={(e) => updateDraftBudgetCategoryField(i, 'program_id', Number(e.target.value))}
                           >
-                            {programs.map((g) => (
+                            {programs.filter((g) => g.active !== false).map((g) => (
                               <option value={g.id} key={g.id}>
                                 {g.name}
                               </option>
@@ -747,6 +772,30 @@ function UsersTab({
                         onChange={(e) => updateDraftBudgetCategoryField(i, 'name', e.target.value)}
                       />
                     </td>
+                    {draftBudgetCategories.some((x) => 'rebills' in x) && (
+                      <td className="center-cell">
+                        {c._existing && !('rebills' in c) ? null : (
+                          <input
+                            type="checkbox"
+                            checked={Boolean(c.rebills)}
+                            onChange={(e) => updateDraftBudgetCategoryField(i, 'rebills', e.target.checked)}
+                            aria-label={`${c.name} is re-billed`}
+                          />
+                        )}
+                      </td>
+                    )}
+                    {draftBudgetCategories.some((x) => 'active' in x) && (
+                      <td className="center-cell">
+                        {c._existing && !('active' in c) ? null : (
+                          <input
+                            type="checkbox"
+                            checked={c.active !== false}
+                            onChange={(e) => updateDraftBudgetCategoryField(i, 'active', e.target.checked)}
+                            aria-label={`${c.name} is active`}
+                          />
+                        )}
+                      </td>
+                    )}
                     <td className="col-last">
                       {c._existing ? (
                         <button className="del-btn" onClick={() => handleDeleteBudgetCategory(c)}>
@@ -785,26 +834,40 @@ function UsersTab({
         <div className="sheet-wrap">
           <table className="sheet">
             <colgroup>
-              <col style={{ width: '30%' }} />
+              <col style={{ width: '38%' }} />
               <col />
+              {draftBudgetSubcategories.some((c) => 'active' in c) && <col style={{ width: '90px' }} />}
               <col className="col-last" />
             </colgroup>
             <thead>
               <tr className="header-row">
                 <th>Budget Category</th>
                 <th>Name</th>
+                {draftBudgetSubcategories.some((c) => 'active' in c) && <th title="Untick to retire: hidden on new POs">Active</th>}
                 <th className="col-last"></th>
               </tr>
             </thead>
             <tbody>
               {draftBudgetSubcategories.length === 0 ? (
                 <tr>
-                  <td className="empty" colSpan={3}>
+                  <td className="empty" colSpan={4}>
                     No sub-categories yet.
                   </td>
                 </tr>
               ) : (
-                draftBudgetSubcategories.map((c, i) => (
+                [...draftBudgetSubcategories]
+                  .map((c, i) => ({ c, i }))
+                  .sort((a, b) => {
+                    // Grouped by budget type and category, in the order they were entered.
+                    const catA = draftBudgetCategories.find((x) => x._existing && x.id === a.c.category_id)
+                    const catB = draftBudgetCategories.find((x) => x._existing && x.id === b.c.category_id)
+                    const pa = programs.findIndex((g) => g.id === catA?.program_id)
+                    const pb = programs.findIndex((g) => g.id === catB?.program_id)
+                    if (pa !== pb) return pa - pb
+                    if (a.c.category_id !== b.c.category_id) return (a.c.category_id || 0) - (b.c.category_id || 0)
+                    return a.i - b.i
+                  })
+                  .map(({ c, i }) => (
                   <tr key={c._existing ? c.id : c._tempId}>
                     <td>
                       <select
@@ -817,7 +880,7 @@ function UsersTab({
                           .filter((cat) => cat._existing)
                           .map((cat) => (
                             <option value={cat.id} key={cat.id}>
-                              {programs.length > 0 ? `${programs.find((g) => g.id === cat.program_id)?.name || ''} — ` : ''}
+                              {programs.length > 0 ? `${programLabel(programs.find((g) => g.id === cat.program_id))} — ` : ''}
                               {cat.name}
                             </option>
                           ))}
@@ -830,6 +893,18 @@ function UsersTab({
                         onChange={(e) => updateDraftBudgetSubcategoryField(i, 'name', e.target.value)}
                       />
                     </td>
+                    {draftBudgetSubcategories.some((x) => 'active' in x) && (
+                      <td className="center-cell">
+                        {c._existing && !('active' in c) ? null : (
+                          <input
+                            type="checkbox"
+                            checked={c.active !== false}
+                            onChange={(e) => updateDraftBudgetSubcategoryField(i, 'active', e.target.checked)}
+                            aria-label={`${c.name} is active`}
+                          />
+                        )}
+                      </td>
+                    )}
                     <td className="col-last">
                       {!c._existing && (
                         <button className="del-btn" onClick={() => removeDraftBudgetSubcategoryRow(i)}>
@@ -1137,7 +1212,7 @@ function UsersTab({
           {programs.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '8px 0' }}>
               <span className="sub" style={{ margin: 0 }}>
-                In project:
+                In budget type:
               </span>
               {programs.map((g) => (
                 <label key={g.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, margin: 0 }}>
@@ -1172,13 +1247,13 @@ function UsersTab({
             <thead>
               <tr className="header-row">
                 <th>Name</th>
-                {programs.length > 0 && <th>Projects</th>}
+                {programs.length > 0 && <th>Budget Types</th>}
                 <th>PO Code</th>
                 {projects.some((p) => 'po_no_site' in p) && (
                   <th title="Tick for a ground-mount entity: the PO form won't ask which site a PO is for.">No site question on POs</th>
                 )}
                 {projects.some((p) => 'can_rebill' in p) && (
-                  <th title="Tick for an entity that re-bills expenses to other entities (Firelight Operations LP): its POs can be marked Chargeable Expense and re-billed to an entity, and then count against that entity's budget.">Can re-bill expenses</th>
+                  <th title="Tick for an entity that re-bills expenses to other entities (Firelight Operations LP): its POs under a re-billing category (O&M Overage) are re-billed to another entity, and then count against that entity's budget.">Can re-bill expenses</th>
                 )}
               </tr>
             </thead>

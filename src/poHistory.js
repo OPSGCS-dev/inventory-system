@@ -80,7 +80,7 @@ const FIELD_LABELS = {
   description: 'Description',
   po_number: 'PO #',
   project_id: 'Entity',
-  program_id: 'Project',
+  program_id: 'Budget Type',
   vendor_id: 'Vendor',
   sub_project_id: 'Site',
   multi_sites: 'Multiple sites',
@@ -186,7 +186,7 @@ export function formatValue(key, value, ctx = {}) {
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
   if (key === 'multi_sites' && Array.isArray(value)) return value.map((s) => s.name).join(', ') || '(blank)'
   if (key === 'project_id') return ctx.projects?.find((p) => p.id === value)?.name || `entity #${value}`
-  if (key === 'program_id') return ctx.programs?.find((g) => g.id === value)?.name || `project #${value}`
+  if (key === 'program_id') return ctx.programs?.find((g) => g.id === value)?.name || `budget type #${value}`
   if (key === 'budget_category_id') return ctx.budgetCategories?.find((c) => c.id === value)?.name || `category #${value}`
   if (key === 'vendor_id') return ctx.vendors?.find((v) => v.id === value)?.name || `vendor #${value}`
   if (key === 'payment_batch_id') return `batch #${value}`

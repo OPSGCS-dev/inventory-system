@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from 'react'
 import Papa from 'papaparse'
 import { buildBudgetReport, budgetYears, emptyAmounts, poSpend, remainingOf } from '../budget'
 import { downloadCsv } from '../stockUtils'
-import { formatAmountWhole, formatDate, formatMoney, poStatusLabel, rebillEntityId } from '../utils'
+import { formatAmountWhole, formatDate, formatMoney, poStatusLabel, programLabel, rebillEntityId } from '../utils'
 
 // Budget against spending, per entity: what each budget category was given for the year, what the issued POs
 // commit, what has been invoiced (invoices approved for payment) and what is left. The sums are in
@@ -40,7 +40,8 @@ function BudgetTab({
   canEdit,
   onSaveBudget,
 }) {
-  const [programId, setProgramId] = useState(programs[0]?.id ?? null)
+  const defaultProgramId = (programs.find((g) => g.active !== false) || programs[0])?.id ?? null
+  const [programId, setProgramId] = useState(defaultProgramId)
   const [year, setYear] = useState(new Date().getFullYear())
   const [view, setView] = useState('detail') // 'detail' | 'summary'
   const [showSubs, setShowSubs] = useState(true)
@@ -51,8 +52,8 @@ function BudgetTab({
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState(null)
 
-  // Until add_projects_layer.sql has been run there are no projects, and every category belongs to one budget.
-  const activeProgramId = programs.some((g) => g.id === programId) ? programId : programs[0]?.id ?? null
+  // Until add_projects_layer.sql has been run there are no budget types, and every category belongs to one budget.
+  const activeProgramId = programs.some((g) => g.id === programId) ? programId : defaultProgramId
 
   const report = useMemo(
     () =>
@@ -107,7 +108,7 @@ function BudgetTab({
         if (!a.hasBudget && a.count === 0) continue
         out.push({
           Year: year,
-          Project: programs.find((g) => g.id === activeProgramId)?.name || '',
+          'Budget Type': programs.find((g) => g.id === activeProgramId)?.name || '',
           Entity: s.name,
           'Budget Category': row.level === 'sub' ? budgetCategories.find((c) => c.id === row.categoryId)?.name || '' : row.label,
           'Sub-category': row.level === 'sub' ? row.label : '',
@@ -225,7 +226,21 @@ function BudgetTab({
   }
 
   const editCategories = report.rows.filter((r) => r.level === 'category' && r.key !== 'none')
-  const subsOf = (categoryId) => budgetSubcategories.filter((s) => s.category_id === categoryId)
+  // Retired sub-categories only show while they still hold an amount.
+  const subsOf = (categoryId) => budgetSubcategories.filter((s) => s.category_id === categoryId && (s.active !== false || report.sites.some((x) => original(x.id, categoryId, s.id) !== '')))
+  // A category left without an amount of its own is budgeted as its sub-categories added up; show that as a hint.
+  const subTotalHint = (siteId, categoryId) => {
+    let total = 0
+    let any = false
+    for (const sc of subsOf(categoryId)) {
+      const text = String(inputValue(siteId, categoryId, sc.id)).trim().replace(/,/g, '')
+      if (text !== '' && Number.isFinite(Number(text))) {
+        total += Number(text)
+        any = true
+      }
+    }
+    return any ? String(Math.round(total * 100) / 100) : ''
+  }
 
   return (
     <div className="card budget-card">
@@ -234,10 +249,10 @@ function BudgetTab({
         <div className="budget-controls">
           {programs.length > 0 && (
             <label>
-              Project{' '}
+              Budget Type{' '}
               <select value={activeProgramId ?? ''} disabled={editing} onChange={(e) => { setProgramId(Number(e.target.value)); setDrill(null) }}>
                 {programs.map((g) => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
+                  <option key={g.id} value={g.id}>{programLabel(g)}</option>
                 ))}
               </select>
             </label>
@@ -314,6 +329,8 @@ function BudgetTab({
                             type="text"
                             inputMode="decimal"
                             value={inputValue(s.id, row.categoryId, 0)}
+                            placeholder={subTotalHint(s.id, row.categoryId)}
+                            title="Leave empty to use the sub-category amounts below added up"
                             onChange={(e) => setCell(s.id, row.categoryId, 0, e.target.value)}
                             aria-label={`${row.label} budget for ${s.name}`}
                           />

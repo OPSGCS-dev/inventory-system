@@ -185,7 +185,7 @@ export function buildPoEmailBody(request, totals, label) {
     '',
     `Please find Purchase Order ${label} attached (PDF).`,
     '',
-    ...(request.program_name ? [`Project: ${request.program_name}`] : []),
+    ...(request.program_name ? [`Budget Type: ${request.program_name}`] : []),
     `Entity: ${request.projects?.name || '-'}`,
     ...(poSiteName(request) ? [`Site: ${poSiteName(request)}`] : []),
     `Grand Total: ${formatMoney(totals.grandTotal)} ${request.currency || 'CAD'}`,

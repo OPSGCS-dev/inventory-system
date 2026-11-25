@@ -179,7 +179,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users, programs = []
       return {
         'PO #': r.po_number || `#${r.id}`,
         Status: poStatusLabel(r.status),
-        ...(r.program_id && programNameFor(r.program_id) ? { Project: programNameFor(r.program_id) } : {}),
+        ...(r.program_id && programNameFor(r.program_id) ? { 'Budget Type': programNameFor(r.program_id) } : {}),
         Entity: r.projects?.name || '',
         ...(rebillReady(projects) ? { 'Re-billed To': rebillEntityId(r) ? projects.find((p) => p.id === r.rebill_project_id)?.name || '' : '' } : {}),
         Site: poSiteName(r, true),
@@ -249,7 +249,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users, programs = []
         </select>
         {programs.length > 0 && (
           <select value={programFilter} onChange={(e) => setProgramFilter(e.target.value)}>
-            <option value="">All Projects</option>
+            <option value="">All Budget Types</option>
             {programs.map((g) => (
               <option value={g.id} key={g.id}>
                 {g.name}
@@ -313,7 +313,7 @@ function PoLedgerTab({ purchaseRequests, projects, vendors, users, programs = []
               <tr className="header-row">
                 <th className="row-head">PO #</th>
                 <th>Status</th>
-                {programs.length > 0 && <th>Project</th>}
+                {programs.length > 0 && <th>Budget Type</th>}
                 <th>Entity</th>
                 <th>Vendor</th>
                 <th>Issued</th>

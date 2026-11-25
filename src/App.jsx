@@ -44,6 +44,8 @@ import {
   siteNeedsLocation,
   entitySites,
   rebillReady,
+  categoryRebillReady,
+  poRebillRequired,
   paymentBatchLabel,
   computePoTotals,
   canReviewInvoice,
@@ -168,7 +170,7 @@ function App() {
   const [importing, setImporting] = useState(false)
 
   const [projects, setProjects] = useState([])
-  // The top layer above sites, shown as "Project": Regular O&M, Repower - Phase 1, ... Each has its own sites,
+  // The top layer above sites, shown as "Budget Type": Regular Operations – Ground Mount / Rooftop, Repower (was "Project"; see add_budget_types.sql) Each has its own sites,
   // budget categories and invoice email (add_projects_layer.sql). Empty until that SQL has been run, and
   // everything then works as it did before.
   const [programs, setPrograms] = useState([])
@@ -1143,8 +1145,10 @@ function App() {
   }, [programs, programSites])
   const siteInProgram = (programId, projectId) =>
     !programsReady || !programId || Boolean(programSiteIds.get(programId)?.has(projectId))
+  // Retired budget types (programs.active = false) stay for the POs already on them but are not offered on new ones.
+  const activePrograms = programs.filter((g) => g.active !== false)
   const defaultProgramFor = (projectId) =>
-    programs.find((g) => programSiteIds.get(g.id)?.has(projectId))?.id ?? programs[0]?.id ?? null
+    activePrograms.find((g) => programSiteIds.get(g.id)?.has(projectId))?.id ?? activePrograms[0]?.id ?? programs[0]?.id ?? null
   const inventoryProjects = useMemo(() => {
     if (!programs.some((g) => g.tracks_inventory)) return projects
     const ids = new Set()
@@ -1155,7 +1159,7 @@ function App() {
   }, [projects, programs, programSiteIds])
   // A site added in Admin starts in the first project unless another is ticked.
   useEffect(() => {
-    if (programs.length > 0 && newProjectPrograms.length === 0) setNewProjectPrograms([programs[0].id])
+    if (programs.length > 0 && newProjectPrograms.length === 0) setNewProjectPrograms([(programs.find((g) => g.active !== false) || programs[0]).id])
   }, [programs, newProjectPrograms])
   useEffect(() => {
     if (inventoryProjects.length > 0 && selectedProjectId !== null && !inventoryProjects.some((p) => p.id === selectedProjectId)) {
@@ -1384,12 +1388,12 @@ function App() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(subProjectRows), 'Sites')
 
     // With projects set up, a category belongs to one, and the same name can be on several.
-    const categoryRows = budgetCategories.map((c) => ({ ...(programsReady ? { Project: programNameOf(c.program_id) } : {}), Name: c.name }))
+    const categoryRows = budgetCategories.map((c) => ({ ...(programsReady ? { 'Budget Type': programNameOf(c.program_id) } : {}), Name: c.name }))
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(categoryRows), 'Budget Categories')
 
     const subcategoryRows = budgetSubcategories.map((sc) => ({
       ...(programsReady
-        ? { Project: programNameOf(budgetCategories.find((c) => c.id === sc.category_id)?.program_id) }
+        ? { 'Budget Type': programNameOf(budgetCategories.find((c) => c.id === sc.category_id)?.program_id) }
         : {}),
       'Budget Category': budgetCategories.find((c) => c.id === sc.category_id)?.name || '',
       Name: sc.name,
@@ -1435,11 +1439,13 @@ function App() {
 
     const errors = []
     const rows = []
-    // A category is identified by its project and name (the same name can be on several projects). The Project
-    // column is optional: without one a category goes to the first project (Regular O&M).
+    // A category is identified by its budget type and name (the same name can be on several budget types). The
+    // Budget Type column (called Project in older files) is optional: without one a category goes to the first
+    // active budget type.
+    const programCellText = (row) => String(getCell(row, 'Budget Type') || getCell(row, 'Project') || '').trim()
     const programIdFromCell = (row) => {
-      const text = String(getCell(row, 'Project') || '').trim().toLowerCase()
-      if (!text) return programs[0]?.id ?? null
+      const text = programCellText(row).toLowerCase()
+      if (!text) return (programs.find((g) => g.active !== false) || programs[0])?.id ?? null
       return programs.find((g) => g.name.toLowerCase() === text)?.id ?? undefined
     }
     const categoryKey = (programId, name) => `${programId ?? ''}|${name.toLowerCase()}`
@@ -1631,7 +1637,7 @@ function App() {
       if (!name) return
       const programId = programsReady ? programIdFromCell(row) : null
       if (programId === undefined) {
-        errors.push(`Budget Categories row ${i + 2}: Project "${String(getCell(row, 'Project')).trim()}" not found for category "${name}".`)
+        errors.push(`Budget Categories row ${i + 2}: Budget Type "${programCellText(row)}" not found for category "${name}".`)
         return
       }
       const existing = budgetCategories.find((c) => categoryKey(c.program_id, c.name) === categoryKey(programId, name))
@@ -2593,8 +2599,30 @@ function App() {
     // "Multiple sites": two or more of the entity's sites, saved as [{ id, name }] with sub_project_id left empty.
     const multiOn = needsLocation && Array.isArray(poDraftMultiSiteIds)
     if (multiOn ? poDraftMultiSiteIds.length < 2 : needsLocation && !poDraftSubProjectId) errors.subProject = true
-    // A chargeable PO says which entity it is re-billed to (once add_po_rebill_entity.sql has been run).
-    if (rebillReady(projects) && poDraftChargeableExpense && !poDraftRebillProjectId) errors.rebill = true
+    // Re-billing is automatic: an entity that can re-bill (FLOPS) under a category that re-bills (O&M Overage) says which
+    // other entity of the budget type it is re-billed to. A PO on a retired budget type keeps the chargeable
+    // expense it already had.
+    const draftProgramRetired = programs.find((g) => g.id === poDraftProgramId)?.active === false
+    const rebillCategoriesReady = categoryRebillReady(budgetCategories)
+    const rebillOn = poRebillRequired(projects, budgetCategories, poDraftProjectId, poDraftBudgetCategoryId)
+    const keepOldChargeable = !rebillOn && draftProgramRetired && poDraftChargeableExpense
+    const chargeableToSave = rebillCategoriesReady ? rebillOn || keepOldChargeable : poDraftChargeableExpense
+    const rebillToSave = chargeableToSave ? poDraftRebillProjectId : null
+    if (
+      rebillOn &&
+      !(poDraftRebillProjectId && poDraftRebillProjectId !== poDraftProjectId && siteInProgram(poDraftProgramId, poDraftRebillProjectId))
+    ) {
+      errors.rebill = true
+    }
+    // Budget lines are the sub-categories now: a category that has any has to be given one.
+    if (
+      poDraftBudgetCategoryId &&
+      !poDraftBudgetSubcategoryId &&
+      !draftProgramRetired &&
+      budgetSubcategories.some((sc) => sc.category_id === poDraftBudgetCategoryId && sc.active !== false)
+    ) {
+      errors.budgetSubcategory = true
+    }
     const multiSitesToSave = multiOn
       ? subProjects.filter((sp) => poDraftMultiSiteIds.includes(sp.id)).map((sp) => ({ id: sp.id, name: sp.name }))
       : null
@@ -2604,13 +2632,15 @@ function App() {
       setPoDraftFieldErrors(errors)
       flashPoStatus(
         errors.program
-          ? 'Choose the project this request is for.'
+          ? 'Choose the budget type this request is for.'
           : errors.subProject
           ? 'Select which site this request is for.'
           : errors.budgetCategory
           ? 'Choose a budget category before saving.'
+          : errors.budgetSubcategory
+          ? 'Choose a sub-category before saving.'
           : errors.rebill
-          ? 'Choose the entity this chargeable expense is re-billed to.'
+          ? 'Choose the entity this expense is re-billed to.'
           : 'Fill in the highlighted fields before saving.',
         false
       )
@@ -2709,8 +2739,8 @@ function App() {
             notes: poDraftNotes.trim() || null,
             budget_category_id: poDraftBudgetCategoryId,
             budget_subcategory_id: poDraftBudgetSubcategoryId,
-            chargeable_expense: poDraftChargeableExpense,
-            ...(rebillReady(projects) ? { rebill_project_id: poDraftChargeableExpense ? poDraftRebillProjectId : null } : {}),
+            chargeable_expense: chargeableToSave,
+            ...(rebillReady(projects) ? { rebill_project_id: rebillToSave } : {}),
             ...invoiceEmailFields,
             ...prepaidFields,
             quote_file_url: quoteFileUrl,
@@ -2740,7 +2770,7 @@ function App() {
           const changeLines = []
           if (programsReady && existing.program_id !== poDraftProgramId) {
             const programName = (id) => programs.find((g) => g.id === id)?.name || '—'
-            changeLines.push(`Project: ${programName(existing.program_id)} → ${programName(poDraftProgramId)}`)
+            changeLines.push(`Budget Type: ${programName(existing.program_id)} → ${programName(poDraftProgramId)}`)
           }
           if (existing.project_id !== newValues.project_id) {
             changeLines.push(`Entity: ${projectName(existing.project_id)} → ${projectName(newValues.project_id)}`)
@@ -2801,8 +2831,8 @@ function App() {
             description: poDraftDescription.trim() || null,
             budget_category_id: poDraftBudgetCategoryId,
             budget_subcategory_id: poDraftBudgetSubcategoryId,
-            chargeable_expense: poDraftChargeableExpense,
-            ...(rebillReady(projects) ? { rebill_project_id: poDraftChargeableExpense ? poDraftRebillProjectId : null } : {}),
+            chargeable_expense: chargeableToSave,
+            ...(rebillReady(projects) ? { rebill_project_id: rebillToSave } : {}),
             ...invoiceEmailFields,
             ...prepaidFields,
             vendor_quote_number: poDraftVendorQuoteNumber.trim() || null,
@@ -4590,7 +4620,7 @@ function App() {
   function addDraftBudgetCategoryRow() {
     setDraftBudgetCategories((prev) => [
       ...prev,
-      { _existing: false, _tempId: crypto.randomUUID(), name: '', program_id: programs[0]?.id ?? null },
+      { _existing: false, _tempId: crypto.randomUUID(), name: '', program_id: (programs.find((g) => g.active !== false) || programs[0])?.id ?? null, active: true, rebills: false },
     ])
   }
 
@@ -4610,7 +4640,7 @@ function App() {
         return
       }
       if (programsReady && !row.program_id) {
-        flashUsersStatus('Every new budget category needs a project.', false)
+        flashUsersStatus('Every new budget category needs a budget type.', false)
         return
       }
     }
@@ -4620,11 +4650,12 @@ function App() {
       const existingRows = draftBudgetCategories.filter((c) => c._existing)
       for (const row of existingRows) {
         const orig = budgetCategories.find((c) => c.id === row.id)
-        if (orig && orig.name !== row.name) {
-          const { error } = await supabase
-            .from('budget_categories')
-            .update({ name: row.name.trim() })
-            .eq('id', row.id)
+        const patch = {}
+        if (orig && orig.name !== row.name) patch.name = row.name.trim()
+        if (orig && 'active' in orig && orig.active !== row.active) patch.active = Boolean(row.active)
+        if (orig && 'rebills' in orig && orig.rebills !== row.rebills) patch.rebills = Boolean(row.rebills)
+        if (orig && Object.keys(patch).length) {
+          const { error } = await supabase.from('budget_categories').update(patch).eq('id', row.id)
           if (error) throw error
         }
       }
@@ -4728,10 +4759,14 @@ function App() {
       const existingRows = draftBudgetSubcategories.filter((c) => c._existing)
       for (const row of existingRows) {
         const orig = budgetSubcategories.find((c) => c.id === row.id)
-        if (orig && (orig.name !== row.name || orig.category_id !== row.category_id)) {
+        if (orig && (orig.name !== row.name || orig.category_id !== row.category_id || ('active' in orig && orig.active !== row.active))) {
           const { error } = await supabase
             .from('budget_subcategories')
-            .update({ name: row.name.trim(), category_id: row.category_id })
+            .update({
+              name: row.name.trim(),
+              category_id: row.category_id,
+              ...('active' in orig ? { active: Boolean(row.active) } : {}),
+            })
             .eq('id', row.id)
           if (error) throw error
         }
@@ -5177,7 +5212,7 @@ function App() {
     setAddingProject(true)
     try {
       if (programsReady && newProjectPrograms.length === 0) {
-        flashUsersStatus('Choose at least one project for the new entity.', false)
+        flashUsersStatus('Choose at least one budget type for the new entity.', false)
         setAddingProject(false)
         return
       }
@@ -5207,7 +5242,7 @@ function App() {
     if (error) {
       console.error(error)
       flashUsersStatus(
-        /duplicate|unique/i.test(error.message || '') ? 'There is already a project with that name.' : 'Could not save the project — check the console for details.',
+        /duplicate|unique/i.test(error.message || '') ? 'There is already a budget type with that name.' : 'Could not save the budget type — check the console for details.',
         false
       )
       await loadPrograms()
@@ -5888,7 +5923,6 @@ function App() {
           poDraftChargeableExpense={poDraftChargeableExpense}
           poDraftInvoiceEmail={poDraftInvoiceEmail}
           setPoDraftInvoiceEmail={setPoDraftInvoiceEmail}
-          setPoDraftChargeableExpense={setPoDraftChargeableExpense}
           poDraftRebillProjectId={poDraftRebillProjectId}
           setPoDraftRebillProjectId={setPoDraftRebillProjectId}
           poDraftVendorQuoteNumber={poDraftVendorQuoteNumber}

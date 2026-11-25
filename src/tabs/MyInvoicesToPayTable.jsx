@@ -66,7 +66,7 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
       'Batch #': batchOf(invoice) ? paymentBatchLabel(batchOf(invoice)) : '',
       Vendor: request.vendors?.name || '',
       'PO #': request.po_number || `#${request.id}`,
-      ...(programName ? { Project: programName(request.program_id) } : {}),
+      ...(programName ? { 'Budget Type': programName(request.program_id) } : {}),
       Entity: request.projects?.name || '',
       'Budget category': request.budget_categories?.name || '',
       'Invoice #': invoice.invoice_number || '',

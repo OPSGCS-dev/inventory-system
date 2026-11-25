@@ -1321,6 +1321,7 @@ function UsersTab({
             Individual sites within an Entity (e.g. Firelight Solar LP's rooftops) — only used
             when creating Purchase Requests. Spares inventory stays tracked at the Entity level.
             {siteExtraEntitiesReady && ' A site belongs to one Entity but can also be made available to others (e.g. Firelight Operations LP).'}
+            {programs.length > 0 && ' A PO only offers a site under the budget types its own Entity is in (Budget Types, above), so Firelight Operations LP sees the rooftop sites under Rooftop and the ground-mount sites under Ground Mount.'}
           </p>
           {!siteExtraEntitiesReady && (
             <p className="sub" style={{ margin: '6px 0 0' }}>
@@ -1360,6 +1361,7 @@ function UsersTab({
               <col style={{ width: '30%' }} />
               <col />
               {siteExtraEntitiesReady && <col style={{ width: '28%' }} />}
+              {programs.length > 0 && <col style={{ width: '22%' }} />}
               <col className="col-last" />
             </colgroup>
             <thead>
@@ -1367,13 +1369,14 @@ function UsersTab({
                 <th>Entity</th>
                 <th>Name</th>
                 {siteExtraEntitiesReady && <th>Also available to</th>}
+                {programs.length > 0 && <th title="Follows the site's own Entity: change it under Budget Types">Offered under</th>}
                 <th className="col-last"></th>
               </tr>
             </thead>
             <tbody>
               {draftSubProjects.length === 0 ? (
                 <tr>
-                  <td className="empty" colSpan={siteExtraEntitiesReady ? 4 : 3}>
+                  <td className="empty" colSpan={(siteExtraEntitiesReady ? 4 : 3) + (programs.length > 0 ? 1 : 0)}>
                     No sites yet.
                   </td>
                 </tr>
@@ -1408,6 +1411,14 @@ function UsersTab({
                           entities={projects}
                           onChange={(ids) => updateDraftSubProjectField(i, 'also_project_ids', ids)}
                         />
+                      </td>
+                    )}
+                    {programs.length > 0 && (
+                      <td className="sub">
+                        {programs
+                          .filter((g) => g.active !== false && programSiteIds?.get(g.id)?.has(sp.project_id))
+                          .map((g) => g.name)
+                          .join(', ') || '—'}
                       </td>
                     )}
                     <td className="col-last">

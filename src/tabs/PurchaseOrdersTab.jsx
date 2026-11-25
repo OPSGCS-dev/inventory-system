@@ -526,7 +526,9 @@ function PurchaseOrdersTab({
   const availableSubcategories = budgetSubcategories.filter(
     (sc) => sc.category_id === poDraftBudgetCategoryId && (sc.active !== false || sc.id === poDraftBudgetSubcategoryId)
   )
-  const availableSubProjects = entitySites(subProjects, poDraftProjectId)
+  // The entities of the chosen budget type: the sites on offer are only those whose own entity is in it.
+  const draftTypeEntityIds = programsReady ? programSiteIds?.get(poDraftProgramId) || null : null
+  const availableSubProjects = entitySites(subProjects, poDraftProjectId, draftTypeEntityIds)
   // Projects (the top layer): the sites and budget categories offered follow the project chosen. Without
   // projects set up (add_projects_layer.sql not run) nothing is filtered.
   const programName = (id) => (programs || []).find((g) => g.id === id)?.name || ''
@@ -784,7 +786,7 @@ function PurchaseOrdersTab({
       add('entity', 'Entity', entity.name, nameOf(cur.projects, cur.poDraftProjectId))
     }
     const entityId = entity ? entity.id : cur.poDraftProjectId
-    const site = matchers.matchSubProject(pages, entitySites(cur.subProjects, entityId))
+    const site = matchers.matchSubProject(pages, entitySites(cur.subProjects, entityId, draftTypeEntityIds))
     // Switching entity clears the site, so a site is offered whenever it differs
     // from what the form will hold after the entity is applied.
     if (site && (entity ? true : site.id !== cur.poDraftSubProjectId)) {
@@ -2042,7 +2044,7 @@ function PurchaseOrdersTab({
                 </button>
               )}
             </div>
-            {siteNeedsLocation(projects.find((p) => p.id === poDraftProjectId), subProjects) && (
+            {siteNeedsLocation(projects.find((p) => p.id === poDraftProjectId), subProjects, draftTypeEntityIds) && (
               <div>
                 <label htmlFor="po_draft_sub_project">Site</label>
                 {poDraftMultiSiteIds ? (

@@ -2327,6 +2327,16 @@ function App() {
       setPoDraftBudgetCategoryId(null)
       setPoDraftBudgetSubcategoryId(null)
     }
+    // The sites on offer follow the budget type too (FLOPS: rooftop sites under Rooftop, ground-mount under Ground Mount).
+    if (poDraftProjectId && siteInProgram(programId, poDraftProjectId)) {
+      const allowed = new Set(entitySites(subProjects, poDraftProjectId, programSiteIds.get(programId) || null).map((sp) => sp.id))
+      if (poDraftSubProjectId && !allowed.has(poDraftSubProjectId)) setPoDraftSubProjectId(null)
+      if (Array.isArray(poDraftMultiSiteIds)) {
+        const kept = poDraftMultiSiteIds.filter((id) => allowed.has(id))
+        if (kept.length !== poDraftMultiSiteIds.length) setPoDraftMultiSiteIds(kept)
+      }
+    }
+    if (poDraftRebillProjectId && !siteInProgram(programId, poDraftRebillProjectId)) setPoDraftRebillProjectId(null)
   }
 
   function closePoDraftForm() {
@@ -2585,7 +2595,9 @@ function App() {
     )
     const hasPartLines = linesHaveParts(validLines)
     const hasServiceLines = linesHaveServices(validLines)
-    const entitySubProjects = entitySites(subProjects, poDraftProjectId)
+    const draftTypeEntityIds = programsReady ? programSiteIds.get(poDraftProgramId) || null : null
+    const entitySubProjects = entitySites(subProjects, poDraftProjectId, draftTypeEntityIds)
+    const allowedSiteIds = new Set(entitySubProjects.map((sp) => sp.id))
     const errors = {}
     if (!poDraftProjectId) errors.project = true
     if (programsReady && !poDraftProgramId) errors.program = true
@@ -2595,10 +2607,17 @@ function App() {
     // A site with real locations (Firelight Solar's rooftops) has to say which; a site whose only location is itself
     // (ground-mount) uses that one without asking.
     const draftSite = projects.find((p) => p.id === poDraftProjectId)
-    const needsLocation = siteNeedsLocation(draftSite, subProjects)
+    const needsLocation = siteNeedsLocation(draftSite, subProjects, draftTypeEntityIds)
     // "Multiple sites": two or more of the entity's sites, saved as [{ id, name }] with sub_project_id left empty.
     const multiOn = needsLocation && Array.isArray(poDraftMultiSiteIds)
-    if (multiOn ? poDraftMultiSiteIds.length < 2 : needsLocation && !poDraftSubProjectId) errors.subProject = true
+    // The site(s) must be ones this entity offers under the chosen budget type.
+    if (
+      multiOn
+        ? poDraftMultiSiteIds.length < 2 || poDraftMultiSiteIds.some((id) => !allowedSiteIds.has(id))
+        : needsLocation && (!poDraftSubProjectId || !allowedSiteIds.has(poDraftSubProjectId))
+    ) {
+      errors.subProject = true
+    }
     // Re-billing is automatic: an entity that can re-bill (FLOPS) under a category that re-bills (O&M Overage) says which
     // other entity of the budget type it is re-billed to. A PO on a retired budget type keeps the chargeable
     // expense it already had.

@@ -5403,7 +5403,7 @@ function App() {
   const selectedProject = projects.find((p) => p.id === selectedProjectId)
 
   return (
-    <div className="wrap">
+    <div className="wrap" style={activeTab === 'po' ? { maxWidth: 1900 } : undefined}>
       <h1>
         📦{' '}
         {activeTab === 'master'

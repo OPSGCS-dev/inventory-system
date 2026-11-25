@@ -24,11 +24,11 @@ import {
   regenerateBlockReason,
   compareInvoicesToPo,
   canDeleteInvoice,
+  canDeleteReceipt,
   formatDateOnly,
   paymentBatchLabel,
   usersWithRole,
   findUserName,
-  isAdmin,
   formatMoney,
   isPrepaid,
   canSetPrepaid,
@@ -82,7 +82,6 @@ function InvoicesPanel({
   // The requisitioner can upload receipts, and so can the Invoice Matching person (who usually
   // uploads the receipt along with the invoice).
   const canAddReceipt = canConfirmReceipt(loggedInUser, request) || canManage
-  const canDelete = isAdmin(loggedInUser)
   const invoices = request.invoices || []
   // The payment batch an invoice was approved in, if it has one.
   const batchOf = (invoice) => (paymentBatchSummaries || []).find((s) => s.batch.id === invoice.payment_batch_id)?.batch
@@ -617,7 +616,7 @@ function InvoicesPanel({
                       )}
                     </td>
                     <td>
-                      {canDelete && row.receipt && (
+                      {row.receipt && canDeleteReceipt(loggedInUser, row.receipt, request) && (
                         <button
                           className="btn-secondary"
                           style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}

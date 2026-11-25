@@ -1008,10 +1008,30 @@ export function canResubmitInvoice(user, invoice, request) {
 // Admins can delete any invoice. Invoice Matching can delete one at any stage before it is approved for
 // payment (matching, review, payment approval, or sent back), e.g. to upload a corrected one in its place;
 // once it is approved for payment or paid only an admin can.
+// The requisitioner (who raised the PO) can also delete an invoice they uploaded themselves, on the same terms.
 export function canDeleteInvoice(user, invoice, request) {
   if (isAdmin(user)) return true
   const stage = invoiceStage(invoice, request)
-  return stage !== 'to_pay' && stage !== 'paid' && canMatchInvoices(user, request)
+  if (stage === 'to_pay' || stage === 'paid') return false
+  return canMatchInvoices(user, request) || ownsUpload(user, invoice, request)
+}
+
+// The person who raised the PO, or Invoice Matching, deleting a file they uploaded themselves.
+function ownsUpload(user, upload, request) {
+  if (!user?.id || upload?.uploaded_by !== user.id) return false
+  return user.id === request?.requested_by || canMatchInvoices(user, request)
+}
+
+// Admins can delete any receipt. Invoice Matching and the requisitioner can delete a receipt they uploaded, unless
+// it is matched to an invoice that is already approved for payment or paid (that would break the match).
+export function canDeleteReceipt(user, receipt, request) {
+  if (isAdmin(user)) return true
+  if (!ownsUpload(user, receipt, request)) return false
+  return !(request?.invoices || []).some((inv) => {
+    if (inv.matched_receipt_id !== receipt.id) return false
+    const stage = invoiceStage(inv, request)
+    return stage === 'to_pay' || stage === 'paid'
+  })
 }
 
 // Marking an invoice paid and setting the manual Payment Status dropdown.

@@ -2892,18 +2892,19 @@ function PurchaseOrdersTab({
           <div className="sheet-wrap">
             <table className="sheet po-summary-table">
               <colgroup>
-                <col style={{ width: '60px' }} />
-                <col style={{ width: '100px' }} />
-                <col style={{ width: programsReady ? '210px' : '250px' }} />
-                {programsReady && <col style={{ width: '130px' }} />}
-                <col style={{ width: '130px' }} />
-                <col style={{ width: '130px' }} />
-                <col style={{ width: '120px' }} />
-                <col style={{ width: '120px' }} />
-                <col style={{ width: '110px' }} />
-                <col style={{ width: '140px' }} />
-                <col style={{ width: '110px' }} />
-                <col style={{ width: programsReady ? '150px' : '130px' }} />
+                {/* Percentages, so the columns share whatever width the window has (pixel widths added up to more than the page and forced a sideways scroll). */}
+                <col style={{ width: '4%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: programsReady ? '14%' : '24%' }} />
+                {programsReady && <col style={{ width: '10%' }} />}
+                <col style={{ width: '9%' }} />
+                <col style={{ width: '9%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: '9%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: '10%' }} />
                 <col className="col-last" />
               </colgroup>
               <thead>

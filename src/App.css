@@ -660,7 +660,7 @@ table.sheet th.nowrap-cell {
    and the whole table fits without a horizontal scrollbar. A small floor
    keeps it from getting uncomfortably cramped on a narrow window. */
 table.po-summary-table {
-  min-width: 1000px;
+  min-width: 1100px;
 }
 
 /* Status heading + flow legend shown once above the summary table, rather

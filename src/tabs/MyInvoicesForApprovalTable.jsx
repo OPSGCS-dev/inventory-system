@@ -163,7 +163,7 @@ function MyInvoicesForApprovalTable({
                       )}
                     </td>
                     <td>
-                      <button className="btn-secondary" onClick={() => toggleExpandedPo(request.id)}>
+                      <button className="btn-secondary" onClick={() => toggleExpandedPo(request.id, listed.map((x) => x.request.id))}>
                         View
                       </button>{' '}
                       {isInvoiceHeld(invoice)

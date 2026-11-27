@@ -623,6 +623,22 @@ function PurchaseOrdersTab({
   )
   const poFilters = useColumnFilters(listedPurchaseRequests, poColumns, poView)
   const shownPurchaseRequests = poFilters.filtered
+
+  // Previous / Next arrows on a PO's page: they walk the list the PO was opened from (the main list as filtered and
+  // sorted, or one of the My Invoices lists), remembered as it was when the PO was opened so it doesn't shift under you.
+  const [poNavIds, setPoNavIds] = useState([])
+  function openPo(id, listIds) {
+    if (listIds) setPoNavIds([...new Set(listIds)])
+    toggleExpandedPo(id)
+  }
+  const poNavList = poNavIds.filter((id) => visiblePurchaseRequests.some((x) => x.id === id))
+  const poNavIndex = poNavList.indexOf(expandedPoId)
+  function goToNeighbourPo(step) {
+    const id = poNavList[poNavIndex + step]
+    if (id == null) return
+    toggleExpandedPo(id)
+    window.scrollTo({ top: 0 })
+  }
   // Markup and shipping only apply to a PO with part lines; Not to Exceed only
   // to one with service lines -- the form shows each only then.
   const formHasParts = linesHaveParts(poDraftLines)
@@ -975,6 +991,31 @@ function PurchaseOrdersTab({
             <button className="btn-secondary" onClick={() => toggleExpandedPo(r.id)}>
               ← Back to Purchase Orders
             </button>
+            {poNavIndex >= 0 && poNavList.length > 1 && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+                <button
+                  className="btn-secondary"
+                  onClick={() => goToNeighbourPo(-1)}
+                  disabled={poNavIndex === 0}
+                  title="Previous PO in the list"
+                  aria-label="Previous PO in the list"
+                >
+                  ‹ Previous
+                </button>
+                <span className="sub" style={{ margin: 0 }}>
+                  {poNavIndex + 1} of {poNavList.length}
+                </span>
+                <button
+                  className="btn-secondary"
+                  onClick={() => goToNeighbourPo(1)}
+                  disabled={poNavIndex === poNavList.length - 1}
+                  title="Next PO in the list"
+                  aria-label="Next PO in the list"
+                >
+                  Next ›
+                </button>
+              </span>
+            )}
           </div>
           {poStatus && <div className={'status ' + (poStatus.ok ? 'ok' : 'err')}>{poStatus.msg}</div>}
         </div>
@@ -2764,7 +2805,7 @@ function PurchaseOrdersTab({
       {poView === 'my-pay' ? (
         <MyInvoicesToPayTable
           invoicesToPay={invoicesToPay}
-          toggleExpandedPo={toggleExpandedPo}
+          toggleExpandedPo={openPo}
           handlePayInvoice={handlePayInvoice}
           poActionBusyId={poActionBusyId}
           users={users}
@@ -2781,7 +2822,7 @@ function PurchaseOrdersTab({
       ) : poView === 'my-review' ? (
         <MyInvoicesToReviewTable
           invoicesToReview={invoicesToReview}
-          toggleExpandedPo={toggleExpandedPo}
+          toggleExpandedPo={openPo}
           handleReviewInvoice={handleReviewInvoice}
           handleReturnInvoice={handleReturnInvoice}
           handleHoldInvoice={handleHoldInvoice}
@@ -2794,7 +2835,7 @@ function PurchaseOrdersTab({
       ) : poView === 'my-invoices' ? (
         <MyInvoicesForApprovalTable
           invoicesPendingApproval={invoicesPendingApproval}
-          toggleExpandedPo={toggleExpandedPo}
+          toggleExpandedPo={openPo}
           handleApproveInvoicesForPayment={handleApproveInvoicesForPayment}
           handleReturnInvoice={handleReturnInvoice}
           handleHoldInvoice={handleHoldInvoice}
@@ -3021,7 +3062,7 @@ function PurchaseOrdersTab({
                             className="btn-primary po-action-btn"
                             onClick={() => {
                               startIssuePurchaseOrder(r)
-                              toggleExpandedPo(r.id)
+                              openPo(r.id, shownPurchaseRequests.map((x) => x.id))
                             }}
                           >
                             Convert to PO
@@ -3030,7 +3071,7 @@ function PurchaseOrdersTab({
                         {r.status === 'issued' && canMatchInvoices(loggedInUser, r) && (
                           <button
                             className="btn-primary po-action-btn"
-                            onClick={() => toggleExpandedPo(r.id)}
+                            onClick={() => openPo(r.id, shownPurchaseRequests.map((x) => x.id))}
                           >
                             Upload Invoice
                           </button>
@@ -3038,7 +3079,7 @@ function PurchaseOrdersTab({
                         {r.status === 'issued' && canConfirmReceipt(loggedInUser, r) && (
                           <button
                             className="btn-primary po-action-btn"
-                            onClick={() => toggleExpandedPo(r.id)}
+                            onClick={() => openPo(r.id, shownPurchaseRequests.map((x) => x.id))}
                           >
                             Upload Receipt
                           </button>
@@ -3059,7 +3100,7 @@ function PurchaseOrdersTab({
                         )}
                       </td>
                       <td className="col-last">
-                        <button className="btn-secondary" onClick={() => toggleExpandedPo(r.id)}>
+                        <button className="btn-secondary" onClick={() => openPo(r.id, shownPurchaseRequests.map((x) => x.id))}>
                           View
                         </button>
                       </td>

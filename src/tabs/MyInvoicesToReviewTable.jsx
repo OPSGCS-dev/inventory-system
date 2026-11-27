@@ -113,7 +113,7 @@ function MyInvoicesToReviewTable({
                     <td>{request.vendors?.name || '—'}</td>
                     <td>{formatDateTime(invoice.uploaded_at)}</td>
                     <td>
-                      <button className="btn-secondary" onClick={() => toggleExpandedPo(request.id)}>
+                      <button className="btn-secondary" onClick={() => toggleExpandedPo(request.id, listed.map((x) => x.request.id))}>
                         View
                       </button>{' '}
                       {isInvoiceOverPo(invoice) ? (

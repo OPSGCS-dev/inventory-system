@@ -194,7 +194,7 @@ function MyInvoicesToPayTable({ invoicesToPay, toggleExpandedPo, handlePayInvoic
                   </td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <button className="btn-secondary" onClick={() => toggleExpandedPo(request.id)}>
+                      <button className="btn-secondary" onClick={() => toggleExpandedPo(request.id, listed.map((x) => x.request.id))}>
                         View
                       </button>
                       {isInvoiceHeld(invoice) ? (

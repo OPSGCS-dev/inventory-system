@@ -1233,11 +1233,6 @@ function UsersTab({
             when creating Purchase Requests. Spares inventory stays tracked at the Entity level.
             {siteExtraEntitiesReady && ' A site belongs to one Entity but can also be made available to others (e.g. Firelight Operations LP).'}
           </p>
-          {!siteExtraEntitiesReady && (
-            <p className="sub" style={{ margin: '6px 0 0' }}>
-              To make a site available to more than one Entity, run add_site_extra_entities.sql in Supabase, then reload this page.
-            </p>
-          )}
         </div>
 
         {siteExtraEntitiesReady && draftSubProjects.length > 0 && (

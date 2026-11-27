@@ -43,7 +43,6 @@ import {
   locationVisible,
   canLinkPos,
   siteNeedsLocation,
-  entitySites,
   poSiteName,
   requisitionerName,
   lineTotal,
@@ -519,7 +518,7 @@ function PurchaseOrdersTab({
   const availableSubcategories = budgetSubcategories.filter(
     (sc) => sc.category_id === poDraftBudgetCategoryId
   )
-  const availableSubProjects = entitySites(subProjects, poDraftProjectId)
+  const availableSubProjects = subProjects.filter((sp) => sp.project_id === poDraftProjectId)
   // Projects (the top layer): the sites and budget categories offered follow the project chosen. Without
   // projects set up (add_projects_layer.sql not run) nothing is filtered.
   const programName = (id) => (programs || []).find((g) => g.id === id)?.name || ''
@@ -786,7 +785,7 @@ function PurchaseOrdersTab({
       add('entity', 'Entity', entity.name, nameOf(cur.projects, cur.poDraftProjectId))
     }
     const entityId = entity ? entity.id : cur.poDraftProjectId
-    const site = matchers.matchSubProject(pages, entitySites(cur.subProjects, entityId))
+    const site = matchers.matchSubProject(pages, cur.subProjects.filter((sp) => sp.project_id === entityId))
     // Switching entity clears the site, so a site is offered whenever it differs
     // from what the form will hold after the entity is applied.
     if (site && (entity ? true : site.id !== cur.poDraftSubProjectId)) {

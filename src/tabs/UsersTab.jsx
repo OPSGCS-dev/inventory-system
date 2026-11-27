@@ -2,33 +2,6 @@ import { useEffect, useState } from 'react'
 import { PO_ROLE_OPTIONS, ENTITY_SCOPED_ROLES, userDisplayName } from '../utils'
 import { vendorAddressLines } from '../vendorFields'
 
-// Admin > Sites: the other entities a site is also available to on a PO (a closed list of checkboxes under a summary).
-function AlsoEntitiesPicker({ site, entities, onChange }) {
-  const chosen = (site.also_project_ids || []).filter((id) => id !== site.project_id)
-  const names = entities.filter((p) => chosen.includes(p.id)).map((p) => p.name)
-  return (
-    <details>
-      <summary style={{ cursor: 'pointer' }}>
-        {names.length === 0 ? <span className="sub">None</span> : names.length <= 2 ? names.join(', ') : `${names.length} entities`}
-      </summary>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 0' }}>
-        {entities
-          .filter((p) => p.id !== site.project_id)
-          .map((p) => (
-            <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0, fontWeight: 'normal' }}>
-              <input
-                type="checkbox"
-                checked={chosen.includes(p.id)}
-                onChange={(e) => onChange(e.target.checked ? [...chosen, p.id] : chosen.filter((id) => id !== p.id))}
-              />
-              {p.name}
-            </label>
-          ))}
-      </div>
-    </details>
-  )
-}
-
 // Compact "add one at a time" control instead of a tall multi-select: a
 // one-line dropdown + Add button, with already-assigned entities shown as
 // small removable chips above it. Keeps each user's row short even when a
@@ -167,8 +140,6 @@ function UsersTab({
   addDraftSubProjectRow,
   removeDraftSubProjectRow,
   updateDraftSubProjectField,
-  siteExtraEntitiesReady,
-  makeAllSitesAvailableTo,
   savingSubProjects,
   handleSaveSubProjects,
   handleExportAdminData,
@@ -194,7 +165,6 @@ function UsersTab({
   const [passwordCopied, setPasswordCopied] = useState(false)
   const [vendorPasswordCopied, setVendorPasswordCopied] = useState(false)
   const [vendorSearch, setVendorSearch] = useState('')
-  const [shareEntityId, setShareEntityId] = useState('')
 
   async function copyVendorPassword() {
     try {
@@ -1231,55 +1201,27 @@ function UsersTab({
           <p className="sub" style={{ margin: 0 }}>
             Individual sites within an Entity (e.g. Firelight Solar LP's rooftops) — only used
             when creating Purchase Requests. Spares inventory stays tracked at the Entity level.
-            {siteExtraEntitiesReady && ' A site belongs to one Entity but can also be made available to others (e.g. Firelight Operations LP).'}
           </p>
         </div>
-
-        {siteExtraEntitiesReady && draftSubProjects.length > 0 && (
-          <div className="edit-toolbar" style={{ marginBottom: 12, alignItems: 'center' }}>
-            <label htmlFor="site_share_entity" style={{ margin: 0 }}>Make every site available to</label>
-            <select id="site_share_entity" value={shareEntityId} onChange={(e) => setShareEntityId(e.target.value)}>
-              <option value="">Select an entity…</option>
-              {projects.map((p) => (
-                <option value={p.id} key={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <button
-              className="btn-secondary"
-              disabled={!shareEntityId || savingSubProjects}
-              onClick={() => {
-                makeAllSitesAvailableTo(Number(shareEntityId))
-                setShareEntityId('')
-              }}
-            >
-              Apply
-            </button>
-            <span className="sub">Ticks it on every row below (except that entity's own sites). Press Save to keep it.</span>
-          </div>
-        )}
 
         <div className="sheet-wrap">
           <table className="sheet">
             <colgroup>
               <col style={{ width: '30%' }} />
               <col />
-              {siteExtraEntitiesReady && <col style={{ width: '28%' }} />}
               <col className="col-last" />
             </colgroup>
             <thead>
               <tr className="header-row">
                 <th>Entity</th>
                 <th>Name</th>
-                {siteExtraEntitiesReady && <th>Also available to</th>}
                 <th className="col-last"></th>
               </tr>
             </thead>
             <tbody>
               {draftSubProjects.length === 0 ? (
                 <tr>
-                  <td className="empty" colSpan={siteExtraEntitiesReady ? 4 : 3}>
+                  <td className="empty" colSpan={3}>
                     No sites yet.
                   </td>
                 </tr>
@@ -1307,15 +1249,6 @@ function UsersTab({
                         onChange={(e) => updateDraftSubProjectField(i, 'name', e.target.value)}
                       />
                     </td>
-                    {siteExtraEntitiesReady && (
-                      <td>
-                        <AlsoEntitiesPicker
-                          site={sp}
-                          entities={projects}
-                          onChange={(ids) => updateDraftSubProjectField(i, 'also_project_ids', ids)}
-                        />
-                      </td>
-                    )}
                     <td className="col-last">
                       {!sp._existing && (
                         <button className="del-btn" onClick={() => removeDraftSubProjectRow(i)}>

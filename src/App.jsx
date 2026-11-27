@@ -42,7 +42,6 @@ import {
   todayLocal,
   defaultBatchName,
   siteNeedsLocation,
-  entitySites,
   paymentBatchLabel,
   computePoTotals,
   canReviewInvoice,
@@ -2382,9 +2381,7 @@ function App() {
       : null
 
     // A location belongs to one site; if the link names both and they disagree, the location's site is the right one.
-    // (unless the site is also available to the entity named, e.g. a rooftop on a Firelight Operations LP ticket.)
-    const siteAlsoForEntity = matchedEntity && matchedSubProject && entitySites(subProjects, matchedEntity.id).some((sp) => sp.id === matchedSubProject.id)
-    const matchedSite = matchedSubProject && !siteAlsoForEntity ? projects.find((p) => p.id === matchedSubProject.project_id) : null
+    const matchedSite = matchedSubProject ? projects.find((p) => p.id === matchedSubProject.project_id) : null
     openPoDraftForm(null, {
       projectId: matchedSite?.id ?? matchedEntity?.id ?? null,
       subProjectId: matchedSubProject?.id ?? null,
@@ -2575,7 +2572,7 @@ function App() {
     )
     const hasPartLines = linesHaveParts(validLines)
     const hasServiceLines = linesHaveServices(validLines)
-    const entitySubProjects = entitySites(subProjects, poDraftProjectId)
+    const entitySubProjects = subProjects.filter((sp) => sp.project_id === poDraftProjectId)
     const errors = {}
     if (!poDraftProjectId) errors.project = true
     if (programsReady && !poDraftProgramId) errors.program = true
@@ -4752,31 +4749,8 @@ function App() {
         _tempId: crypto.randomUUID(),
         project_id: projects[0]?.id ?? null,
         name: '',
-        also_project_ids: [],
       },
     ])
-  }
-
-  // Sites can be made available to other entities (Admin > Sites, sub_projects.also_project_ids) once
-  // add_site_extra_entities.sql has been run; until then the column isn't on the rows and the controls are hidden.
-  const siteExtraEntitiesReady = subProjects.length === 0 || 'also_project_ids' in subProjects[0]
-
-  // "Make every site available to <entity>": ticks that entity on every site row below (not on its own sites).
-  // Only changes the drafts; Save writes them.
-  function makeAllSitesAvailableTo(entityId) {
-    if (!entityId) return
-    setDraftSubProjects((prev) =>
-      prev.map((sp) =>
-        sp.project_id === entityId || (sp.also_project_ids || []).includes(entityId)
-          ? sp
-          : { ...sp, also_project_ids: [...(sp.also_project_ids || []), entityId] }
-      )
-    )
-  }
-
-  // The entities a site is also available to, sorted, without its own entity.
-  function cleanAlsoIds(row) {
-    return [...new Set(row.also_project_ids || [])].filter((id) => id !== row.project_id).sort((a, b) => a - b)
   }
 
   function removeDraftSubProjectRow(index) {
@@ -4805,13 +4779,10 @@ function App() {
       const existingRows = draftSubProjects.filter((sp) => sp._existing)
       for (const row of existingRows) {
         const orig = subProjects.find((sp) => sp.id === row.id)
-        const alsoNow = cleanAlsoIds(row)
-        const alsoWas = [...(orig?.also_project_ids || [])].sort((a, b) => a - b)
-        const alsoChanged = siteExtraEntitiesReady && alsoNow.join(',') !== alsoWas.join(',')
-        if (orig && (orig.name !== row.name || orig.project_id !== row.project_id || alsoChanged)) {
+        if (orig && (orig.name !== row.name || orig.project_id !== row.project_id)) {
           const { error } = await supabase
             .from('sub_projects')
-            .update({ name: row.name.trim(), project_id: row.project_id, ...(siteExtraEntitiesReady ? { also_project_ids: alsoNow } : {}) })
+            .update({ name: row.name.trim(), project_id: row.project_id })
             .eq('id', row.id)
           if (error) throw error
         }
@@ -4819,7 +4790,7 @@ function App() {
 
       if (newRows.length) {
         const { error } = await supabase.from('sub_projects').insert(
-          newRows.map((r) => ({ name: r.name.trim(), project_id: r.project_id, ...(siteExtraEntitiesReady ? { also_project_ids: cleanAlsoIds(r) } : {}) }))
+          newRows.map((r) => ({ name: r.name.trim(), project_id: r.project_id }))
         )
         if (error) throw error
       }
@@ -6085,8 +6056,6 @@ function App() {
           addDraftSubProjectRow={addDraftSubProjectRow}
           removeDraftSubProjectRow={removeDraftSubProjectRow}
           updateDraftSubProjectField={updateDraftSubProjectField}
-          siteExtraEntitiesReady={siteExtraEntitiesReady}
-          makeAllSitesAvailableTo={makeAllSitesAvailableTo}
           savingSubProjects={savingSubProjects}
           handleSaveSubProjects={handleSaveSubProjects}
           consumableCap={consumableCap}
